@@ -23,6 +23,7 @@ local BACKDROP = {
 }
 
 local function R() return ns.Data.ViewRealm() end
+local onlineNow = {} -- friend record name -> true while they are in the roster (not saved)
 
 ---------------------------------------------------------------------------
 -- data per tab
@@ -93,11 +94,33 @@ local TABS = {
         if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
         return e.version
       end },
-      { L.COL_TAKEDOWNS, 70, function(e) return e.k end },
-      { L.COL_DEATHS, 55, function(e) return e.d end },
-      { L.COL_LAST_EVENT, 305, function(e) return (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r" end },
+      { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end },
+      { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end },
+      { L.COL_LAST_EVENT, 305, function(e)
+        if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
+        local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
+        return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
+      end },
     },
-    fetch = function() return sortedValues(R().players, function(p) return p.friend end) end },
+    -- friends we've heard from, plus online same-realm Battle.net friends the addon can see
+    -- but hasn't received anything from yet (so you can tell "not detected" from "silent")
+    fetch = function()
+      local rows = sortedValues(R().players, function(p) return p.friend end)
+      if ns.viewSim then return rows end
+      wipe(onlineNow)
+      local onlineRows = {}
+      for _, name in ipairs(ns.Comm.RosterNames()) do
+        local p = ns.Data.Resolve(R().players, name)
+        local rec = R().players[p]
+        if rec and rec.friend then
+          onlineNow[rec.name] = true
+        else
+          onlineRows[#onlineRows + 1] = { name = name, pending = true }
+        end
+      end
+      for _, row in ipairs(onlineRows) do table.insert(rows, 1, row) end
+      return rows
+    end },
   { key = "feed", label = L.TAB_FEED,
     columns = {
       { L.COL_TIME, 80, function(e) return ns.Ago(e.t) end },
