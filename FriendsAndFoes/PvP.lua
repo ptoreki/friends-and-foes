@@ -71,12 +71,14 @@ local function readEnemy(unit)
   ns.SetCap("enemyDetect", "ok")
 
   local info = { faction = faction }
-  local name = UnitName(unit)
+  -- Forever: UnitName returns (first, surname); the pair is the identity
+  local name, surname = UnitName(unit)
   if issecret(name) then
     ns.SetCap("unitNames", "secret")
   elseif name and name ~= "" and name ~= UNKNOWNOBJECT then
     ns.SetCap("unitNames", "ok")
-    info.name = ns.CleanName(name)
+    if issecret(surname) then surname = nil end
+    info.name = ns.CleanName(name, surname)
   end
   local _, class = UnitClass(unit)
   if not issecret(class) then info.class = class end
@@ -261,9 +263,21 @@ local function readRecap()
   return result
 end
 
-local function looksLikePlayerName(name)
-  return not name:find("[%s%d]")
+-- Look a name up in a name-keyed table. Exact match first; otherwise match on first name,
+-- but only when exactly one entry shares it (Forever first names aren't unique).
+local function findByName(tbl, name)
+  if not (tbl and name) then return nil end
+  if tbl[name] then return tbl[name] end
+  local first, hit, n = ns.FirstName(name), nil, 0
+  for k, v in pairs(tbl) do
+    if k ~= "?" and ns.FirstName(k) == first and (k == first or name == first) then
+      hit, n = v, n + 1
+    end
+  end
+  if n == 1 then return hit end
+  return nil
 end
+PvP.FindByName = findByName
 
 local function resolveDeath(deathTime)
   local active = enc and (deathTime - enc.last) <= ENCOUNTER_GAP
@@ -276,16 +290,19 @@ local function resolveDeath(deathTime)
 
   local killer, conf
   if rk then
-    local known = (enc and enc.attackers[rk.name])
-      or (seen[rk.name] and GetTime() - seen[rk.name].time < 60 and seen[rk.name])
+    local recent = findByName(seen, rk.name)
+    local known = (enc and findByName(enc.attackers, rk.name))
+      or (recent and GetTime() - recent.time < 60 and recent)
     if known then
       killer, conf = known, "c"
+      -- the recap may carry the surname our unit scan missed
+      if rk.name:find(" ", 1, true) and not known.name:find(" ", 1, true) then known.name = rk.name end
     elseif rk.isPlayer == true then
       -- recap says it's a player: trust it even if we never saw them (names-unreadable fallback)
       killer, conf = { name = rk.name }, "c"
-    elseif rk.isPlayer == nil and active and looksLikePlayerName(rk.name) then
-      killer, conf = { name = rk.name }, "s"
     end
+    -- isPlayer == nil and not a known attacker: NPC names ("Twilight Acolyte") look just like
+    -- Forever player names ("Kragg Bear"), so don't guess; fall through to the last attacker.
   end
   if not killer and active then
     local bestName, bestT
@@ -307,7 +324,7 @@ local function resolveDeath(deathTime)
     for _, info in pairs(enc.attackers) do addAssist(info) end
   end
   for name in pairs(recap and recap.players or {}) do
-    addAssist(seen[name] or { name = name })
+    addAssist(findByName(seen, name) or { name = name })
   end
   ns.Events.Emit("DIE", {
     zone = PvP.ZoneText(),
@@ -353,9 +370,9 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
     return
   end
   ns.SetCap("honor", "ok")
-  local info = seen[victim]
+  local info = findByName(seen, victim)
   ns.Events.Emit("KILL", {
-    victim = victim,
+    victim = (info and info.name) or victim,
     vclass = info and info.class or "",
     vlevel = info and info.level or "",
     vguild = info and info.guild or "",
@@ -371,7 +388,7 @@ local function checkSighting(unit)
   local info = PvP.ReadEnemy(unit)
   if not info or not info.name then return end
   remember(info)
-  local hit = ns.Data.Realm().hitlist[info.name]
+  local hit = ns.Data.FindHit(info.name)
   if not hit then return end
   local zone = PvP.ZoneText()
   ns.Data.Touch(hit, { class = info.class, level = info.level, guild = info.guild, zone = zone })

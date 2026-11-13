@@ -51,8 +51,10 @@ function RUN_TIMERS()
 end
 function RUN_TICKERS(n) for _ = 1, n or 1 do ADVANCE(0.25); for _, fn in ipairs(TICKERS or {}) do fn() end end end
 
-ME, MY_FACTION, MY_REALM = "Testme", "Horde", "Nightslayer"
-function UnitName(u) if u == "player" then return ME end end
+-- WoW Forever: UnitName returns (first, surname); only the pair is unique
+ME, MY_SURNAME, MY_FACTION, MY_REALM = "Testme", "Tester", "Horde", "Nightslayer"
+function UnitName(u) if u == "player" then return ME, MY_SURNAME end end
+function RegionalUniqueNamesEnabled() return true end
 function UnitFactionGroup(u) if u == "player" then return MY_FACTION end end
 function UnitClass(u) if u == "player" then return "Warrior", "WARRIOR" end end
 function UnitLevel(u) if u == "player" then return 30 end return 0 end
@@ -90,17 +92,18 @@ C_Item = { GetItemInfo = function(link)
   return "Item", link, q, 60, 60, "Weapon", "Sword", 1, "INVTYPE_WEAPON", 135000, 0, 2, 7, 2
 end }
 
--- sync mock: one same-realm Battle.net friend, every send recorded
+-- sync mock: one same-realm Battle.net friend "Buddy Pal", every send recorded.
+-- Worst case assumed: Battle.net reports only the first name.
 SENT = {}
 FRIENDS_ONLINE = 1
 function BNGetNumFriends() return FRIENDS_ONLINE, FRIENDS_ONLINE end
 C_BattleNet = {
   GetFriendNumGameAccounts = function() return 1 end,
   GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "Nightslayer", factionName = "Horde", gameAccountID = 77 } end,
-  GetGameAccountInfoByID = function(id) return { characterName = "Buddy-Nightslayer", realmName = "Night Slayer" } end,
+  GetGameAccountInfoByID = function(id) return { characterName = "Buddy", realmName = "Night Slayer", gameAccountID = 77 } end,
 }
-function BNSendGameData(gid, prefix, payload) SENT[#SENT + 1] = { route = "bn", payload = payload } end
+function BNSendGameData(gid, prefix, payload) SENT[#SENT + 1] = { route = "bn", target = gid, payload = payload } end
 C_ChatInfo = {
   RegisterAddonMessagePrefix = function() end,
-  SendAddonMessage = function(prefix, payload, chan, target) SENT[#SENT + 1] = { route = "whisper", payload = payload }; return 0 end,
+  SendAddonMessage = function(prefix, payload, chan, target) SENT[#SENT + 1] = { route = "whisper", target = target, payload = payload }; return 0 end,
 }

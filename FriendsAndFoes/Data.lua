@@ -44,15 +44,92 @@ function Data.ClearSim()
   ns.viewSim = false
 end
 
+---------------------------------------------------------------------------
+-- name resolution (WoW Forever: "First Last" is the identity, first names are shared)
+---------------------------------------------------------------------------
+local COUNTERS = { k = true, d = true, a = true, attacks = true, kills = true, suspect = true, revenge = true }
+
+-- counters add up, sets merge, newest timestamps win
+local function mergeInto(dst, src)
+  for k, v in pairs(src) do
+    local cur = dst[k]
+    if k == "name" then
+      -- keep the key
+    elseif COUNTERS[k] then
+      dst[k] = (tonumber(cur) or 0) + (tonumber(v) or 0)
+    elseif k == "level" then
+      dst[k] = math.max(tonumber(cur) or 0, tonumber(v) or 0)
+    elseif k == "firstSeen" then
+      dst[k] = cur and math.min(cur, v) or v
+    elseif k == "lastSeen" or k == "lastRevenge" then
+      if not cur or v > cur then
+        dst[k] = v
+        if k == "lastSeen" and src.lastZone then dst.lastZone = src.lastZone end
+      end
+    elseif k == "lastZone" then
+      dst[k] = cur or v
+    elseif type(v) == "boolean" then
+      dst[k] = cur or v
+    elseif type(v) == "table" and type(cur) == "table" then
+      for kk, vv in pairs(v) do cur[kk] = cur[kk] or vv end
+    elseif cur == nil then
+      dst[k] = v
+    end
+  end
+end
+Data.MergeInto = mergeInto
+
+-- full-name keys in `map` whose first name is `first`
+local function fullKeysFor(map, first)
+  local out = {}
+  for k in pairs(map) do
+    if type(k) == "string" and k:find(" ", 1, true) and ns.FirstName(k) == first then out[#out + 1] = k end
+  end
+  return out
+end
+
+-- A bare first name resolves to a full-name record only when exactly one exists.
+-- Never guess between two characters sharing a first name.
+local function resolve(map, name)
+  if not name or map[name] then return name end
+  if not name:find(" ", 1, true) then
+    local keys = fullKeysFor(map, name)
+    if #keys == 1 then return keys[1] end
+  end
+  return name
+end
+Data.Resolve = resolve
+
+local function getOrCreate(map, name, new)
+  local key = resolve(map, name)
+  local rec = map[key]
+  if rec then return rec end
+  rec = new(key)
+  map[key] = rec
+  -- a bare-first-name record made earlier now has its full name: fold it in, if unambiguous
+  local first = ns.FirstName(key)
+  if key ~= first and map[first] and #fullKeysFor(map, first) == 1 then
+    mergeInto(rec, map[first])
+    map[first] = nil
+  end
+  return rec
+end
+
 -- K/D/A record for any player (friend, self or enemy)
 function Data.Player(name)
-  local players = Data.Realm().players
-  local p = players[name]
-  if not p then
-    p = { name = name, k = 0, d = 0, a = 0 }
-    players[name] = p
-  end
-  return p
+  return getOrCreate(Data.Realm().players, name, function(key)
+    return { name = key, k = 0, d = 0, a = 0 }
+  end)
+end
+
+function Data.FindPlayer(name)
+  local map = Data.Realm().players
+  return map[resolve(map, name)]
+end
+
+function Data.FindHit(name)
+  local map = Data.Realm().hitlist
+  return map[resolve(map, name)]
 end
 
 function Data.Touch(rec, u)
@@ -66,13 +143,9 @@ function Data.Touch(rec, u)
 end
 
 function Data.Hit(name)
-  local list = Data.Realm().hitlist
-  local h = list[name]
-  if not h then
-    h = { name = name, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
-    list[name] = h
-  end
-  return h
+  return getOrCreate(Data.Realm().hitlist, name, function(key)
+    return { name = key, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
+  end)
 end
 
 function Data.Feed(kind, text)
@@ -86,13 +159,50 @@ end
 -- several friends can get honor for the same death; count it once
 local recentDeaths = {}
 function Data.EnemyDied(name)
-  local now = GetTime()
-  if recentDeaths[name] and now - recentDeaths[name] < 15 then return false end
-  recentDeaths[name] = now
   local e = Data.Player(name)
+  local now = GetTime()
+  local key = e.name
+  if recentDeaths[key] and now - recentDeaths[key] < 15 then return false end
+  recentDeaths[key] = now
   e.d = e.d + 1
   return true
 end
+
+-- 0.2.0 stored attackers by bare first name ("Kragg", from UnitName) and recap killers by
+-- full name ("Kragg Bear"). Fold each bare-first-name record into the one full-name record
+-- with that first name. Ambiguous ones (two "Kragg X") are left alone and logged.
+local function foldFirstNames(map)
+  local moved, todo = 0, {}
+  for name in pairs(map) do
+    if type(name) == "string" and not name:find(" ", 1, true) then todo[#todo + 1] = name end
+  end
+  for _, first in ipairs(todo) do
+    local keys = fullKeysFor(map, first)
+    if #keys == 1 then
+      mergeInto(map[keys[1]], map[first])
+      map[first] = nil
+      moved = moved + 1
+    elseif #keys > 1 then
+      ns.Debug("FOLD-AMBIGUOUS", first, #keys)
+    end
+  end
+  return moved
+end
+
+function Data.FoldFirstNames(db)
+  local moved = 0
+  local function realm(r)
+    ensure(r)
+    moved = moved + foldFirstNames(r.players) + foldFirstNames(r.hitlist)
+  end
+  for _, r in pairs(db.realms or {}) do realm(r) end
+  if db.sim then realm(db.sim) end
+  return moved
+end
+
+ns.OnReady(function()
+  ns.Try("fold", function() ns.Debug("FOLD", Data.FoldFirstNames(FriendsAndFoesDB)) end)
+end)
 
 -- Drop enemies not seen for 90 days who never hurt us and aren't on the hitlist.
 function Data.Prune()

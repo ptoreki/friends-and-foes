@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0
+**Not compatible with 0.2.** Everyone needs to update. An older friend now triggers a
+"friend needs to update" toast instead of being silently ignored.
+
+### WoW Forever names
+On Forever every character has a first name and a surname. Only the full pair is unique, and
+first names can be shared. 0.2 treated a first name as the identity and the surname as a realm,
+which caused bugs.
+- Players are now stored as "First Last". `UnitName`'s second value is read as the surname,
+  not stripped as a realm.
+- Fixed one enemy appearing twice ("Kragg" from the attack, "Kragg Bear" from the death recap).
+  Existing duplicates are merged automatically at login.
+- A bare first name (for example, from an honor-kill message) is matched to a known
+  "First Last" only when exactly one exists. The addon never guesses between two characters
+  who share a first name.
+- Messages carry the sender's full name, so the Battle.net and whisper routes agree on who sent
+  them. Whispers are addressed to "First Last", and a stranger who shares a friend's first name
+  is rejected.
+- If the death recap can't say whether the killer was a player, the addon no longer guesses
+  from the name, because NPC names now look like player names. It falls back to the last
+  attacker, marked as suspected.
+- Wider name columns.
+- More debug logging for dropped messages (`BN-DROP`, `WHISPER-DROP`, `SENDER-MISMATCH`, `ROSTER+`).
+
 ## 0.2.0
 **Not compatible with 0.1.** The message format changed, so everyone needs to update.
 

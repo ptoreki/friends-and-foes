@@ -1,7 +1,7 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.2.0"
-ns.PROTOCOL = 2
+ns.VERSION = "0.3.0"
+ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 
 local issecret = issecretvalue or function() return false end
@@ -136,7 +136,7 @@ ns.On("ADDON_LOADED", function(name)
 end)
 
 ns.On("PLAYER_LOGIN", function()
-  ns.me = UnitName("player")
+  ns.me = ns.CleanName(UnitName("player")) or "?"
   ns.myFaction = UnitFactionGroup("player")
   ns.realm = GetRealmName()
   ns.Debug("LOGIN", ns.VERSION, select(4, GetBuildInfo()), ns.realm, ns.me, ns.myFaction)
@@ -169,14 +169,39 @@ function ns.StripRealm(name)
   return name:match("^([^%-]+)") or name
 end
 
--- Canonical player key: no realm suffix, no stray whitespace. Friends are same-realm only,
--- so "Name-Realm" and "Name" must land on the same record.
-function ns.CleanName(name)
+-- WoW Forever: every character has a first name and a surname, and only the PAIR is unique
+-- (region-wide). First names are shared. UnitName returns (first, surname) where retail returns
+-- (name, realm); addon whispers arrive from "First Last"; the death recap says "First Last";
+-- "First-Last" also addresses a character. Neither part may contain spaces or hyphens.
+-- So the canonical player key is "First Last". A bare "First" (e.g. from an older client) is
+-- kept as-is and resolved against known full names by Data.
+function ns.ForeverNames()
+  if RegionalUniqueNamesEnabled then
+    local ok, v = pcall(RegionalUniqueNamesEnabled)
+    if ok and not issecret(v) and v ~= nil then return v and true or false end
+  end
+  return true -- this addon only targets Forever (interface 16001)
+end
+
+-- CleanName(name [, second]) -> "First Last" / "First" / nil.
+-- `second` is UnitName's second return: the surname on Forever, the realm elsewhere.
+-- Accepts "First Last", "First-Last", "First Last-Realm"; trailing parts beyond the surname are dropped.
+function ns.CleanName(name, second)
   if not name or issecret(name) or type(name) ~= "string" then return nil end
-  name = ns.StripRealm(name)
-  name = name and name:match("^%s*(.-)%s*$")
-  if not name or name == "" then return nil end
-  return name
+  local forever = ns.ForeverNames()
+  local words = {}
+  for w in name:gmatch("[^%s%-]+") do words[#words + 1] = w end
+  if #words == 0 then return nil end
+  if not forever then return words[1] end -- retail: the rest is a realm
+  if not words[2] and second and not issecret(second) and type(second) == "string" then
+    words[2] = second:match("^[%s]*([^%s%-]+)")
+  end
+  if words[2] then return words[1] .. " " .. words[2] end
+  return words[1]
+end
+
+function ns.FirstName(name)
+  return name and name:match("^(%S+)")
 end
 
 -- Turns a Blizzard format string ("You create: %s.") into an anchored Lua pattern.

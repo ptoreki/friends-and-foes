@@ -1,4 +1,4 @@
-# Friends & Foes — Spec (v0.2)
+# Friends & Foes — Spec (v0.3)
 
 WoW Forever addon (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`).
 Tells you what your friends are doing (leveling, epic BoEs, new gear), alerts you to
@@ -23,8 +23,22 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 - Events are sent **live only**. Nothing is replayed at login.
   - Exception: a manual **Share hitlist** sends your 40 most recent entries. Receivers merge by
     taking the higher of each counter.
-- Message format (protocol 2): `2\tKIND\tID\tclass\tlevel\taddonVersion\t<fields...>`,
+- Message format (protocol 3): `3\tKIND\tID\tsenderName\tclass\tlevel\taddonVersion\t<fields...>`,
   at most 255 bytes. If a message is too long, guild names are dropped first.
+- The sender name in the header is accepted only if its first name matches what the route
+  reports (Battle.net `characterName` or the whisper sender). The roster then switches to the
+  full name, and whispers are addressed to "First Last".
+
+## Names (WoW Forever)
+- Every character has a first name and a surname. **Only the pair is unique** (region-wide).
+  First names are shared. Neither part contains spaces or hyphens.
+- `UnitName` returns `(first, surname)` where retail returns `(name, realm)`. The death recap and
+  addon whispers use "First Last". "First-Last" also addresses a character.
+- The key is always "First Last". A bare first name is resolved to a known full name only when
+  exactly one matches. Otherwise it's kept as its own record, and folded in later once the full
+  name appears and there's no ambiguity.
+- At login, 0.2 records stored under a bare first name are merged into their unique full-name
+  record.
 - **Throttling:** each route has a token bucket of 8 that refills at 1 per second, with three
   priorities (PvP, then progress, then bulk). A client throttle result puts the message back
   in the queue.
@@ -44,7 +58,7 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | KILL | Honorable-kill message | victim, vclass, vlevel, vguild, zone |
 | HIT | Manual hitlist share | share id, packed entries |
 
-Units are encoded as `name:CLASS:level:guild`. Names are always stored without the realm suffix.
+Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
 
 Rules:
 - **Gear identity** is item ID plus random suffix; enchants are ignored. Shirt, tabard and ammo are excluded.
@@ -58,8 +72,8 @@ Rules:
 - **Killer:**
   - the death recap's source, if readable and either a known enemy or flagged as a player
     by its GUID or flags (confirmed)
-  - the recap's source with unknown type, during an active encounter, if the name looks like
-    a player name (no spaces or digits) (suspected)
+  - the recap's name isn't used to guess "player" from its shape, since Forever player names
+    ("Kragg Bear") look like NPC names
   - otherwise the most recent attacker in the encounter (suspected)
   - the other encounter attackers, plus other players in the recap, count as assists and are
     added to the hitlist

@@ -8,10 +8,10 @@ local L = ns.L
 local Sim = {}
 ns.Sim = Sim
 
-local FRIEND, FRIEND_CLASS, FRIEND_LEVEL = "Simfriend", "PALADIN", 42
+local FRIEND, FRIEND_CLASS, FRIEND_LEVEL = "Simfriend Tester", "PALADIN", 42
 local ENEMIES = {
-  { name = "Simganker", class = "ROGUE", level = 60, guild = "Sim Gankers" },
-  { name = "Simhelper", class = "MAGE", level = 58 },
+  { name = "Simganker Shade", class = "ROGUE", level = 60, guild = "Sim Gankers" },
+  { name = "Simhelper Shade", class = "MAGE", level = 58 },
 }
 local EPIC_LINK = "|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r"
 local BLUE_LINK = "|cff0070dd|Hitem:13072::::::::60:::::::|h[Stonegrip Gauntlets]|h|r"
@@ -39,7 +39,7 @@ Sim.KINDS = { "level", "loot", "gear", "attacked", "died", "kill", "sighting" }
 
 -- deliver as if Simfriend's client had sent it (local only)
 local function deliverFromFriend(kind, fields)
-  local msg = { kind = kind, id = ns.NewId(true), class = FRIEND_CLASS, level = FRIEND_LEVEL, f = fields }
+  local msg = { kind = kind, id = ns.NewId(true), name = FRIEND, class = FRIEND_CLASS, level = FRIEND_LEVEL, f = fields }
   local decoded = ns.Comm.Decode(ns.Comm.Encode(msg))
   if not decoded then return end
   decoded.from = FRIEND

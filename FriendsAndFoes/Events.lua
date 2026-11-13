@@ -105,6 +105,18 @@ function Events.NewerVersion(sender, version)
   })
 end
 
+-- a friend's client speaks another protocol: neither side can read the other
+function Events.ProtocolMismatch(sender, theirsIsNewer)
+  if theirsIsNewer then return Events.NewerVersion(sender, nil) end
+  if versionNotified[sender] then return end
+  versionNotified[sender] = true
+  ns.Toast.Push({
+    category = "progress", icon = ICON.version,
+    title = L.TOAST_OLDER_VERSION,
+    text = L.TOAST_OLDER_PROTOCOL_TEXT:format(sender),
+  })
+end
+
 ---------------------------------------------------------------------------
 -- apply
 ---------------------------------------------------------------------------
@@ -252,7 +264,7 @@ H.KILL = function(_, isSelf, p, f)
   enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
 
-  local hit = ns.Data.Realm().hitlist[name]
+  local hit = ns.Data.FindHit(name)
   local revenge = ""
   if hit and counted then
     hit.revenge = (hit.revenge or 0) + 1
@@ -280,7 +292,7 @@ H.HIT = function(msg, isSelf, p, f)
     local e = ns.Split(raw, ":")
     local name = ns.CleanName(e[1])
     if name then
-      local isNew = ns.Data.Realm().hitlist[name] == nil
+      local isNew = ns.Data.FindHit(name) == nil
       local h = ns.Data.Hit(name)
       if e[2] and e[2] ~= "" then h.class = h.class or e[2] end
       local lvl = tonumber(e[3])

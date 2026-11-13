@@ -4,8 +4,11 @@ local issecret = ns.issecret
 local Comm = {}
 ns.Comm = Comm
 
-local roster = {} -- characterName -> { gid = gameAccountID, faction = "Horde"|"Alliance" }
+-- name -> { gid = gameAccountID, faction = "Horde"|"Alliance" }
+-- name is "First Last" once known (learned from their messages), else whatever Battle.net gives.
+local roster = {}
 Comm.roster = roster
+local fullByGid = {} -- gameAccountID -> "First Last", learned from received headers
 
 local MAX_PAYLOAD = 255
 
@@ -24,15 +27,18 @@ local PRIORITY_OF = { ATK = "high", DIE = "high", KILL = "high", LVL = "normal",
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
--- wire format: PROTOCOL \t KIND \t ID \t class \t level \t addonVersion \t fields...
+-- wire format: PROTOCOL \t KIND \t ID \t senderName \t class \t level \t addonVersion \t fields...
+-- senderName is the full "First Last": on Forever, Battle.net may only give us the first name,
+-- and first names are shared.
 ---------------------------------------------------------------------------
+local HEADER = 7
 local function clean(v)
   if v == nil then return "" end
   return (tostring(v):gsub("\t", " "))
 end
 
 function Comm.Encode(msg, dropGuilds)
-  local parts = { tostring(ns.PROTOCOL), msg.kind, msg.id, clean(msg.class), clean(msg.level), ns.VERSION }
+  local parts = { tostring(ns.PROTOCOL), msg.kind, msg.id, clean(msg.name or ns.me), clean(msg.class), clean(msg.level), ns.VERSION }
   for _, field in ipairs(SCHEMA[msg.kind]) do
     local v = clean(msg.f[field])
     if dropGuilds and UNIT_FIELDS[field] then
@@ -50,8 +56,8 @@ function Comm.Decode(text)
   if proto ~= ns.PROTOCOL then return nil, proto end
   local schema = SCHEMA[p[2]]
   if not schema or not p[3] or p[3] == "" then return nil end
-  local msg = { kind = p[2], id = p[3], class = p[4], level = tonumber(p[5]), version = p[6], f = {} }
-  for i, field in ipairs(schema) do msg.f[field] = p[6 + i] or "" end
+  local msg = { kind = p[2], id = p[3], name = ns.CleanName(p[4]), class = p[5], level = tonumber(p[6]), version = p[7], f = {} }
+  for i, field in ipairs(schema) do msg.f[field] = p[HEADER + i] or "" end
   return msg
 end
 
@@ -86,9 +92,10 @@ function Comm.RebuildRoster()
       local g = C_BattleNet.GetFriendGameAccountInfo(i, j)
       if g and g.isOnline and g.clientProgram == wowClient and g.characterName and g.realmName
         and ns.NormRealm(g.realmName) == myRealm then
-        local name = ns.CleanName(g.characterName)
+        local name = fullByGid[g.gameAccountID] or ns.CleanName(g.characterName)
         if name and name ~= ns.me then
           roster[name] = { gid = g.gameAccountID, faction = g.factionName }
+          ns.Debug("ROSTER+", name, g.characterName)
         end
       end
     end
@@ -106,10 +113,33 @@ function Comm.QueueRoster()
   end)
 end
 
-local function isFriend(name)
-  if roster[name] then return true end
+-- roster entry for a name in any form ("First Last", "First"); first-name matches only when unique
+local function rosterFind(name)
+  if not name then return nil end
+  if roster[name] then return name end
+  local first, hit, n = ns.FirstName(name), nil, 0
+  for k in pairs(roster) do
+    if ns.FirstName(k) == first and (k == first or name == first) then hit, n = k, n + 1 end
+  end
+  if n == 1 then return hit end
+  return nil
+end
+
+local function findFriend(name)
+  local key = rosterFind(name)
+  if key then return key end
   if GetTime() - lastRebuild > 10 then Comm.RebuildRoster() end
-  return roster[name] ~= nil
+  return rosterFind(name)
+end
+Comm.FindFriend = findFriend
+
+-- learned a friend's full name: re-key their roster entry so whispers address "First Last"
+local function learnFull(key, full, gid)
+  if gid then fullByGid[gid] = full end
+  if key and key ~= full and roster[key] then
+    roster[full] = roster[key]
+    roster[key] = nil
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -268,16 +298,36 @@ end
 local seen, seenCount = {}, 0
 local warnedProtocol = false
 
-local function accept(text, sender, via)
+-- routeName: who the route says sent it (Battle.net characterName or whisper sender), maybe
+-- first name only. The header carries the full name; accept it only if the first names agree.
+-- Returns the canonical sender name, or nil to drop.
+local function senderOf(msg, routeName)
+  local header = msg.name
+  if header and ns.FirstName(header) == ns.FirstName(routeName) then
+    -- same character: keep whichever form carries the surname
+    if #header >= #routeName then return header end
+    return routeName
+  end
+  if header then
+    ns.Debug("SENDER-MISMATCH", routeName, header)
+    return nil
+  end
+  return routeName
+end
+
+-- returns the canonical sender name if accepted
+local function accept(text, routeName, via)
   if issecret(text) or type(text) ~= "string" then return end
   local msg, otherProto = Comm.Decode(text)
   if not msg then
-    if otherProto and otherProto > ns.PROTOCOL and not warnedProtocol then
+    if otherProto and otherProto ~= ns.PROTOCOL and not warnedProtocol then
       warnedProtocol = true
-      ns.Events.NewerVersion(sender, nil)
+      ns.Events.ProtocolMismatch(routeName, otherProto > ns.PROTOCOL)
     end
     return
   end
+  local sender = senderOf(msg, routeName)
+  if not sender then return end
   local key = sender .. ":" .. msg.id
   if seen[key] then return end
   seen[key] = GetTime()
@@ -292,28 +342,41 @@ local function accept(text, sender, via)
     end
   end
   msg.from = sender
-  ns.Debug("RECV", via, sender, msg.kind, msg.id)
+  ns.Debug("RECV", via, routeName, sender, msg.kind, msg.id)
   ns.Events.Apply(msg, false)
+  return sender
 end
 
 ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   if issecret(prefix) or prefix ~= ns.PREFIX or issecret(senderID) then return end
   local g = C_BattleNet.GetGameAccountInfoByID(senderID)
-  if not (g and g.characterName and g.realmName) then return end
-  if ns.NormRealm(g.realmName) ~= ns.NormRealm(ns.realm) then return end
+  if not (g and g.characterName and g.realmName) then
+    ns.Debug("BN-DROP", "no game info", senderID)
+    return
+  end
+  if ns.NormRealm(g.realmName) ~= ns.NormRealm(ns.realm) then
+    ns.Debug("BN-DROP", "realm", g.realmName, ns.realm)
+    return
+  end
   local name = ns.CleanName(g.characterName)
   if not name then return end
   ns.SetCap("bnet", "ok")
-  accept(text, name, "bn")
+  local sender = accept(text, name, "bn")
+  if sender then learnFull(rosterFind(name), sender, g.gameAccountID) end
 end)
 
 ns.On("CHAT_MSG_ADDON", function(prefix, text, channel, sender)
   if issecret(prefix) or prefix ~= ns.PREFIX then return end
   if issecret(channel) or channel ~= "WHISPER" then return end
   local name = ns.CleanName(sender)
-  if not name or not isFriend(name) then return end
+  local key = findFriend(name)
+  if not key then
+    ns.Debug("WHISPER-DROP", "not a friend", sender)
+    return
+  end
   ns.SetCap("whisper", "ok")
-  accept(text, name, "whisper")
+  local from = accept(text, name, "whisper")
+  if from then learnFull(key, from, roster[key] and roster[key].gid) end
 end)
 
 for _, ev in ipairs({ "BN_FRIEND_INFO_CHANGED", "BN_FRIEND_ACCOUNT_ONLINE", "BN_FRIEND_ACCOUNT_OFFLINE", "BN_CONNECTED", "PLAYER_ENTERING_WORLD" }) do
