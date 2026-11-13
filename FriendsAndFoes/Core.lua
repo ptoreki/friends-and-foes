@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.3.0"
+ns.VERSION = "0.3.1"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 
@@ -84,6 +84,7 @@ function ns.SetCap(key, value)
   if ns.caps[key] == "ok" and value ~= "ok" then return end
   if ns.caps[key] ~= value then
     ns.caps[key] = value
+    if FriendsAndFoesDB then FriendsAndFoesDB.caps = ns.caps end -- saved, so reports show it
     ns.Debug("CAP", key, value)
   end
 end
@@ -139,6 +140,7 @@ ns.On("PLAYER_LOGIN", function()
   ns.me = ns.CleanName(UnitName("player")) or "?"
   ns.myFaction = UnitFactionGroup("player")
   ns.realm = GetRealmName()
+  FriendsAndFoesDB.caps = ns.caps
   ns.Debug("LOGIN", ns.VERSION, select(4, GetBuildInfo()), ns.realm, ns.me, ns.myFaction)
   for i = 1, #readyCallbacks do ns.Try("ready", readyCallbacks[i]) end
 end)
@@ -298,9 +300,10 @@ function ns.DecodeUnits(s)
 end
 
 function ns.PrintStatus()
-  local n = 0
-  for _ in pairs(ns.Comm.roster) do n = n + 1 end
-  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - friends online on realm: " .. n
+  ns.Comm.RebuildRoster()
+  local names = ns.Comm.RosterNames()
+  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " on " .. tostring(ns.realm))
+  print("  friends online on realm: " .. #names .. (#names > 0 and (" (" .. table.concat(names, ", ") .. ")") or "")
     .. ", messages queued: " .. ns.Comm.QueuedCount())
   for k, v in pairs(ns.caps) do print("  " .. k .. ": " .. v) end
   print("  errors caught: " .. ns.errors .. (ns.lastError and (" (last: " .. ns.lastError .. ")") or ""))

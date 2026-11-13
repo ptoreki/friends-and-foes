@@ -85,22 +85,46 @@ function Comm.RebuildRoster()
     return
   end
   local myRealm = ns.NormRealm(ns.realm)
+  local myRealmID = GetRealmID and GetRealmID()
+  if issecret(myRealmID) then myRealmID = nil end
   local wowClient = BNET_CLIENT_WOW or "WoW"
   local n = BNGetNumFriends() or 0
+  local report = {} -- one line per WoW game account, so a report shows why someone is missing
   for i = 1, n do
     for j = 1, (C_BattleNet.GetFriendNumGameAccounts(i) or 0) do
       local g = C_BattleNet.GetFriendGameAccountInfo(i, j)
-      if g and g.isOnline and g.clientProgram == wowClient and g.characterName and g.realmName
-        and ns.NormRealm(g.realmName) == myRealm then
-        local name = fullByGid[g.gameAccountID] or ns.CleanName(g.characterName)
-        if name and name ~= ns.me then
-          roster[name] = { gid = g.gameAccountID, faction = g.factionName }
-          ns.Debug("ROSTER+", name, g.characterName)
+      if g and g.clientProgram == wowClient then
+        local why
+        local sameRealm = (g.realmName and ns.NormRealm(g.realmName) == myRealm)
+          or (myRealmID and g.realmID and not issecret(g.realmID) and g.realmID == myRealmID)
+        if not g.isOnline then why = "offline"
+        elseif not g.characterName then why = "no character name"
+        elseif not sameRealm then why = "other realm"
         end
+        local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
+        if not why and (not name or name == ns.me) then why = "self" end
+        if not why then
+          roster[name] = { gid = g.gameAccountID, faction = g.factionName }
+        end
+        report[#report + 1] = table.concat({ tostring(g.characterName), tostring(g.realmName),
+          tostring(g.realmID), tostring(g.factionName), why or "OK" }, "/")
       end
     end
   end
-  ns.Debug("ROSTER", "rebuilt")
+  table.sort(report)
+  local sig = table.concat(report, "; ")
+  if sig ~= Comm.lastRosterReport then
+    Comm.lastRosterReport = sig
+    ns.Debug("ROSTER", "me=" .. tostring(ns.me) .. " realm=" .. tostring(ns.realm) .. "/" .. tostring(myRealmID),
+      "bnetFriends=" .. n, sig ~= "" and sig or "no WoW game accounts")
+  end
+end
+
+function Comm.RosterNames()
+  local names = {}
+  for name in pairs(roster) do names[#names + 1] = name end
+  table.sort(names)
+  return names
 end
 
 local pending = false
@@ -187,6 +211,9 @@ local function sendItem(routeName, item)
   if type(res) == "number" and E and E.AddonMessageThrottle and res == E.AddonMessageThrottle then
     return false -- throttled by the client: retry later
   end
+  if res ~= nil and res ~= 0 and res ~= true and not issecret(res) then
+    ns.Debug("WHISPER-RESULT", item.target, tostring(res))
+  end
   return true
 end
 
@@ -241,7 +268,8 @@ function Comm.Broadcast(msg)
   local payload = Comm.Fit(msg)
   if not payload then return end
   Comm.SendPayload(payload, PRIORITY_OF[msg.kind] or "normal")
-  ns.Debug("SEND", msg.kind, msg.id)
+  local to = Comm.RosterNames()
+  ns.Debug("SEND", msg.kind, msg.id, #to == 0 and "to nobody (no friends found)" or ("to " .. table.concat(to, ", ")))
 end
 
 ---------------------------------------------------------------------------

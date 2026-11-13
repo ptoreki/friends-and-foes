@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1
+Compatible with 0.3.0.
+- Friends whose realm name Battle.net spells differently are now matched by realm ID.
+- The debug log lists every WoW Battle.net friend with the reason they were or weren't included
+  (offline, other realm, ...), and each send now names who it went to.
+- `/fnf status` shows your full name, your realm and the friends found.
+- Feature status (`caps`) is saved, so reports show it.
+
 ## 0.3.0
 **Not compatible with 0.2.** Everyone needs to update. An older friend now triggers a
 "friend needs to update" toast instead of being silently ignored.

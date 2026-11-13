@@ -81,6 +81,20 @@ check(wt == "Buddy Pal", "whispers address First Last: " .. tostring(wt))
 ns.Comm.RebuildRoster()
 check(ns.Comm.roster["Buddy Pal"] ~= nil, "learned surname survives roster rebuild")
 
+-- roster matches by realm ID when Battle.net spells the realm differently
+local origInfo, origRealmID = C_BattleNet.GetFriendGameAccountInfo, GetRealmID
+C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "Some Other Spelling", realmID = 4242, factionName = "Horde", gameAccountID = 77 } end
+GetRealmID = function() return 4242 end
+ns.Comm.RebuildRoster()
+check(ns.Comm.roster["Buddy Pal"] ~= nil, "roster matches same realm ID despite different realm name")
+GetRealmID = function() return 1 end
+ns.Comm.RebuildRoster()
+check(next(ns.Comm.roster) == nil, "different realm excluded")
+check(ns.Comm.lastRosterReport:find("other realm", 1, true) ~= nil, "roster report says why: " .. tostring(ns.Comm.lastRosterReport))
+C_BattleNet.GetFriendGameAccountInfo, GetRealmID = origInfo, origRealmID
+ns.Comm.RebuildRoster()
+check(FriendsAndFoesDB.caps and FriendsAndFoesDB.caps.bnet == "ok", "caps saved for reports")
+
 -- a different "Buddy" (same first name, other surname) can't pose as our friend
 FIRE("CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 50 }, "imp1"), "WHISPER", "Buddy Fake")
 check(real.players["Buddy Fake"] == nil and buddy.level == 32, "same-first-name stranger rejected")

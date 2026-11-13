@@ -2,7 +2,7 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress toasts, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.3.0
+## Version: 0.3.1
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## IconTexture: Interface\Icons\Ability_DualWield
