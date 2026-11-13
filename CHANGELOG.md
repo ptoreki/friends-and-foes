@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.3
+Compatible with 0.3.0 to 0.3.2.
+- **Pick which friends you get alerts from.** Click a friend in the Friends tab, or use
+  `/fnf group <name or BattleTag>`, to toggle them. Once you've picked anyone, you only exchange
+  events with your picks, in both directions. Nobody picked means every friend with the addon
+  (the old behaviour). `/fnf group` lists online friends, and `/fnf group all` clears the picks.
+- Picks are stored by BattleTag, so they cover all of a friend's characters.
+
 ## 0.3.2
 Compatible with 0.3.0 and 0.3.1.
 - **Fixed sync between friends.** WoW Forever has no realms. The "realm" the game reports

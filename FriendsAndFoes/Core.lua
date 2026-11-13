@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.3.2"
+ns.VERSION = "0.3.3"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 
@@ -305,6 +305,7 @@ function ns.PrintStatus()
   print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " (server " .. tostring(ns.realm) .. ")")
   print("  friends online: " .. #names .. (#names > 0 and (" (" .. table.concat(names, ", ") .. ")") or "")
     .. ", messages queued: " .. ns.Comm.QueuedCount())
+  print("  alerts: " .. (ns.Comm.GroupActive() and "picked friends only (/fnf group)" or "every friend (/fnf group to pick)"))
   for k, v in pairs(ns.caps) do print("  " .. k .. ": " .. v) end
   print("  errors caught: " .. ns.errors .. (ns.lastError and (" (last: " .. ns.lastError .. ")") or ""))
 end

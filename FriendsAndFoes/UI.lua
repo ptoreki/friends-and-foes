@@ -8,7 +8,7 @@ local WIDTH, HEIGHT = 700, 480
 local ROWS, ROW_H = 15, 20
 local MAX_COLS = 7
 
-local win, rowsFrame, header, rows, detail, settings, pageText, emptyText, simBanner
+local win, rowsFrame, header, rows, detail, settings, pageText, emptyText, simBanner, friendsHint
 local tabButtons = {}
 local currentTab = "hitlist"
 local offset = 0
@@ -96,7 +96,13 @@ local TABS = {
       end },
       { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end },
       { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end },
-      { L.COL_LAST_EVENT, 305, function(e)
+      { L.COL_ALERTS, 50, function(e)
+        local tag = ns.Comm.TagFor(e.name)
+        if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
+        if ns.Comm.GroupActive() then return "|cff888888" .. L.ALERTS_OFF .. "|r" end
+        return "|cff888888" .. L.ALERTS_ALL .. "|r"
+      end },
+      { L.COL_LAST_EVENT, 255, function(e)
         if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
         local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
         return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
@@ -109,7 +115,7 @@ local TABS = {
       if ns.viewSim then return rows end
       wipe(onlineNow)
       local onlineRows = {}
-      for _, name in ipairs(ns.Comm.RosterNames()) do
+      for _, name in ipairs(ns.Comm.EveryoneNames()) do
         local p = ns.Data.Resolve(R().players, name)
         local rec = R().players[p]
         if rec and rec.friend then
@@ -210,6 +216,7 @@ function UI.Refresh()
     detail:Hide()
     pageText:SetText("")
     settings:Show()
+    friendsHint:Hide()
     UI.RefreshSettings()
     return
   end
@@ -242,6 +249,8 @@ function UI.Refresh()
     pageText:SetText(#data > 0 and tostring(#data) or "")
   end
   refreshDetail()
+  friendsHint:SetShown(currentTab == "friends" and not ns.viewSim)
+  friendsHint:SetText(ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL)
 end
 
 local refreshPending = false
@@ -516,6 +525,8 @@ local function build()
       if currentTab == "hitlist" and self.entry then
         selected = self.entry.name
         UI.Refresh()
+      elseif currentTab == "friends" and self.entry and not ns.viewSim then
+        UI.TogglePick(self.entry.name)
       end
     end)
     rows[i] = row
@@ -527,6 +538,11 @@ local function build()
 
   pageText = win:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   pageText:SetPoint("BOTTOMRIGHT", -24, 18)
+
+  friendsHint = win:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  friendsHint:SetPoint("BOTTOMLEFT", 24, 40)
+  friendsHint:SetPoint("BOTTOMRIGHT", -24, 40)
+  friendsHint:SetJustifyH("LEFT")
 
   -- hitlist detail (note / remove / share)
   detail = CreateFrame("Frame", nil, win)
@@ -590,6 +606,47 @@ function UI.ShareHitlist()
   local count = ns.Comm.ShareHitlist()
   print(prefix .. L.SHARE_STARTED:format(count, n))
   UI.Refresh()
+end
+
+-- pick/unpick a friend (by character name; the pick is stored by BattleTag)
+function UI.TogglePick(name)
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+  local tag = ns.Comm.TagFor(name)
+  if not tag then
+    print(prefix .. L.PICK_NO_TAG:format(name))
+    return
+  end
+  local on = ns.Comm.TogglePick(tag)
+  print(prefix .. (on and L.PICK_ON or L.PICK_OFF):format(name, tag))
+  if not ns.Comm.GroupActive() then print(prefix .. L.PICK_NOW_ALL) end
+  UI.Refresh()
+end
+
+local function groupCommand(arg)
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+  if arg == "all" or arg == "clear" then
+    ns.Comm.ClearPicks()
+    print(prefix .. L.PICK_NOW_ALL)
+  elseif arg ~= "" then
+    ns.Comm.RebuildRoster()
+    local name, tagOrWhy = ns.Comm.FindCandidate(arg)
+    if not name then
+      print(prefix .. (tagOrWhy == "ambiguous" and L.PICK_AMBIGUOUS or L.PICK_NOT_FOUND):format(arg))
+      return
+    end
+    UI.TogglePick(name)
+    return
+  end
+  ns.Comm.RebuildRoster()
+  print(prefix .. (ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL))
+  local names = ns.Comm.EveryoneNames()
+  if #names == 0 then print("  " .. L.SHARE_NO_FRIENDS) end
+  for _, name in ipairs(names) do
+    local tag = ns.Comm.TagFor(name)
+    local mark = ns.Comm.Allowed(tag) and "|cff33ff33[x]|r " or "[ ] "
+    print("  " .. mark .. name .. " (" .. tostring(tag or "?") .. ")")
+  end
+  print("  " .. L.PICK_USAGE)
 end
 
 function UI.Show(tab)
@@ -656,6 +713,8 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end
+  elseif msg == "group" or msg:find("^group ") then
+    groupCommand(strtrim(msg:sub(6)))
   elseif msg == "sim" or msg:find("^sim ") then
     ns.Sim.Command(strtrim(msg:sub(4)))
   else

@@ -6,9 +6,76 @@ ns.Comm = Comm
 
 -- name -> { gid = gameAccountID, faction = "Horde"|"Alliance" }
 -- name is "First Last" once known (learned from their messages), else whatever Battle.net gives.
+-- `roster` holds only the friends you exchange events with (your picks, or everyone if you picked
+-- nobody). `everyone` holds every eligible online friend, so the UI can offer to pick them.
 local roster = {}
 Comm.roster = roster
+local everyone = {}
+Comm.everyone = everyone
 local fullByGid = {} -- gameAccountID -> "First Last", learned from received headers
+local tagByGid = {}  -- gameAccountID -> BattleTag
+
+---------------------------------------------------------------------------
+-- picked friends ("group"), keyed by BattleTag so alts are covered
+---------------------------------------------------------------------------
+local function group()
+  FriendsAndFoesDB.group = FriendsAndFoesDB.group or {}
+  return FriendsAndFoesDB.group
+end
+
+-- nobody picked = everyone counts (the default)
+function Comm.GroupActive() return next(group()) ~= nil end
+
+function Comm.Allowed(tag)
+  if not Comm.GroupActive() then return true end
+  return tag ~= nil and group()[tag] == true
+end
+
+function Comm.IsPicked(tag) return tag ~= nil and group()[tag] == true end
+
+-- remembered name -> BattleTag, so offline friends in the Friends tab can still be toggled
+local function rememberTag(name, tag)
+  if not (name and tag) then return end
+  FriendsAndFoesDB.friendTags = FriendsAndFoesDB.friendTags or {}
+  FriendsAndFoesDB.friendTags[name] = tag
+end
+
+function Comm.TagFor(name)
+  if not name then return nil end
+  if everyone[name] then return everyone[name].tag end
+  local tags = FriendsAndFoesDB.friendTags or {}
+  return tags[name]
+end
+
+-- returns the new state (true = picked)
+function Comm.TogglePick(tag)
+  if not tag then return nil end
+  local g = group()
+  g[tag] = (not g[tag]) or nil
+  Comm.RebuildRoster()
+  return g[tag] == true
+end
+
+function Comm.ClearPicks()
+  wipe(group())
+  Comm.RebuildRoster()
+end
+
+-- find an online friend by "First Last", unique first name, BattleTag or BattleTag name (case-insensitive)
+function Comm.FindCandidate(query)
+  query = query and query:lower()
+  if not query or query == "" then return nil end
+  local hits = {}
+  for name, e in pairs(everyone) do
+    local tag = e.tag and e.tag:lower()
+    if name:lower() == query or (tag and (tag == query or tag:match("^[^#]+") == query)) then
+      return name, e.tag
+    end
+    if ns.FirstName(name):lower() == query then hits[#hits + 1] = name end
+  end
+  if #hits == 1 then return hits[1], everyone[hits[1]].tag end
+  return nil, #hits > 1 and "ambiguous" or nil
+end
 
 local MAX_PAYLOAD = 255
 
@@ -100,6 +167,7 @@ end
 function Comm.RebuildRoster()
   lastRebuild = GetTime()
   wipe(roster)
+  wipe(everyone)
   if not (BNGetNumFriends and C_BattleNet and C_BattleNet.GetFriendNumGameAccounts and C_BattleNet.GetFriendGameAccountInfo) then
     ns.SetCap("bnet", "missing")
     return
@@ -108,6 +176,11 @@ function Comm.RebuildRoster()
   local n = BNGetNumFriends() or 0
   local report = {} -- one line per WoW game account, so a report shows why someone is missing
   for i = 1, n do
+    local tag
+    if C_BattleNet.GetFriendAccountInfo then
+      local ok, acct = pcall(C_BattleNet.GetFriendAccountInfo, i)
+      if ok and acct and type(acct.battleTag) == "string" and not issecret(acct.battleTag) then tag = acct.battleTag end
+    end
     for j = 1, (C_BattleNet.GetFriendNumGameAccounts(i) or 0) do
       local g = C_BattleNet.GetFriendGameAccountInfo(i, j)
       if g and g.clientProgram == wowClient then
@@ -120,10 +193,14 @@ function Comm.RebuildRoster()
         local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
         if not why and (not name or name == ns.me) then why = "self" end
         if not why then
-          roster[name] = { gid = g.gameAccountID, faction = g.factionName }
+          local entry = { gid = g.gameAccountID, faction = g.factionName, tag = tag }
+          everyone[name] = entry
+          if g.gameAccountID then tagByGid[g.gameAccountID] = tag or false end
+          rememberTag(name, tag)
+          if Comm.Allowed(tag) then roster[name] = entry else why = "not picked" end
         end
         report[#report + 1] = table.concat({ tostring(g.characterName), tostring(g.realmName),
-          tostring(g.realmID), tostring(g.wowProjectID), tostring(g.factionName), why or "OK" }, "/")
+          tostring(g.realmID), tostring(g.wowProjectID), tostring(g.factionName), tag and "tag" or "no tag", why or "OK" }, "/")
       end
     end
   end
@@ -176,10 +253,22 @@ Comm.FindFriend = findFriend
 -- learned a friend's full name: re-key their roster entry so whispers address "First Last"
 local function learnFull(key, full, gid)
   if gid then fullByGid[gid] = full end
-  if key and key ~= full and roster[key] then
-    roster[full] = roster[key]
-    roster[key] = nil
+  if key and key ~= full then
+    for _, map in ipairs({ roster, everyone }) do
+      if map[key] then
+        map[full] = map[key]
+        map[key] = nil
+      end
+    end
   end
+  rememberTag(full, gid and tagByGid[gid] or (everyone[full] and everyone[full].tag))
+end
+
+function Comm.EveryoneNames()
+  local names = {}
+  for name in pairs(everyone) do names[#names + 1] = name end
+  table.sort(names)
+  return names
 end
 
 ---------------------------------------------------------------------------
@@ -405,6 +494,13 @@ ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   end
   local name = ns.CleanName(g.characterName)
   if not name then return end
+  if Comm.GroupActive() then
+    if tagByGid[g.gameAccountID] == nil then Comm.RebuildRoster() end
+    if not Comm.Allowed(tagByGid[g.gameAccountID]) then
+      ns.Debug("BN-DROP", "not picked", name)
+      return
+    end
+  end
   ns.SetCap("bnet", "ok")
   local sender = accept(text, name, "bn")
   if sender then learnFull(rosterFind(name), sender, g.gameAccountID) end
@@ -416,7 +512,7 @@ ns.On("CHAT_MSG_ADDON", function(prefix, text, channel, sender)
   local name = ns.CleanName(sender)
   local key = findFriend(name)
   if not key then
-    ns.Debug("WHISPER-DROP", "not a friend", sender)
+    ns.Debug("WHISPER-DROP", "not a (picked) friend", sender)
     return
   end
   ns.SetCap("whisper", "ok")

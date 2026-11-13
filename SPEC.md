@@ -18,6 +18,10 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 - A "friend" is a Battle.net friend who is **online in WoW Forever** (same WoW project) and has the addon.
   Forever has no realms: `GetRealmName` returns an internal server name ("CAMWOW EU4 Realm 8 PvP")
   that differs between friends who play together, so it is ignored. Names are unique region-wide.
+- **Picked friends** (`FriendsAndFoesDB.group`, keyed by BattleTag): if the set is empty, every
+  friend above counts. Otherwise events are sent to, and accepted from, picked friends only. Toggle a
+  friend by clicking them in the Friends tab, or with `/fnf group <name|BattleTag>`. `/fnf group all`
+  clears the set. Unpicked online friends are still listed so you can pick them.
 - Each event is sent **two ways**:
   - `BNSendGameData` to the friend's game account
   - an addon `WHISPER` to the friend's character (same faction only)
@@ -133,7 +137,7 @@ Rules:
     - minimap, debug, unlock toasts, test toasts
     - which features this client supports
 - Slash commands: `/fnf`, `/fnf settings`, `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
-  `/fnf share`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
+  `/fnf share`, `/fnf group [name|BattleTag|all]`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
   `/fnf debug clear`, `/fnf minimap`.
 
 ## Tooling

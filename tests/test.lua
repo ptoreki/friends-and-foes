@@ -96,6 +96,41 @@ C_BattleNet.GetFriendGameAccountInfo, GetRealmID = origInfo, origRealmID
 ns.Comm.RebuildRoster()
 check(FriendsAndFoesDB.caps and FriendsAndFoesDB.caps.bnet == "ok", "caps saved for reports")
 
+-- picked friends: nobody picked = everyone; once someone is picked, only picks send/receive
+check(not ns.Comm.GroupActive() and ns.Comm.roster["Buddy Pal"] ~= nil, "no picks: every friend counts")
+check(ns.Comm.TagFor("Buddy Pal") == "Buddy#1234", "BattleTag known for Buddy Pal")
+check(select(2, ns.Comm.FindCandidate("buddy")) == "Buddy#1234" and ns.Comm.FindCandidate("BUDDY#1234") == "Buddy Pal"
+  and ns.Comm.FindCandidate("buddy pal") == "Buddy Pal", "FindCandidate by first name, BattleTag, full name")
+check(ns.Comm.FindCandidate("nobody") == nil, "FindCandidate miss")
+FriendsAndFoesDB.group = { ["Someone#9"] = true }
+ns.Comm.RebuildRoster()
+check(ns.Comm.GroupActive() and next(ns.Comm.roster) == nil and ns.Comm.everyone["Buddy Pal"] ~= nil,
+  "unpicked friend dropped from roster, still listed for picking")
+check(ns.Comm.lastRosterReport:find("not picked", 1, true) ~= nil, "roster report says not picked")
+local feedBefore = #real.feed
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 40 }, "pick1"), "WHISPER", 77)
+FIRE("CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 40 }, "pick2"), "WHISPER", "Buddy Pal")
+check(#real.feed == feedBefore and real.players["Buddy Pal"].level == 32, "unpicked friend's events ignored on both routes")
+SENT = {}
+ns.Comm.SendPayload("ping", "high")
+RUN_TICKERS(2)
+check(#SENT == 0, "nothing sent to unpicked friend: " .. #SENT)
+check(ns.Comm.TogglePick("Buddy#1234") == true and ns.Comm.roster["Buddy Pal"] ~= nil, "picking Buddy adds him back")
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 32 }, "pick3"), "WHISPER", 77)
+check(#real.feed == feedBefore + 1, "picked friend's events received")
+check(ns.Comm.TogglePick("Buddy#1234") == false, "unpick")
+ns.Comm.ClearPicks()
+check(not ns.Comm.GroupActive() and ns.Comm.roster["Buddy Pal"] ~= nil, "clearing picks = everyone again")
+check(ns.errors == 0, "no errors in picks (" .. tostring(ns.lastError) .. ")")
+-- UI: Friends tab lists the friend, slash command toggles a pick
+ns.UI.Show("friends")
+SlashCmdList.FRIENDSANDFOES("group")
+SlashCmdList.FRIENDSANDFOES("group buddy")
+check(ns.Comm.IsPicked("Buddy#1234"), "/fnf group buddy picks him")
+SlashCmdList.FRIENDSANDFOES("group all")
+check(not ns.Comm.GroupActive(), "/fnf group all clears picks")
+check(ns.errors == 0, "no errors in Friends tab / group command (" .. tostring(ns.lastError) .. ")")
+
 -- a different "Buddy" (same first name, other surname) can't pose as our friend
 FIRE("CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 50 }, "imp1"), "WHISPER", "Buddy Fake")
 check(real.players["Buddy Fake"] == nil and buddy.level == 32, "same-first-name stranger rejected")

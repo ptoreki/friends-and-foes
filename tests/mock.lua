@@ -99,6 +99,7 @@ FRIENDS_ONLINE = 1
 function BNGetNumFriends() return FRIENDS_ONLINE, FRIENDS_ONLINE end
 C_BattleNet = {
   GetFriendNumGameAccounts = function() return 1 end,
+  GetFriendAccountInfo = function() return { battleTag = "Buddy#1234" } end,
   GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "Nightslayer", factionName = "Horde", gameAccountID = 77 } end,
   GetGameAccountInfoByID = function(id) return { characterName = "Buddy", realmName = "Night Slayer", gameAccountID = 77 } end,
 }

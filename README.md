@@ -13,6 +13,9 @@ A WoW Forever addon that:
 
 Only Battle.net friends who are **online in WoW Forever** and **also have the addon** can see your events. (Forever has no realms, so the server name the game shows doesn't matter.)
 
+To get alerts only from certain friends, click them in the **Friends** tab (or `/fnf group <name>`).
+Once anyone is picked, you only exchange events with your picks. `/fnf group all` goes back to everyone.
+
 ## Beta testing
 - `/fnf sim all` shows every toast type, using fake data that never mixes with real records.
   `/fnf sim clear` removes it.
