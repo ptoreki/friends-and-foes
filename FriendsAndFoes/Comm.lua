@@ -77,6 +77,26 @@ end
 ---------------------------------------------------------------------------
 local lastRebuild = 0
 
+-- Can we exchange events with this Battle.net game account?
+-- WoW Forever has no realms: GetRealmName returns an internal server name ("CAMWOW EU4 Realm 8 PvP")
+-- that differs between friends who play together. Names are unique region-wide, so any friend in
+-- the Forever game (same WoW project) counts. Elsewhere, fall back to same-realm.
+-- Returns ok, reasonIfNot.
+function Comm.SameWorld(g)
+  if ns.ForeverNames() then
+    local proj = g.wowProjectID
+    if proj and WOW_PROJECT_ID and not issecret(proj) and proj ~= WOW_PROJECT_ID then
+      return false, "other WoW version"
+    end
+    return true
+  end
+  local myRealmID = GetRealmID and GetRealmID()
+  if issecret(myRealmID) then myRealmID = nil end
+  if g.realmName and ns.NormRealm(g.realmName) == ns.NormRealm(ns.realm) then return true end
+  if myRealmID and g.realmID and not issecret(g.realmID) and g.realmID == myRealmID then return true end
+  return false, "other realm"
+end
+
 function Comm.RebuildRoster()
   lastRebuild = GetTime()
   wipe(roster)
@@ -84,9 +104,6 @@ function Comm.RebuildRoster()
     ns.SetCap("bnet", "missing")
     return
   end
-  local myRealm = ns.NormRealm(ns.realm)
-  local myRealmID = GetRealmID and GetRealmID()
-  if issecret(myRealmID) then myRealmID = nil end
   local wowClient = BNET_CLIENT_WOW or "WoW"
   local n = BNGetNumFriends() or 0
   local report = {} -- one line per WoW game account, so a report shows why someone is missing
@@ -95,11 +112,10 @@ function Comm.RebuildRoster()
       local g = C_BattleNet.GetFriendGameAccountInfo(i, j)
       if g and g.clientProgram == wowClient then
         local why
-        local sameRealm = (g.realmName and ns.NormRealm(g.realmName) == myRealm)
-          or (myRealmID and g.realmID and not issecret(g.realmID) and g.realmID == myRealmID)
+        local same, notWhy = Comm.SameWorld(g)
         if not g.isOnline then why = "offline"
         elseif not g.characterName then why = "no character name"
-        elseif not sameRealm then why = "other realm"
+        elseif not same then why = notWhy
         end
         local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
         if not why and (not name or name == ns.me) then why = "self" end
@@ -107,7 +123,7 @@ function Comm.RebuildRoster()
           roster[name] = { gid = g.gameAccountID, faction = g.factionName }
         end
         report[#report + 1] = table.concat({ tostring(g.characterName), tostring(g.realmName),
-          tostring(g.realmID), tostring(g.factionName), why or "OK" }, "/")
+          tostring(g.realmID), tostring(g.wowProjectID), tostring(g.factionName), why or "OK" }, "/")
       end
     end
   end
@@ -115,7 +131,7 @@ function Comm.RebuildRoster()
   local sig = table.concat(report, "; ")
   if sig ~= Comm.lastRosterReport then
     Comm.lastRosterReport = sig
-    ns.Debug("ROSTER", "me=" .. tostring(ns.me) .. " realm=" .. tostring(ns.realm) .. "/" .. tostring(myRealmID),
+    ns.Debug("ROSTER", "me=" .. tostring(ns.me) .. " server=" .. tostring(ns.realm) .. " project=" .. tostring(WOW_PROJECT_ID),
       "bnetFriends=" .. n, sig ~= "" and sig or "no WoW game accounts")
   end
 end
@@ -378,12 +394,13 @@ end
 ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   if issecret(prefix) or prefix ~= ns.PREFIX or issecret(senderID) then return end
   local g = C_BattleNet.GetGameAccountInfoByID(senderID)
-  if not (g and g.characterName and g.realmName) then
+  if not (g and g.characterName) then
     ns.Debug("BN-DROP", "no game info", senderID)
     return
   end
-  if ns.NormRealm(g.realmName) ~= ns.NormRealm(ns.realm) then
-    ns.Debug("BN-DROP", "realm", g.realmName, ns.realm)
+  local same, why = Comm.SameWorld(g)
+  if not same then
+    ns.Debug("BN-DROP", why, g.realmName, ns.realm, tostring(g.wowProjectID))
     return
   end
   local name = ns.CleanName(g.characterName)

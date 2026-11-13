@@ -102,7 +102,7 @@ local TABS = {
         return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
       end },
     },
-    -- friends we've heard from, plus online same-realm Battle.net friends the addon can see
+    -- friends we've heard from, plus online Battle.net friends in Forever the addon can see
     -- but hasn't received anything from yet (so you can tell "not detected" from "silent")
     fetch = function()
       local rows = sortedValues(R().players, function(p) return p.friend end)

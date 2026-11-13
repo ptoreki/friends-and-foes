@@ -81,16 +81,17 @@ check(wt == "Buddy Pal", "whispers address First Last: " .. tostring(wt))
 ns.Comm.RebuildRoster()
 check(ns.Comm.roster["Buddy Pal"] ~= nil, "learned surname survives roster rebuild")
 
--- roster matches by realm ID when Battle.net spells the realm differently
+-- Forever has no realms: a friend on another internal server still counts; another WoW version doesn't
 local origInfo, origRealmID = C_BattleNet.GetFriendGameAccountInfo, GetRealmID
-C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "Some Other Spelling", realmID = 4242, factionName = "Horde", gameAccountID = 77 } end
-GetRealmID = function() return 4242 end
+WOW_PROJECT_ID = 99
+C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "CAMWOW EU5 Realm 2 PVP", wowProjectID = 99, factionName = "Horde", gameAccountID = 77 } end
 ns.Comm.RebuildRoster()
-check(ns.Comm.roster["Buddy Pal"] ~= nil, "roster matches same realm ID despite different realm name")
-GetRealmID = function() return 1 end
+check(ns.Comm.roster["Buddy Pal"] ~= nil, "friend on another Forever server is in the roster")
+C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "Nightslayer", wowProjectID = 1, factionName = "Horde", gameAccountID = 77 } end
 ns.Comm.RebuildRoster()
-check(next(ns.Comm.roster) == nil, "different realm excluded")
-check(ns.Comm.lastRosterReport:find("other realm", 1, true) ~= nil, "roster report says why: " .. tostring(ns.Comm.lastRosterReport))
+check(next(ns.Comm.roster) == nil, "friend on another WoW version excluded")
+check(ns.Comm.lastRosterReport:find("other WoW version", 1, true) ~= nil, "roster report says why: " .. tostring(ns.Comm.lastRosterReport))
+WOW_PROJECT_ID = nil
 C_BattleNet.GetFriendGameAccountInfo, GetRealmID = origInfo, origRealmID
 ns.Comm.RebuildRoster()
 check(FriendsAndFoesDB.caps and FriendsAndFoesDB.caps.bnet == "ok", "caps saved for reports")
@@ -147,6 +148,20 @@ check(moved == 2 and db.realms.R.hitlist.Kragg == nil and mh.attacks == 1 and mh
   "migration merges Kragg into Kragg Bear (moved " .. moved .. ")")
 check(mp.k == 1 and mp.a == 2 and mp.level == 24, "migration merges K/D/A and keeps level")
 check(db.realms.R.hitlist.Ash ~= nil, "migration leaves ambiguous bare names alone")
+-- 0.3.1 data stored per internal server name is merged into one Forever store
+local sdb = { realms = {
+  ["CAMWOW EU4 Realm 8 PvP"] = { players = { ["Kragg Bear"] = { name = "Kragg Bear", k = 1, d = 0, a = 0 } },
+    hitlist = { ["Kragg Bear"] = { name = "Kragg Bear", attacks = 1, kills = 1, suspect = 0, revenge = 0, victims = { A = true } } },
+    feed = { { t = 2, text = "b" } } },
+  ["CAMWOW EU5 Realm 2 PVP"] = { players = { ["Kragg Bear"] = { name = "Kragg Bear", k = 2, d = 1, a = 0 } },
+    hitlist = { ["Kragg Bear"] = { name = "Kragg Bear", attacks = 2, kills = 0, suspect = 0, revenge = 0, victims = { B = true } } },
+    feed = { { t = 1, text = "a" } } },
+} }
+check(ns.Data.MergeServerStores(sdb) == 2, "two server stores merged")
+local fz = sdb.realms.Forever
+check(fz and next(sdb.realms, next(sdb.realms)) == nil, "only the Forever store remains")
+check(fz.players["Kragg Bear"].k == 3 and fz.hitlist["Kragg Bear"].attacks == 3 and fz.hitlist["Kragg Bear"].victims.A and fz.hitlist["Kragg Bear"].victims.B, "server merge adds counters, unions victims")
+check(fz.feed[1].text == "a" and fz.feed[2].text == "b", "merged feed in time order")
 -- unit lookups used by death resolution
 local tbl = { ["Kragg Bear"] = 1, ["Ash Vale"] = 2, ["Ash Stone"] = 3, Solo = 4 }
 check(ns.PvP.FindByName(tbl, "Kragg") == 1 and ns.PvP.FindByName(tbl, "Ash") == nil

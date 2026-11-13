@@ -20,9 +20,16 @@ function Data.SimRealm()
   return ensure(db.sim)
 end
 
+-- Storage key. Forever has no realms (GetRealmName is an internal server name that can differ
+-- between friends and logins) and names are unique region-wide, so everything shares one store.
+function Data.StoreKey()
+  if ns.ForeverNames() then return "Forever" end
+  return ns.realm or GetRealmName()
+end
+
 function Data.RealRealm()
   local realms = FriendsAndFoesDB.realms
-  local key = ns.realm or GetRealmName()
+  local key = Data.StoreKey()
   realms[key] = realms[key] or {}
   return ensure(realms[key])
 end
@@ -200,7 +207,37 @@ function Data.FoldFirstNames(db)
   return moved
 end
 
+-- 0.2-0.3.1 stored data per "realm", which on Forever is an internal server name
+-- ("CAMWOW EU4 Realm 8 PvP"). Fold every such store into the single "Forever" store.
+function Data.MergeServerStores(db)
+  if not ns.ForeverNames() then return 0 end
+  db.realms = db.realms or {}
+  local dst = db.realms.Forever or {}
+  db.realms.Forever = ensure(dst)
+  local merged, keys = 0, {}
+  for key in pairs(db.realms) do
+    if key ~= "Forever" then keys[#keys + 1] = key end
+  end
+  for _, key in ipairs(keys) do
+    local src = ensure(db.realms[key])
+    for _, field in ipairs({ "players", "hitlist" }) do
+      for name, rec in pairs(src[field]) do
+        if dst[field][name] then mergeInto(dst[field][name], rec) else dst[field][name] = rec end
+      end
+    end
+    for _, e in ipairs(src.feed) do dst.feed[#dst.feed + 1] = e end
+    db.realms[key] = nil
+    merged = merged + 1
+  end
+  if merged > 0 then
+    table.sort(dst.feed, function(a, b) return (a.t or 0) < (b.t or 0) end)
+    while #dst.feed > FEED_MAX do table.remove(dst.feed, 1) end
+  end
+  return merged
+end
+
 ns.OnReady(function()
+  ns.Try("servers", function() ns.Debug("MERGE-SERVERS", Data.MergeServerStores(FriendsAndFoesDB)) end)
   ns.Try("fold", function() ns.Debug("FOLD", Data.FoldFirstNames(FriendsAndFoesDB)) end)
 end)
 

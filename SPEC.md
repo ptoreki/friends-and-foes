@@ -15,7 +15,9 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 - Nothing has been tested on a live client. Friends are the testers.
 
 ## Friends and sync
-- A "friend" is a Battle.net friend who is **online on the same realm** and has the addon.
+- A "friend" is a Battle.net friend who is **online in WoW Forever** (same WoW project) and has the addon.
+  Forever has no realms: `GetRealmName` returns an internal server name ("CAMWOW EU4 Realm 8 PvP")
+  that differs between friends who play together, so it is ignored. Names are unique region-wide.
 - Each event is sent **two ways**:
   - `BNSendGameData` to the friend's game account
   - an addon `WHISPER` to the friend's character (same faction only)
@@ -83,7 +85,7 @@ Rules:
 - **Kill vs. assist:** killing blows can't be detected without the combat log, so a friend's honorable
   kills are counted as **takedowns**.
 
-## Records (account-wide, per realm)
+## Records (account-wide, one store: `realms.Forever`; older per-server stores are merged at login)
 - **Players**: K/D/A per name.
   - Friends and you: takedowns and deaths.
   - Enemies: kills on us, deaths to us, and assists on our deaths.
@@ -155,4 +157,4 @@ or logout, to `WTF\Account\<ACCOUNT>\SavedVariables\FriendsAndFoes.lua`. It reco
 4. Whether the Battle.net and whisper sync routes deliver.
 
 ## Out of scope for 0.1
-Localization, cross-realm friends, login replay, waypoints, public release.
+Localization, login replay, waypoints, public release.

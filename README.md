@@ -11,7 +11,7 @@ A WoW Forever addon that:
    `AddOns\FriendsAndFoes\FriendsAndFoes.toc`.
 3. Log in. Type `/fnf` or click the crossed-swords minimap button.
 
-Only Battle.net friends **on your realm** who **also have the addon** can see your events.
+Only Battle.net friends who are **online in WoW Forever** and **also have the addon** can see your events. (Forever has no realms, so the server name the game shows doesn't matter.)
 
 ## Beta testing
 - `/fnf sim all` shows every toast type, using fake data that never mixes with real records.

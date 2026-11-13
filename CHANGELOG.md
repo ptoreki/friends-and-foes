@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2
+Compatible with 0.3.0 and 0.3.1.
+- **Fixed sync between friends.** WoW Forever has no realms. The "realm" the game reports
+  ("CAMWOW EU4 Realm 8 PvP") is an internal server name that differs between friends who play
+  together, and 0.3.1 and earlier only talked to friends on the *same* one. Any Battle.net friend
+  online in WoW Forever now counts. Friends playing another WoW version are excluded.
+- Your data is now kept in a single store, instead of one per server name, so it can't look
+  empty after a server change. Older stores are merged at login.
+
 ## 0.3.1
 Compatible with 0.3.0.
 - Friends whose realm name Battle.net spells differently are now matched by realm ID.

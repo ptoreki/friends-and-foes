@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.3.1"
+ns.VERSION = "0.3.2"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 
@@ -302,8 +302,8 @@ end
 function ns.PrintStatus()
   ns.Comm.RebuildRoster()
   local names = ns.Comm.RosterNames()
-  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " on " .. tostring(ns.realm))
-  print("  friends online on realm: " .. #names .. (#names > 0 and (" (" .. table.concat(names, ", ") .. ")") or "")
+  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " (server " .. tostring(ns.realm) .. ")")
+  print("  friends online: " .. #names .. (#names > 0 and (" (" .. table.concat(names, ", ") .. ")") or "")
     .. ", messages queued: " .. ns.Comm.QueuedCount())
   for k, v in pairs(ns.caps) do print("  " .. k .. ": " .. v) end
   print("  errors caught: " .. ns.errors .. (ns.lastError and (" (last: " .. ns.lastError .. ")") or ""))
