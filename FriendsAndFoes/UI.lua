@@ -6,9 +6,9 @@ ns.UI = UI
 
 local WIDTH, HEIGHT = 700, 480
 local ROWS, ROW_H = 15, 20
-local MAX_COLS = 6
+local MAX_COLS = 7
 
-local win, rowsFrame, header, rows, detail, settings, pageText, emptyText
+local win, rowsFrame, header, rows, detail, settings, pageText, emptyText, simBanner
 local tabButtons = {}
 local currentTab = "hitlist"
 local offset = 0
@@ -21,6 +21,8 @@ local BACKDROP = {
   tile = true, tileSize = 32, edgeSize = 32,
   insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
+
+local function R() return ns.Data.ViewRealm() end
 
 ---------------------------------------------------------------------------
 -- data per tab
@@ -37,7 +39,7 @@ end
 local function victimsText(victims)
   local list = {}
   for name in pairs(victims or {}) do
-    local p = ns.Data.Realm().players[name]
+    local p = R().players[name]
     list[#list + 1] = ns.ClassColored(name, p and p.class)
   end
   table.sort(list)
@@ -49,44 +51,60 @@ local function lastText(e)
 end
 
 local function lvl(e) return e.level and tostring(e.level) or "?" end
+local function guild(e) return e.guild and ("<" .. e.guild .. ">") or "" end
+local function nameCol(e) return ns.ClassColored(e.name, e.class) end
+
+local function hitKills(e)
+  local s = tostring(e.kills or 0)
+  if (e.suspect or 0) > 0 then s = s .. "*" end
+  if (e.revenge or 0) > 0 then s = s .. "  |cff33ff33" .. L.REVENGE_SHORT:format(e.revenge) .. "|r" end
+  return s
+end
 
 local TABS = {
   { key = "hitlist", label = L.TAB_HITLIST,
     columns = {
-      { L.COL_NAME, 130, function(e) return ns.ClassColored(e.name, e.class) end },
-      { L.COL_LEVEL, 35, lvl },
-      { L.COL_ATTACKS, 55, function(e) return e.attacks or 0 end },
-      { L.COL_KILLS, 45, function(e) return (e.kills or 0) .. (((e.suspect or 0) > 0) and "*" or "") end },
-      { L.COL_VICTIMS, 170, function(e) return victimsText(e.victims) end },
-      { L.COL_LAST, 220, lastText },
+      { L.COL_NAME, 105, nameCol },
+      { L.COL_LEVEL, 30, lvl },
+      { L.COL_GUILD, 105, guild },
+      { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end },
+      { L.COL_KILLS, 75, hitKills },
+      { L.COL_VICTIMS, 120, function(e) return victimsText(e.victims) end },
+      { L.COL_LAST, 175, lastText },
     },
-    fetch = function() return sortedValues(ns.Data.Realm().hitlist) end },
+    fetch = function() return sortedValues(R().hitlist) end },
   { key = "enemies", label = L.TAB_ENEMIES,
     columns = {
-      { L.COL_NAME, 140, function(e) return ns.ClassColored(e.name, e.class) end },
-      { L.COL_LEVEL, 35, lvl },
-      { L.COL_KILLS_ON_US, 80, function(e) return e.k end },
-      { L.COL_DEATHS_TO_US, 75, function(e) return e.d end },
-      { L.COL_ASSISTS, 60, function(e) return e.a end },
-      { L.COL_LAST, 260, lastText },
+      { L.COL_NAME, 115, nameCol },
+      { L.COL_LEVEL, 30, lvl },
+      { L.COL_GUILD, 110, guild },
+      { L.COL_KILLS_ON_US, 75, function(e) return e.k end },
+      { L.COL_DEATHS_TO_US, 70, function(e) return e.d end },
+      { L.COL_ASSISTS, 55, function(e) return e.a end },
+      { L.COL_LAST, 205, lastText },
     },
-    fetch = function() return sortedValues(ns.Data.Realm().players, function(p) return p.enemy end) end },
+    fetch = function() return sortedValues(R().players, function(p) return p.enemy end) end },
   { key = "friends", label = L.TAB_FRIENDS,
     columns = {
-      { L.COL_NAME, 120, function(e) return ns.ClassColored(e.name, e.class) end },
-      { L.COL_LEVEL, 35, lvl },
-      { L.COL_TAKEDOWNS, 75, function(e) return e.k end },
+      { L.COL_NAME, 110, nameCol },
+      { L.COL_LEVEL, 30, lvl },
+      { L.COL_VERSION, 50, function(e)
+        if not e.version then return "" end
+        if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
+        return e.version
+      end },
+      { L.COL_TAKEDOWNS, 70, function(e) return e.k end },
       { L.COL_DEATHS, 55, function(e) return e.d end },
-      { L.COL_LAST_EVENT, 365, function(e) return (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r" end },
+      { L.COL_LAST_EVENT, 345, function(e) return (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r" end },
     },
-    fetch = function() return sortedValues(ns.Data.Realm().players, function(p) return p.friend end) end },
+    fetch = function() return sortedValues(R().players, function(p) return p.friend end) end },
   { key = "feed", label = L.TAB_FEED,
     columns = {
       { L.COL_TIME, 80, function(e) return ns.Ago(e.t) end },
-      { L.COL_EVENT, 570, function(e) return e.text end },
+      { L.COL_EVENT, 580, function(e) return e.text end },
     },
     fetch = function()
-      local feed, out = ns.Data.Realm().feed, {}
+      local feed, out = R().feed, {}
       for i = #feed, 1, -1 do out[#out + 1] = feed[i] end
       return out
     end },
@@ -126,15 +144,23 @@ local function layoutColumns(def)
   end
 end
 
+local function refreshShareStatus()
+  local queued = ns.Comm.QueuedCount("bulk")
+  detail.shareStatus:SetText(queued > 0 and L.SHARE_QUEUED:format(queued) or "")
+  if ns.viewSim then detail.share:Disable() else detail.share:Enable() end
+end
+
 local function refreshDetail()
   if currentTab ~= "hitlist" then
     detail:Hide()
     return
   end
   detail:Show()
-  local h = selected and ns.Data.Realm().hitlist[selected]
+  refreshShareStatus()
+  local h = selected and R().hitlist[selected]
   if h then
-    detail.label:SetText(ns.ClassColored(h.name, h.class) .. "  |cff888888" .. L.SUSPECT_HINT .. "|r")
+    local extra = h.sharedBy and ("  |cff888888" .. L.SHARED_BY:format(h.sharedBy) .. "|r") or ""
+    detail.label:SetText(ns.ClassColored(h.name, h.class) .. extra .. "  |cff888888" .. L.SUSPECT_HINT .. "|r")
     detail.note:SetText(h.note or "")
     detail.note:Enable()
     detail.save:Enable()
@@ -154,10 +180,12 @@ function UI.Refresh()
   for _, b in ipairs(tabButtons) do
     if b.key == currentTab then b:LockHighlight() else b:UnlockHighlight() end
   end
+  simBanner:SetShown(ns.viewSim and true or false)
 
   if currentTab == "settings" then
     rowsFrame:Hide()
     detail:Hide()
+    pageText:SetText("")
     settings:Show()
     UI.RefreshSettings()
     return
@@ -217,7 +245,7 @@ local capsText, modeText
 
 local function check(parent, x, y, label, get, set)
   local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-  cb:SetSize(24, 24)
+  cb:SetSize(22, 22)
   cb:SetPoint("TOPLEFT", x, y)
   local fs = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   fs:SetPoint("LEFT", cb, "RIGHT", 2, 0)
@@ -239,63 +267,80 @@ local function buildSettings(parent)
   local function toggle(tbl, key)
     return function() return S()[tbl][key] end, function(v) S()[tbl][key] = v end
   end
+  local STEP = 21
 
   local x1, x2, x3 = 10, 230, 450
   heading(parent, x1, -5, L.SHARE_HEADER)
-  local y = -25
+  local y = -24
   for _, o in ipairs({ { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR }, { "pvp", L.OPT_PVP } }) do
     check(parent, x1, y, o[2], toggle("share", o[1]))
-    y = y - 24
+    y = y - STEP
   end
 
+  y = y - 8
+  heading(parent, x1, y, L.DND_HEADER)
+  y = y - 19
+  check(parent, x1, y, L.OPT_DND_COMBAT, toggle("dnd", "combat"))
+  y = y - STEP
+  check(parent, x1, y, L.OPT_DND_INSTANCE, toggle("dnd", "instance"))
+
   heading(parent, x2, -5, L.TOAST_HEADER)
-  y = -25
+  y = -24
   for _, o in ipairs({
     { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR },
-    { "attacked", L.OPT_ATTACKED }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL }, { "sighting", L.OPT_SIGHTING },
+    { "attacked", L.OPT_ATTACKED }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL },
+    { "sighting", L.OPT_SIGHTING }, { "share", L.OPT_SHARE },
   }) do
     check(parent, x2, y, o[2], toggle("toast", o[1]))
-    y = y - 24
+    y = y - STEP
   end
 
   heading(parent, x3, -5, L.SOUND_HEADER)
-  y = -25
+  y = -24
   for _, o in ipairs({
     { "enabled", L.OPT_SOUND }, { "pvp", L.OPT_SOUND_PVP }, { "progress", L.OPT_SOUND_PROGRESS }, { "sighting", L.OPT_SOUND_SIGHTING },
   }) do
     check(parent, x3, y, o[2], toggle("sound", o[1]))
-    y = y - 24
+    y = y - STEP
   end
 
-  heading(parent, x3, -135, L.MISC_HEADER)
-  check(parent, x3, -155,
-    L.OPT_MINIMAP,
+  y = y - 8
+  heading(parent, x3, y, L.MISC_HEADER)
+  y = y - 19
+  check(parent, x3, y, L.OPT_MINIMAP,
     function() return not S().minimap.hide end,
     function(v)
       S().minimap.hide = not v
       if ns.Minimap then ns.Minimap.Update() end
     end)
-  check(parent, x3, -179, L.OPT_DEBUG,
+  y = y - STEP
+  check(parent, x3, y, L.OPT_DEBUG,
     function() return S().debug end,
     function(v) S().debug = v end)
 
   local unlock = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  unlock:SetSize(120, 22)
+  unlock:SetSize(110, 22)
   unlock:SetPoint("TOPLEFT", x1, -205)
   unlock:SetText(L.BTN_UNLOCK)
   unlock:SetScript("OnClick", function() ns.Toast.ToggleUnlock() end)
 
   local test = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  test:SetSize(120, 22)
-  test:SetPoint("LEFT", unlock, "RIGHT", 10, 0)
+  test:SetSize(110, 22)
+  test:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
   test:SetText(L.BTN_TEST)
   test:SetScript("OnClick", function() ns.Toast.Test() end)
+
+  local sim = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  sim:SetSize(110, 22)
+  sim:SetPoint("LEFT", test, "RIGHT", 8, 0)
+  sim:SetText(L.BTN_SIM)
+  sim:SetScript("OnClick", function() ns.Sim.RunAll(false) end)
 
   heading(parent, x1, -238, L.CAPS_HEADER)
   capsText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   capsText:SetPoint("TOPLEFT", x1, -256)
   capsText:SetJustifyH("LEFT")
-  capsText:SetWidth(200)
+  capsText:SetWidth(210)
 
   heading(parent, x2, -238, L.MODE_HEADER)
   modeText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -334,7 +379,7 @@ function UI.RefreshSettings()
     local v = ns.caps[c[1]] or "untested"
     lines[#lines + 1] = c[2] .. ": " .. (CAP_COLORS[v] or "") .. v .. "|r"
   end
-  lines[#lines + 1] = "Errors caught: " .. ns.errors
+  lines[#lines + 1] = L.ERRORS_LINE:format(ns.errors)
   capsText:SetText(table.concat(lines, "\n"))
   modeText:SetText(modeNotes())
 end
@@ -342,6 +387,14 @@ end
 ---------------------------------------------------------------------------
 -- window
 ---------------------------------------------------------------------------
+local function button(parent, w, text, onClick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(w, 22)
+  b:SetText(text)
+  b:SetScript("OnClick", onClick)
+  return b
+end
+
 local function build()
   win = CreateFrame("Frame", "FriendsAndFoesFrame", UIParent, "BackdropTemplate")
   win:SetSize(WIDTH, HEIGHT)
@@ -365,15 +418,26 @@ local function build()
   local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -6, -6)
 
+  -- simulation banner
+  simBanner = CreateFrame("Frame", nil, win)
+  simBanner:SetSize(260, 22)
+  simBanner:SetPoint("TOPLEFT", 18, -14)
+  local simText = simBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  simText:SetPoint("LEFT")
+  simText:SetText("|cffff9933" .. L.SIM_BANNER .. "|r")
+  local simExit = button(simBanner, 80, L.SIM_EXIT, function()
+    ns.viewSim = false
+    UI.Refresh()
+  end)
+  simExit:SetPoint("LEFT", simText, "RIGHT", 6, 0)
+  simBanner:Hide()
+
   -- tabs
   local prev
   for _, t in ipairs(TABS) do
-    local b = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
-    b:SetSize(100, 22)
+    local b = button(win, 100, t.label, function() UI.SelectTab(t.key) end)
     if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", 20, -44) end
-    b:SetText(t.label)
     b.key = t.key
-    b:SetScript("OnClick", function() UI.SelectTab(t.key) end)
     tabButtons[#tabButtons + 1] = b
     prev = b
   end
@@ -441,7 +505,7 @@ local function build()
   pageText = win:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   pageText:SetPoint("BOTTOMRIGHT", -24, 18)
 
-  -- hitlist detail (note / remove)
+  -- hitlist detail (note / remove / share)
   detail = CreateFrame("Frame", nil, win)
   detail:SetPoint("BOTTOMLEFT", 20, 30)
   detail:SetPoint("BOTTOMRIGHT", -20, 30)
@@ -452,34 +516,32 @@ local function build()
   noteLabel:SetPoint("BOTTOMLEFT", 0, 4)
   noteLabel:SetText(L.NOTE)
   detail.note = CreateFrame("EditBox", nil, detail, "InputBoxTemplate")
-  detail.note:SetSize(400, 20)
+  detail.note:SetSize(300, 20)
   detail.note:SetPoint("LEFT", noteLabel, "RIGHT", 10, 0)
   detail.note:SetAutoFocus(false)
   detail.note:SetMaxLetters(200)
-  detail.save = CreateFrame("Button", nil, detail, "UIPanelButtonTemplate")
-  detail.save:SetSize(70, 22)
-  detail.save:SetPoint("LEFT", detail.note, "RIGHT", 8, 0)
-  detail.save:SetText(L.SAVE)
   local function saveNote()
-    local h = selected and ns.Data.Realm().hitlist[selected]
+    local h = selected and R().hitlist[selected]
     if h then
       local t = detail.note:GetText()
       h.note = (t and t ~= "") and t or nil
     end
     detail.note:ClearFocus()
   end
-  detail.save:SetScript("OnClick", saveNote)
+  detail.save = button(detail, 60, L.SAVE, saveNote)
+  detail.save:SetPoint("LEFT", detail.note, "RIGHT", 8, 0)
   detail.note:SetScript("OnEnterPressed", saveNote)
   detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  detail.remove = CreateFrame("Button", nil, detail, "UIPanelButtonTemplate")
-  detail.remove:SetSize(80, 22)
-  detail.remove:SetPoint("LEFT", detail.save, "RIGHT", 6, 0)
-  detail.remove:SetText(L.REMOVE)
-  detail.remove:SetScript("OnClick", function()
-    if selected then ns.Data.Realm().hitlist[selected] = nil end
+  detail.remove = button(detail, 70, L.REMOVE, function()
+    if selected then R().hitlist[selected] = nil end
     selected = nil
     UI.Refresh()
   end)
+  detail.remove:SetPoint("LEFT", detail.save, "RIGHT", 6, 0)
+  detail.share = button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end)
+  detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
+  detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
 
   -- settings
   settings = CreateFrame("Frame", nil, win)
@@ -487,11 +549,32 @@ local function build()
   settings:SetPoint("BOTTOMRIGHT", -20, 20)
   buildSettings(settings)
   settings:Hide()
+
+  -- keep the share queue counter live while the window is open
+  C_Timer.NewTicker(1, function()
+    if win:IsShown() and currentTab == "hitlist" then ns.Try("share-status", refreshShareStatus) end
+  end)
+end
+
+function UI.ShareHitlist()
+  local n = 0
+  for _ in pairs(ns.Comm.roster) do n = n + 1 end
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+  if n == 0 then
+    print(prefix .. L.SHARE_NO_FRIENDS)
+    return
+  end
+  local count = ns.Comm.ShareHitlist()
+  print(prefix .. L.SHARE_STARTED:format(count, n))
+  UI.Refresh()
 end
 
 function UI.Show(tab)
   if not win then build() end
-  if tab then currentTab = tab; offset = 0 end
+  if tab then
+    currentTab = tab
+    offset = 0
+  end
   win:Show()
   UI.Refresh()
 end
@@ -501,7 +584,7 @@ function UI.Toggle()
 end
 
 function UI.ShowPlayer(name)
-  local r = ns.Data.Realm()
+  local r = R()
   if r.hitlist[name] then
     selected = name
     UI.Show("hitlist")
@@ -525,6 +608,7 @@ end
 SLASH_FRIENDSANDFOES1 = "/fnf"
 SlashCmdList.FRIENDSANDFOES = function(msg)
   msg = strtrim((msg or ""):lower())
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
   if msg == "" then
     UI.Toggle()
   elseif msg == "settings" or msg == "config" then
@@ -537,16 +621,21 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     ns.Toast.Test()
   elseif msg == "status" then
     ns.PrintStatus()
+  elseif msg == "share" then
+    UI.ShareHitlist()
   elseif msg == "debug" then
     ns.S().debug = not ns.S().debug
-    print("|cff33ff99" .. L.ADDON .. "|r debug: " .. (ns.S().debug and "on" or "off"))
+    print(prefix .. "debug: " .. (ns.S().debug and "on" or "off"))
   elseif msg == "debug clear" then
     wipe(FriendsAndFoesDB.debugLog)
-    print("|cff33ff99" .. L.ADDON .. "|r debug log cleared")
+    wipe(FriendsAndFoesDB.errorLog)
+    print(prefix .. "debug + error logs cleared")
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end
+  elseif msg == "sim" or msg:find("^sim ") then
+    ns.Sim.Command(strtrim(msg:sub(4)))
   else
-    print("|cff33ff99" .. L.ADDON .. "|r " .. L.HELP)
+    print(prefix .. L.HELP)
   end
 end

@@ -8,6 +8,8 @@ local MAX_VISIBLE = 3
 local DURATION = 5
 local FADE = 0.5
 local HEIGHT, WIDTH, GAP = 58, 320, 6
+local QUEUE_MAX = 30
+local STALE_PVP = 60
 
 local BORDER = {
   pvp = { 0.9, 0.2, 0.15 },
@@ -95,7 +97,7 @@ end
 local function render(f)
   local spec = f.spec
   f.icon:SetTexture(spec.icon or ns.ICON.fallback)
-  f.title:SetText(spec.title or "")
+  f.title:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or ""))
   f.text:SetText(spec.text or "")
   local c = BORDER[spec.category] or BORDER.progress
   f:SetBackdropBorderColor(c[1], c[2], c[3], 1)
@@ -175,22 +177,54 @@ local function playSound(category)
   ns.Try("sound", PlaySound, SOUNDS[category], "Master")
 end
 
-function Toast.Pump()
-  while #active < MAX_VISIBLE and #queue > 0 do
-    local spec = table.remove(queue, 1)
-    local f = table.remove(pool) or createToast()
-    f.spec = spec
-    render(f)
-    active[#active + 1] = f
-    Toast.Layout()
-    f:Show()
-    playSound(spec.category)
+-- Do-not-disturb: in combat only PvP/sighting toasts get through; in instances everything waits.
+local function isHeld(spec)
+  local dnd = ns.S().dnd
+  if dnd.instance then
+    local inInstance = IsInInstance()
+    if not ns.issecret(inInstance) and inInstance then return true end
   end
+  if dnd.combat and spec.category ~= "pvp" and spec.category ~= "sighting" then
+    local inCombat = UnitAffectingCombat("player")
+    if not ns.issecret(inCombat) and inCombat then return true end
+  end
+  return false
+end
+
+local function show(spec)
+  local f = table.remove(pool) or createToast()
+  f.spec = spec
+  render(f)
+  active[#active + 1] = f
+  Toast.Layout()
+  f:Show()
+  playSound(spec.category)
+end
+
+function Toast.Pump()
+  local i = 1
+  while #active < MAX_VISIBLE and i <= #queue do
+    local spec = queue[i]
+    if spec.category == "pvp" and GetTime() - spec.created > STALE_PVP then
+      table.remove(queue, i) -- a fight from minutes ago is no longer actionable
+    elseif isHeld(spec) then
+      i = i + 1
+    else
+      table.remove(queue, i)
+      show(spec)
+    end
+  end
+end
+
+for _, ev in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA" }) do
+  ns.On(ev, function() if anchor then Toast.Pump() end end)
 end
 
 function Toast.Push(spec)
   if not anchor then return end
   if spec.kind and ns.S().toast[spec.kind] == false then return end
+  spec.created = GetTime()
+  spec.sim = spec.sim or ns.simulating or nil
   if spec.collapseKey and spec.merge then
     for _, f in ipairs(active) do
       if f.spec.collapseKey == spec.collapseKey then
@@ -207,6 +241,7 @@ function Toast.Push(spec)
     end
   end
   queue[#queue + 1] = spec
+  while #queue > QUEUE_MAX do table.remove(queue, 1) end
   Toast.Pump()
 end
 

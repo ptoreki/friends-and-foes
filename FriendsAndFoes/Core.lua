@@ -1,6 +1,7 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.1.0"
+ns.VERSION = "0.2.0"
+ns.PROTOCOL = 2
 ns.PREFIX = "FNF1"
 
 local issecret = issecretvalue or function() return false end
@@ -11,8 +12,9 @@ ns.issecret = issecret
 ---------------------------------------------------------------------------
 local DEFAULTS = {
   share = { level = true, loot = true, gear = true, pvp = true },
-  toast = { level = true, loot = true, gear = true, attacked = true, died = true, kill = true, sighting = true },
+  toast = { level = true, loot = true, gear = true, attacked = true, died = true, kill = true, sighting = true, share = true },
   sound = { enabled = true, pvp = true, progress = true, sighting = true },
+  dnd = { combat = true, instance = true },
   minimap = { hide = false, angle = 210 },
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
@@ -35,6 +37,7 @@ function ns.S() return FriendsAndFoesDB.settings end
 -- debug log + error containment
 ---------------------------------------------------------------------------
 ns.errors = 0
+local ERROR_LOG_MAX = 50
 
 local function str(v)
   if issecret(v) then return "<SECRET>" end
@@ -51,13 +54,22 @@ function ns.Debug(tag, ...)
   if #log > 5000 then table.remove(log, 1) end
 end
 
+-- Errors are always kept (last 50), even with debug logging off.
+local function recordError(tag, err)
+  ns.errors = ns.errors + 1
+  ns.lastError = str(err)
+  local db = FriendsAndFoesDB
+  if db and db.errorLog then
+    local log = db.errorLog
+    log[#log + 1] = date("%Y-%m-%d %H:%M:%S") .. " [" .. tag .. "] " .. ns.lastError
+    while #log > ERROR_LOG_MAX do table.remove(log, 1) end
+  end
+  ns.Debug("ERR:" .. tag, err)
+end
+
 function ns.Try(tag, fn, ...)
   local ok, err = pcall(fn, ...)
-  if not ok then
-    ns.errors = ns.errors + 1
-    ns.lastError = str(err)
-    ns.Debug("ERR:" .. tag, err)
-  end
+  if not ok then recordError(tag, err) end
   return ok
 end
 
@@ -118,6 +130,7 @@ ns.On("ADDON_LOADED", function(name)
   fillDefaults(db.settings, DEFAULTS)
   db.realms = db.realms or {}
   db.debugLog = db.debugLog or {}
+  db.errorLog = db.errorLog or {}
   FriendsAndFoesCharDB = FriendsAndFoesCharDB or {}
   FriendsAndFoesCharDB.equipped = FriendsAndFoesCharDB.equipped or {}
 end)
@@ -156,6 +169,16 @@ function ns.StripRealm(name)
   return name:match("^([^%-]+)") or name
 end
 
+-- Canonical player key: no realm suffix, no stray whitespace. Friends are same-realm only,
+-- so "Name-Realm" and "Name" must land on the same record.
+function ns.CleanName(name)
+  if not name or issecret(name) or type(name) ~= "string" then return nil end
+  name = ns.StripRealm(name)
+  name = name and name:match("^%s*(.-)%s*$")
+  if not name or name == "" then return nil end
+  return name
+end
+
 -- Turns a Blizzard format string ("You create: %s.") into an anchored Lua pattern.
 function ns.ToPattern(fmt)
   if type(fmt) ~= "string" then return nil end
@@ -191,21 +214,42 @@ function ns.Ago(t)
 end
 
 local idCounter = 0
-function ns.NewId()
+function ns.NewId(sim)
   idCounter = idCounter + 1
-  return string.format("%x%x", time() % 0x1000000, idCounter)
+  return (sim and "S" or "") .. string.format("%x%x", time() % 0x1000000, idCounter)
 end
 
--- player-ish units travel as "name:CLASS:level", lists joined with ";"
+-- "1.2.10" > "1.2.9"
+function ns.VersionNewer(a, b)
+  if not a or not b then return false end
+  local pa, pb = ns.Split(a, "."), ns.Split(b, ".")
+  for i = 1, math.max(#pa, #pb) do
+    local x, y = tonumber(pa[i]) or 0, tonumber(pb[i]) or 0
+    if x ~= y then return x > y end
+  end
+  return false
+end
+
+-- player-ish units travel as "name:CLASS:level:guild", lists joined with ";"
+local function field(v)
+  if v == nil then return "" end
+  return (tostring(v):gsub("[:;\t]", " "))
+end
+
 function ns.EncodeUnit(u)
   if not u then return "" end
-  return (u.name or "") .. ":" .. (u.class or "") .. ":" .. (u.level or "")
+  return field(u.name) .. ":" .. field(u.class) .. ":" .. field(u.level) .. ":" .. field(u.guild)
 end
 
 function ns.DecodeUnit(s)
   if not s or s == "" then return nil end
   local p = ns.Split(s, ":")
-  return { name = (p[1] ~= "" and p[1]) or nil, class = (p[2] ~= "" and p[2]) or nil, level = tonumber(p[3]) }
+  return {
+    name = ns.CleanName(p[1]),
+    class = (p[2] and p[2] ~= "") and p[2] or nil,
+    level = tonumber(p[3]),
+    guild = (p[4] and p[4] ~= "") and p[4] or nil,
+  }
 end
 
 function ns.EncodeUnits(list, max)
@@ -231,7 +275,8 @@ end
 function ns.PrintStatus()
   local n = 0
   for _ in pairs(ns.Comm.roster) do n = n + 1 end
-  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - friends online on realm: " .. n)
+  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - friends online on realm: " .. n
+    .. ", messages queued: " .. ns.Comm.QueuedCount())
   for k, v in pairs(ns.caps) do print("  " .. k .. ": " .. v) end
   print("  errors caught: " .. ns.errors .. (ns.lastError and (" (last: " .. ns.lastError .. ")") or ""))
 end

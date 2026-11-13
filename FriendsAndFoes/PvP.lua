@@ -10,7 +10,9 @@ local PvP = {}
 ns.PvP = PvP
 
 local ENCOUNTER_GAP = 30
-local MAX_ATTACKERS_PER_MSG = 4
+local ATTACKERS_PER_MSG = 2
+local MAX_ASSISTS_PER_MSG = 3
+local ZONE_MAX_LEN = 48
 local SIGHTING_COOLDOWN = 300
 
 -- world-PvP objective areas are excluded
@@ -40,10 +42,12 @@ end
 function PvP.ZoneText()
   local zone, sub = GetRealZoneText(), GetSubZoneText()
   if issecret(zone) or not zone then zone = "?" end
+  local text = zone
   if sub and not issecret(sub) and sub ~= "" and sub ~= zone then
-    return zone .. " (" .. sub .. ")"
+    text = zone .. " (" .. sub .. ")"
   end
-  return zone
+  if #text > ZONE_MAX_LEN then text = text:sub(1, ZONE_MAX_LEN) end
+  return text
 end
 
 ---------------------------------------------------------------------------
@@ -67,18 +71,21 @@ local function readEnemy(unit)
   ns.SetCap("enemyDetect", "ok")
 
   local info = { faction = faction }
-  local name, realm = UnitName(unit)
+  local name = UnitName(unit)
   if issecret(name) then
     ns.SetCap("unitNames", "secret")
   elseif name and name ~= "" and name ~= UNKNOWNOBJECT then
     ns.SetCap("unitNames", "ok")
-    info.name = name
-    if realm and not issecret(realm) and realm ~= "" then info.name = name .. "-" .. realm end
+    info.name = ns.CleanName(name)
   end
   local _, class = UnitClass(unit)
   if not issecret(class) then info.class = class end
   local level = UnitLevel(unit)
   if not issecret(level) and level and level > 0 then info.level = level end
+  if GetGuildInfo then
+    local guild = GetGuildInfo(unit)
+    if guild and not issecret(guild) and guild ~= "" then info.guild = guild end
+  end
   local targetsMe = UnitIsUnit(unit .. "target", "player")
   if issecret(targetsMe) then
     ns.SetCap("targeting", "secret")
@@ -97,10 +104,24 @@ function PvP.ReadEnemy(unit)
   return nil
 end
 
+local seenCount = 0
 local function remember(info)
   if not info.name then return end
   info.time = GetTime()
+  if not seen[info.name] then seenCount = seenCount + 1 end
   seen[info.name] = info
+  if seenCount > 300 then
+    local now = GetTime()
+    for name, i in pairs(seen) do
+      if now - i.time > 600 then
+        seen[name] = nil
+        seenCount = seenCount - 1
+      end
+    end
+    for name, t in pairs(threat) do
+      if now - t.time > 60 then threat[name] = nil end
+    end
+  end
 end
 
 local CANDIDATES = { "target", "focus", "mouseover" }
@@ -158,11 +179,12 @@ local function onHit()
       added[#added + 1] = info
     end
   end
-  if #added > 0 then
-    ns.Events.Emit("ATK", {
-      enc = enc.id, zone = PvP.ZoneText(),
-      attackers = ns.EncodeUnits(added, MAX_ATTACKERS_PER_MSG),
-    })
+  -- small chunks keep each message under the 255-byte limit even with guild names
+  local zone = PvP.ZoneText()
+  for i = 1, #added, ATTACKERS_PER_MSG do
+    local chunk = {}
+    for j = i, math.min(i + ATTACKERS_PER_MSG - 1, #added) do chunk[#chunk + 1] = added[j] end
+    ns.Events.Emit("ATK", { enc = enc.id, zone = zone, attackers = ns.EncodeUnits(chunk, ATTACKERS_PER_MSG) })
   end
 end
 
@@ -223,14 +245,14 @@ local function readRecap()
   for _, e in ipairs(events) do
     local t = e.timestamp
     if t and not issecret(t) and (not bestT or t > bestT) then best, bestT = e, t end
-    local name = e.sourceName
-    if name and not issecret(name) and name ~= "" and recapSourceIsPlayer(e) == true then
+    local name = ns.CleanName(e.sourceName)
+    if name and recapSourceIsPlayer(e) == true then
       result.players[name] = true
     end
   end
   best = best or events[1]
-  local name = best and best.sourceName
-  if not name or issecret(name) or name == "" then
+  local name = best and ns.CleanName(best.sourceName)
+  if not name then
     ns.SetCap("deathRecap", "secret")
     return result
   end
@@ -291,7 +313,7 @@ local function resolveDeath(deathTime)
     zone = PvP.ZoneText(),
     killer = killer and ns.EncodeUnit(killer) or "",
     conf = conf or "",
-    assists = ns.EncodeUnits(assists, MAX_ATTACKERS_PER_MSG),
+    assists = ns.EncodeUnits(assists, MAX_ASSISTS_PER_MSG),
   })
   enc = nil
 end
@@ -325,6 +347,7 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
     victim = msg:match(p)
     if victim then break end
   end
+  victim = ns.CleanName(victim)
   if not victim then
     ns.Debug("HONOR-NOMATCH", msg)
     return
@@ -335,6 +358,7 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
     victim = victim,
     vclass = info and info.class or "",
     vlevel = info and info.level or "",
+    vguild = info and info.guild or "",
     zone = PvP.ZoneText(),
   })
 end)
@@ -350,7 +374,7 @@ local function checkSighting(unit)
   local hit = ns.Data.Realm().hitlist[info.name]
   if not hit then return end
   local zone = PvP.ZoneText()
-  ns.Data.Touch(hit, { class = info.class, level = info.level, zone = zone })
+  ns.Data.Touch(hit, { class = info.class, level = info.level, guild = info.guild, zone = zone })
   local now = GetTime()
   if sightCooldown[info.name] and now - sightCooldown[info.name] < SIGHTING_COOLDOWN then return end
   sightCooldown[info.name] = now

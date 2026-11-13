@@ -99,8 +99,28 @@ ns.On("CHAT_MSG_LOOT", function(msg)
 end)
 
 ---------------------------------------------------------------------------
--- new gear
+-- new gear (bursts within GEAR_BUNDLE seconds become one event: best item + count)
 ---------------------------------------------------------------------------
+local GEAR_BUNDLE = 4
+local gearBuffer
+
+local function queueGear(link, quality)
+  if not gearBuffer then
+    gearBuffer = { count = 0 }
+    C_Timer.After(GEAR_BUNDLE, function()
+      local b = gearBuffer
+      gearBuffer = nil
+      if b and b.best then
+        ns.Try("gear-emit", ns.Events.Emit, "GEAR", { link = b.best, count = b.count })
+      end
+    end)
+  end
+  gearBuffer.count = gearBuffer.count + 1
+  if not gearBuffer.bestQuality or quality > gearBuffer.bestQuality then
+    gearBuffer.best, gearBuffer.bestQuality = link, quality
+  end
+end
+
 local function seed()
   local known = FriendsAndFoesCharDB.equipped
   for slot = 0, 19 do
@@ -136,6 +156,6 @@ ns.On("PLAYER_EQUIPMENT_CHANGED", function(slot)
     if not quality or quality < QUALITY_RARE then return end
     local t = recentLootShared[id]
     if t and GetTime() - t < 300 then return end -- already announced as loot
-    ns.Events.Emit("GEAR", { link = link })
+    queueGear(link, quality)
   end)
 end)

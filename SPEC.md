@@ -1,4 +1,4 @@
-# Friends & Foes — Spec (v0.1)
+# Friends & Foes — Spec (v0.2)
 
 WoW Forever addon (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`).
 Tells you what your friends are doing (leveling, epic BoEs, new gear), alerts you to
@@ -21,17 +21,30 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
   - an addon `WHISPER` to the friend's character (same faction only)
 - The receiver drops duplicates using `sender:eventId`.
 - Events are sent **live only**. Nothing is replayed at login.
-- Message format: `1\tKIND\tID\tclass\tlevel\t<fields...>`, at most 255 bytes.
+  - Exception: a manual **Share hitlist** sends your 40 most recent entries. Receivers merge by
+    taking the higher of each counter.
+- Message format (protocol 2): `2\tKIND\tID\tclass\tlevel\taddonVersion\t<fields...>`,
+  at most 255 bytes. If a message is too long, guild names are dropped first.
+- **Throttling:** each route has a token bucket of 8 that refills at 1 per second, with three
+  priorities (PvP, then progress, then bulk). A client throttle result puts the message back
+  in the queue.
+- **Version check:** friends' versions appear in the Friends tab. You get a toast once per session
+  when a friend runs a newer version or an incompatible protocol.
+- **Simulation:** IDs that start with `S` are simulated. Every client stores them in
+  `FriendsAndFoesDB.sim`, never in real data.
 
 ## Events
 | Kind | Trigger (own character) | Fields |
 |---|---|---|
 | LVL | `PLAYER_LEVEL_UP` (every level) | level |
 | LOOT | Looted or crafted item: **epic or better**, BoE or BoU | link, source (`loot`/`craft`) |
-| GEAR | Newly equipped item: **blue or better**, never equipped on this character before | link |
-| ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join) | enc, zone, attackers |
-| DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists |
-| KILL | Honorable-kill message | victim, vclass, vlevel, zone |
+| GEAR | Newly equipped item: **blue or better**, never equipped on this character before. Changes within 4 seconds are bundled | link (best item), count |
+| ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join, 2 attackers per message) | enc, zone, attackers |
+| DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3) |
+| KILL | Honorable-kill message | victim, vclass, vlevel, vguild, zone |
+| HIT | Manual hitlist share | share id, packed entries |
+
+Units are encoded as `name:CLASS:level:guild`. Names are always stored without the realm suffix.
 
 Rules:
 - **Gear identity** is item ID plus random suffix; enchants are ignored. Shirt, tabard and ammo are excluded.
@@ -61,15 +74,24 @@ Rules:
   - Friends and you: takedowns and deaths.
   - Enemies: kills on us, deaths to us, and assists on our deaths.
 - **Hitlist**: anyone who attacked or killed you or a friend.
-  - Stores attacks, kills (with a suspected count), victims, last seen and zone, and a note.
+  - Stores guild, attacks, kills (with a suspected count), revenge count, victims, last seen and
+    zone, a note, and who shared it.
   - Entries never expire. They can be removed by hand.
+- **Pruning** at login: enemies not seen for 90 days, with no kills or assists on us and not on
+  the hitlist, are removed.
 - **Feed**: the last 500 events.
+- **Error log**: the last 50 errors, always kept (`FriendsAndFoesDB.errorLog`).
 - **Per character**: the set of item keys already equipped.
 
 ## Toasts
 - **Shown for:** friends' events, plus hitlist sightings (nameplate, target or mouseover,
   once per player every 5 minutes). Your own events go to the Feed only.
-- **Layout:** movable anchor (`/fnf unlock`), 5 seconds each, at most 3 on screen, the rest queued.
+- **Layout:** movable anchor (`/fnf unlock`), 5 seconds each, at most 3 on screen, the rest queued
+  (at most 30).
+- **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
+  Queued PvP toasts older than 60 seconds are dropped.
+- **Revenge:** a kill on a hitlist entry adds "revenge!" to the toast and "R<n>" to the Kills
+  column.
 - **Collapse:**
   - level-ups merge into one toast ("Bob, Alice and 2 others leveled up")
   - a burst of gear from one friend merges into one toast
@@ -94,8 +116,15 @@ Rules:
     - sound toggles
     - minimap, debug, unlock toasts, test toasts
     - which features this client supports
-- Slash commands: `/fnf`, `/fnf settings`, `/fnf unlock`, `/fnf test`, `/fnf status`,
-  `/fnf debug`, `/fnf debug clear`, `/fnf minimap`.
+- Slash commands: `/fnf`, `/fnf settings`, `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
+  `/fnf share`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
+  `/fnf debug clear`, `/fnf minimap`.
+
+## Tooling
+- `npm test` runs a Lua 5.1 syntax check, then loads the whole addon in a JavaScript Lua VM
+  (fengari, which is Lua 5.3) against a mocked WoW API (`tests/mock.lua`) and runs
+  `tests/test.lua`.
+- `npm run package` builds `dist/FriendsAndFoes-<version>.zip`.
 
 ## Debugging
 `/fnf debug` logs to `FriendsAndFoesDB.debugLog` (at most 5000 lines). The log is saved on `/reload`
