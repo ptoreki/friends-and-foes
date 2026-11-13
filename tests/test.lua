@@ -278,11 +278,48 @@ ns.Toast.Push({ kind = "attacked", category = "pvp", title = "p", text = "q" })
 check((SOUNDS_PLAYED or 0) == pvpBefore + 1, "pvp toast shown during combat")
 drainToasts()
 local beforeSounds = SOUNDS_PLAYED or 0
-ns.Toast.Push({ kind = "level", category = "progress", title = "x", text = "y" })
+ns.Toast.Push({ kind = "level", category = "progress", title = "x", text = "y", milestone = true })
 local heldSounds = SOUNDS_PLAYED or 0
 IN_COMBAT = false
 FIRE("PLAYER_REGEN_ENABLED")
 check(heldSounds == beforeSounds and (SOUNDS_PLAYED or 0) > heldSounds, "progress toast held in combat, shown after")
+
+-- routing: progress goes to chat, milestones toast, PvP toasts, "off" silences
+drainToasts()
+local function toasted(fn) local s = SOUNDS_PLAYED or 0; CHAT = {}; fn(); drainToasts(); return (SOUNDS_PLAYED or 0) > s end
+local t1 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 45 }, "r1"), "WHISPER", 77) end)
+check(not t1 and #CHAT == 1 and CHAT[1]:find("reached level 45", 1, true) ~= nil, "ordinary level-up goes to chat: " .. tostring(CHAT[1]))
+local t2 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r2"), "WHISPER", 77) end)
+check(t2 and #CHAT == 0, "level 60 is a toast")
+local epic = "|cffa335ee|Hitem:12584::::::::60:::::::|h[Sword]|h|r"
+local t3 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LOOT", { link = epic, source = "loot" }, "r3"), "WHISPER", 77) end)
+check(t3 and #CHAT == 0, "looted epic BoE is a toast")
+local t4 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LOOT", { link = epic, source = "craft" }, "r4"), "WHISPER", 77) end)
+check(not t4 and #CHAT == 1, "crafted epic goes to chat")
+local t5 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "e9", zone = "Duskwood", attackers = "Zed Q:ROGUE:60:" }, "r5"), "WHISPER", 77) end)
+check(t5 and #CHAT == 0, "friend attacked is a toast")
+ns.S().show.level = "off"
+local t6 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r6"), "WHISPER", 77) end)
+check(not t6 and #CHAT == 0, "off silences even milestones")
+ns.S().show.level = "chat"
+check(real.hitlist["Zed Q"] ~= nil and #real.feed > 0, "records still kept regardless of display")
+
+-- hitlist marks: nameplate skull + tooltip line
+local plate = CreateFrame()
+C_NamePlate = { GetNamePlateForUnit = function(u) if u == "nameplate1" then return plate end end }
+local origUnitName, origIsPlayer = UnitName, UnitIsPlayer
+UnitName = function(u) if u == "nameplate1" or u == "mouseover" then return "Zed", "Q" end return origUnitName(u) end
+UnitIsPlayer = function(u) return u == "nameplate1" or u == "mouseover" end
+FIRE("NAME_PLATE_UNIT_ADDED", "nameplate1")
+check(plate.fnfMark ~= nil and plate.fnfMark:IsShown(), "hitlist player gets a nameplate skull")
+ns.S().mark = false; ns.Marks.Refresh()
+check(not plate.fnfMark:IsShown(), "skull hidden when marking is off")
+ns.S().mark = true; ns.Marks.Refresh()
+check(ns.Marks.HitFor("mouseover") == real.hitlist["Zed Q"], "tooltip lookup finds the hitlist entry")
+FIRE("NAME_PLATE_UNIT_REMOVED", "nameplate1")
+check(not plate.fnfMark:IsShown(), "skull hidden when plate removed")
+UnitName, UnitIsPlayer, C_NamePlate = origUnitName, origIsPlayer, nil
+check(ns.errors == 0, "no errors in routing/marks (" .. tostring(ns.lastError) .. ")")
 
 -- prune
 local old = ns.Data.Player("Oldie")

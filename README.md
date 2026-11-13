@@ -1,9 +1,13 @@
 # Friends & Foes
 
 A WoW Forever addon that:
-- shows a toast when your Battle.net friends level up, loot an epic BoE, or equip new gear
-- warns you when friends are attacked, killed, or get kills in world PvP
-- keeps a hitlist and per-player K/D/A
+- pops up a toast when a friend is attacked or killed in world PvP, reaches level 60, loots an
+  epic BoE, or gets revenge
+- adds a quiet chat line for everything else (level-ups, gear, kills), with clickable items
+- keeps a hitlist and marks those players with a skull on their nameplate and a tooltip line
+- tracks per-player K/D/A
+
+Each alert type can be set to Toast, Chat or Off in Settings.
 
 ## Install (for friends)
 1. Download `FriendsAndFoes-<version>.zip`.

@@ -1,8 +1,9 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.3.3"
+ns.VERSION = "0.4.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
+ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
 
 local issecret = issecretvalue or function() return false end
 ns.issecret = issecret
@@ -12,7 +13,11 @@ ns.issecret = issecret
 ---------------------------------------------------------------------------
 local DEFAULTS = {
   share = { level = true, loot = true, gear = true, pvp = true },
-  toast = { level = true, loot = true, gear = true, attacked = true, died = true, kill = true, sighting = true, share = true },
+  -- how each kind shows: "toast" | "chat" | "off". Urgent PvP toasts; progress goes to chat.
+  -- Milestones (level 60, looted epic BoE, revenge kill) toast anyway unless "off".
+  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "chat", sighting = "chat", share = "chat" },
+  chatFrame = 1,
+  mark = true, -- skull on hitlist players' nameplates + a tooltip line
   sound = { enabled = true, pvp = true, progress = true, sighting = true },
   dnd = { combat = true, instance = true },
   minimap = { hide = false, angle = 210 },
@@ -129,6 +134,13 @@ ns.On("ADDON_LOADED", function(name)
   local db = FriendsAndFoesDB
   db.settings = db.settings or {}
   fillDefaults(db.settings, DEFAULTS)
+  -- 0.3.3 and earlier: toast = { kind = bool }. Keep "off" choices, drop the rest.
+  if type(db.settings.toast) == "table" then
+    for k, v in pairs(db.settings.toast) do
+      if v == false and db.settings.show[k] then db.settings.show[k] = "off" end
+    end
+    db.settings.toast = nil
+  end
   db.realms = db.realms or {}
   db.debugLog = db.debugLog or {}
   db.errorLog = db.errorLog or {}

@@ -142,6 +142,7 @@ function Events.Apply(msg, isSelf)
     Events.NewerVersion(msg.from, msg.version)
   end
   if sim then ns.viewSim = true end
+  if not sim and ns.Marks then ns.Marks.Refresh() end -- a new hitlist entry may be on screen
   if ns.UI and ns.UI.OnDataChanged then ns.UI.OnDataChanged() end
 end
 
@@ -149,11 +150,13 @@ H.LVL = function(_, isSelf, p, f)
   local lvl = tonumber(f.level)
   if not lvl then return end
   p.level = lvl
-  feed(p, "level", L.FEED_LEVEL:format(who(p), lvl))
+  local line = L.FEED_LEVEL:format(who(p), lvl)
+  feed(p, "level", line)
   if isSelf then return end
+  local milestone = lvl >= ns.MILESTONE_LEVEL
   ns.Toast.Push({
-    kind = "level", category = "progress", icon = ICON.level,
-    subjects = { who(p) }, title = L.TOAST_LEVEL:format(who(p)), text = L.TOAST_LEVEL_TEXT:format(lvl),
+    kind = "level", category = "progress", icon = ICON.level, chat = line, milestone = milestone,
+    subjects = { who(p) }, title = (milestone and L.TOAST_LEVEL_MAX or L.TOAST_LEVEL):format(who(p)), text = L.TOAST_LEVEL_TEXT:format(lvl),
     collapseKey = "level", merge = mergeSubjects(L.TOAST_LEVEL),
   })
 end
@@ -161,10 +164,12 @@ end
 H.LOOT = function(_, isSelf, p, f)
   if f.link == "" then return end
   local crafted = f.source == "craft"
-  feed(p, "loot", (crafted and L.FEED_CRAFT or L.FEED_LOOT):format(who(p), f.link))
+  local line = (crafted and L.FEED_CRAFT or L.FEED_LOOT):format(who(p), f.link)
+  feed(p, "loot", line)
   if isSelf then return end
   ns.Toast.Push({
     kind = "loot", category = "progress", icon = itemIcon(f.link), link = f.link,
+    chat = line, milestone = not crafted, -- a looted epic BoE always toasts
     title = L.TOAST_LOOT:format(who(p)), text = (crafted and L.TOAST_CRAFTED or L.TOAST_LOOTED):format(f.link),
   })
 end
@@ -173,10 +178,11 @@ H.GEAR = function(_, isSelf, p, f)
   if f.link == "" then return end
   local count = tonumber(f.count) or 1
   local text = (count > 1) and L.TOAST_GEAR_MORE:format(f.link, count - 1) or f.link
-  feed(p, "gear", L.FEED_GEAR:format(who(p), text))
+  local line = L.FEED_GEAR:format(who(p), text)
+  feed(p, "gear", line)
   if isSelf then return end
   ns.Toast.Push({
-    kind = "gear", category = "progress", icon = itemIcon(f.link), link = f.link, firstLink = f.link, count = count,
+    chat = line, kind = "gear", category = "progress", icon = itemIcon(f.link), link = f.link, firstLink = f.link, count = count,
     title = L.TOAST_GEAR:format(who(p)), text = text,
     collapseKey = "gear:" .. p.name,
     merge = function(old, new)
@@ -212,10 +218,11 @@ H.ATK = function(msg, isSelf, p, f)
   atkSeenCount = atkSeenCount + 1
 
   local by = (#names > 0) and ns.JoinNames(names) or L.UNKNOWN_ENEMY
-  feed(p, "attacked", L.FEED_ATTACKED:format(who(p), by, f.zone))
+  local line = L.FEED_ATTACKED:format(who(p), by, f.zone)
+  feed(p, "attacked", line)
   if isSelf or suppressAttackToast(msg.from) then return end
   ns.Toast.Push({
-    kind = "attacked", category = "pvp", icon = ICON.attacked,
+    chat = line, kind = "attacked", category = "pvp", icon = ICON.attacked,
     title = L.TOAST_ATTACKED:format(who(p)), text = L.TOAST_ATTACKED_TEXT:format(f.zone, by),
     player = attackers[1] and attackers[1].name,
   })
@@ -242,14 +249,11 @@ H.DIE = function(msg, isSelf, p, f)
     end
   end
 
-  if by then
-    feed(p, "died", L.FEED_DIED:format(who(p), by, f.zone))
-  else
-    feed(p, "died", L.FEED_DIED_UNKNOWN:format(who(p), f.zone))
-  end
+  local line = by and L.FEED_DIED:format(who(p), by, f.zone) or L.FEED_DIED_UNKNOWN:format(who(p), f.zone)
+  feed(p, "died", line)
   if isSelf then return end
   ns.Toast.Push({
-    kind = "died", category = "pvp", icon = ICON.died,
+    chat = line, kind = "died", category = "pvp", icon = ICON.died,
     title = L.TOAST_DIED:format(who(p)),
     text = by and L.TOAST_DIED_TEXT:format(by, f.zone) or L.TOAST_DIED_UNKNOWN:format(f.zone),
     player = killer and killer.name,
@@ -273,10 +277,11 @@ H.KILL = function(_, isSelf, p, f)
   end
 
   local v = ns.ClassColored(name, victim.class)
-  feed(p, "kill", L.FEED_KILL:format(who(p), v, f.zone) .. revenge)
+  local line = L.FEED_KILL:format(who(p), v, f.zone) .. revenge
+  feed(p, "kill", line)
   if isSelf then return end
   ns.Toast.Push({
-    kind = "kill", category = "pvp", icon = ICON.kill,
+    chat = line, milestone = revenge ~= "", kind = "kill", category = "pvp", icon = ICON.kill,
     title = L.TOAST_KILL:format(who(p)) .. revenge, text = L.TOAST_KILL_TEXT:format(v, f.zone),
     player = name,
   })
@@ -322,9 +327,10 @@ H.HIT = function(msg, isSelf, p, f)
   end
   s.added = s.added + added
   local text = L.FEED_SHARE:format(who(p), s.added)
+  s.first = s.entry == nil
   if s.entry then s.entry.text = text else s.entry = ns.Data.Feed("share", text) end
   ns.Toast.Push({
-    kind = "share", category = "progress", icon = ICON.share,
+    kind = "share", category = "progress", icon = ICON.share, chat = L.CHAT_SHARE:format(who(p)), quiet = not s.first,
     title = L.TOAST_SHARE:format(who(p)), text = L.TOAST_SHARE_TEXT:format(s.added),
     collapseKey = "share:" .. key,
     merge = function(old) old.text = L.TOAST_SHARE_TEXT:format(s.added) end,

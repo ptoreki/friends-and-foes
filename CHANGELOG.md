@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+Compatible with 0.3.x. Friends don't need to update at the same time.
+- **Fewer pop-ups.** Only alerts you can act on are toasts: a friend being attacked or killed.
+  Level-ups, loot, gear, kills, sightings and shares are now a single chat line in the
+  guild-achievement colour, with clickable item links.
+- **Milestones still toast:** a friend reaching level 60, looting an epic BoE, or getting a
+  revenge kill.
+- Each kind can be set to Toast, Chat or Off in Settings (click to cycle).
+  `/fnf chat <tab number>` picks which chat tab gets the lines.
+- **Hitlist marks:** a skull next to a hitlist player's nameplate, and a tooltip line with their
+  kills and attacks on you and your friends, who they hit, and your note. Toggle it in Settings.
+- The sighting sound is now the softer whisper ping, instead of the ready-check horn.
+- Toasts you turned off in 0.3 stay off.
+
 ## 0.3.3
 Compatible with 0.3.0 to 0.3.2.
 - **Pick which friends you get alerts from.** Click a friend in the Friends tab, or use

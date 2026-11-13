@@ -20,7 +20,7 @@ local BORDER = {
 local SOUNDS = {
   pvp = (SOUNDKIT and SOUNDKIT.RAID_WARNING) or 8959,
   progress = 888, -- level up fanfare
-  sighting = (SOUNDKIT and SOUNDKIT.READY_CHECK) or 8960,
+  sighting = (SOUNDKIT and SOUNDKIT.TELL_MESSAGE) or 3081, -- the whisper ping: noticeable, not alarming
 }
 
 local BACKDROP = {
@@ -220,11 +220,45 @@ for _, ev in ipairs({ "PLAYER_REGEN_ENABLED", "PLAYER_ENTERING_WORLD", "ZONE_CHA
   ns.On(ev, function() if anchor then Toast.Pump() end end)
 end
 
+---------------------------------------------------------------------------
+-- routing: each kind shows as "toast", "chat" or "off" (settings.show).
+-- Milestones (level 60, a looted epic BoE, a revenge kill) always toast unless "off".
+---------------------------------------------------------------------------
+function Toast.Mode(spec)
+  if spec.force or not spec.kind then return "toast" end
+  local mode = ns.S().show[spec.kind] or "toast"
+  if mode == "off" then return "off" end
+  if spec.milestone then return "toast" end
+  return mode
+end
+
+local function chatFrame()
+  local n = tonumber(ns.S().chatFrame) or 1
+  return _G["ChatFrame" .. n] or DEFAULT_CHAT_FRAME
+end
+
+-- one line in chat, in the colour of guild achievement announcements
+function Toast.Chat(text, sim)
+  local frame = chatFrame()
+  if not (frame and text) then return end
+  local info = ChatTypeInfo and ChatTypeInfo.GUILD_ACHIEVEMENT
+  local r, g, b = 1, 1, 0
+  if info and info.r then r, g, b = info.r, info.g, info.b end
+  frame:AddMessage("|cff33ff99" .. L.CHAT_PREFIX .. "|r " .. (sim and "|cff999999[SIM]|r " or "") .. text, r, g, b)
+end
+
 function Toast.Push(spec)
   if not anchor then return end
-  if spec.kind and ns.S().toast[spec.kind] == false then return end
-  spec.created = GetTime()
+  local mode = Toast.Mode(spec)
+  if mode == "off" then return end
   spec.sim = spec.sim or ns.simulating or nil
+  if mode == "chat" then
+    if not spec.quiet then Toast.Chat(spec.chat or spec.title, spec.sim) end
+    if spec.category == "sighting" then playSound("sighting") end -- the one chat line worth a sound
+    return
+  end
+  if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast
+  spec.created = GetTime()
   if spec.collapseKey and spec.merge then
     for _, f in ipairs(active) do
       if f.spec.collapseKey == spec.collapseKey then
@@ -249,10 +283,12 @@ end
 -- sightings + test
 ---------------------------------------------------------------------------
 function Toast.Sighting(name, class, zone, hit)
+  local who = ns.ClassColored(name, class)
   Toast.Push({
     kind = "sighting", category = "sighting", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
-    title = L.TOAST_SIGHTING:format(ns.ClassColored(name, class)),
+    title = L.TOAST_SIGHTING:format(who),
     text = L.TOAST_SIGHTING_TEXT:format(zone or "?", hit.attacks or 0, hit.kills or 0),
+    chat = L.CHAT_SIGHTING:format(who, zone or "?", hit.attacks or 0, hit.kills or 0),
     player = name,
   })
 end
@@ -261,15 +297,15 @@ function Toast.Test()
   local friend = ns.ClassColored("Testfriend", "PALADIN")
   local enemy = ns.ClassColored("Testenemy", "ROGUE")
   local link = "|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r"
-  Toast.Push({ kind = "level", category = "progress", icon = ns.ICON.level, subjects = { friend },
+  Toast.Push({ force = true, kind = "level", category = "progress", icon = ns.ICON.level, subjects = { friend },
     title = L.TOAST_LEVEL:format(friend), text = L.TOAST_LEVEL_TEXT:format(42) })
-  Toast.Push({ kind = "loot", category = "progress", icon = ns.ICON.fallback, link = link,
+  Toast.Push({ force = true, kind = "loot", category = "progress", icon = ns.ICON.fallback, link = link,
     title = L.TOAST_LOOT:format(friend), text = L.TOAST_LOOTED:format(link) })
-  Toast.Push({ kind = "attacked", category = "pvp", icon = ns.ICON.attacked,
+  Toast.Push({ force = true, kind = "attacked", category = "pvp", icon = ns.ICON.attacked,
     title = L.TOAST_ATTACKED:format(friend), text = L.TOAST_ATTACKED_TEXT:format("Hillsbrad Foothills (Tarren Mill)", enemy) })
-  Toast.Push({ kind = "died", category = "pvp", icon = ns.ICON.died,
+  Toast.Push({ force = true, kind = "died", category = "pvp", icon = ns.ICON.died,
     title = L.TOAST_DIED:format(friend), text = L.TOAST_DIED_TEXT:format(enemy, "Hillsbrad Foothills") })
-  Toast.Push({ kind = "kill", category = "pvp", icon = ns.ICON.kill,
+  Toast.Push({ force = true, kind = "kill", category = "pvp", icon = ns.ICON.kill,
     title = L.TOAST_KILL:format(friend), text = L.TOAST_KILL_TEXT:format(enemy, "Stranglethorn Vale") })
 end
 

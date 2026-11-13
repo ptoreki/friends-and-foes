@@ -108,3 +108,8 @@ C_ChatInfo = {
   RegisterAddonMessagePrefix = function() end,
   SendAddonMessage = function(prefix, payload, chan, target) SENT[#SENT + 1] = { route = "whisper", target = target, payload = payload }; return 0 end,
 }
+
+-- chat output capture
+CHAT = {}
+DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) CHAT[#CHAT + 1] = m end }
+ChatFrame1 = DEFAULT_CHAT_FRAME

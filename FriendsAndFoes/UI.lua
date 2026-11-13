@@ -288,6 +288,27 @@ local function check(parent, x, y, label, get, set)
   return cb
 end
 
+-- a small button that cycles a kind through toast -> chat -> off
+local SHOW_NEXT = { toast = "chat", chat = "off", off = "toast" }
+local SHOW_LABEL = { toast = "|cffffd100" .. L.SHOW_TOAST .. "|r", chat = "|cff33ff99" .. L.SHOW_CHAT .. "|r", off = "|cff888888" .. L.SHOW_OFF .. "|r" }
+local cyclers = {}
+local function cycler(parent, x, y, label, kind)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(52, 20)
+  b:SetPoint("TOPLEFT", x, y)
+  local fs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  fs:SetPoint("LEFT", b, "RIGHT", 6, 0)
+  fs:SetText(label)
+  b.refresh = function() b:SetText(SHOW_LABEL[ns.S().show[kind]] or SHOW_LABEL.toast) end
+  b:SetScript("OnClick", function()
+    local show = ns.S().show
+    show[kind] = SHOW_NEXT[show[kind]] or "toast"
+    b.refresh()
+  end)
+  cyclers[#cyclers + 1] = b
+  return b
+end
+
 local function heading(parent, x, y, text)
   local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   fs:SetPoint("TOPLEFT", x, y)
@@ -323,7 +344,7 @@ local function buildSettings(parent)
     { "attacked", L.OPT_ATTACKED }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL },
     { "sighting", L.OPT_SIGHTING }, { "share", L.OPT_SHARE },
   }) do
-    check(parent, x2, y, o[2], toggle("toast", o[1]))
+    cycler(parent, x2, y, o[2], o[1])
     y = y - STEP
   end
 
@@ -349,6 +370,13 @@ local function buildSettings(parent)
   check(parent, x3, y, L.OPT_DEBUG,
     function() return S().debug end,
     function(v) S().debug = v end)
+  y = y - STEP
+  check(parent, x3, y, L.OPT_MARK,
+    function() return S().mark end,
+    function(v)
+      S().mark = v
+      if ns.Marks then ns.Marks.Refresh() end
+    end)
 
   local unlock = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
   unlock:SetSize(110, 22)
@@ -401,11 +429,13 @@ local function modeNotes()
   if bad("honor") then notes[#notes + 1] = L.MODE_NO_HONOR end
   if c.bnet ~= "ok" and c.whisper ~= "ok" then notes[#notes + 1] = L.MODE_SYNC_UNTESTED end
   if #notes == 0 then notes[1] = L.MODE_FULL end
+  table.insert(notes, 1, L.MILESTONE_NOTE)
   return table.concat(notes, "\n\n")
 end
 
 function UI.RefreshSettings()
   for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
+  for _, b in ipairs(cyclers) do b.refresh() end
   local lines = {}
   for _, c in ipairs(CAP_LABELS) do
     local v = ns.caps[c[1]] or "untested"
@@ -573,6 +603,7 @@ local function build()
   detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   detail.remove = button(detail, 70, L.REMOVE, function()
     if selected then R().hitlist[selected] = nil end
+    if ns.Marks then ns.Marks.Refresh() end
     selected = nil
     UI.Refresh()
   end)
@@ -713,6 +744,15 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end
+  elseif msg == "chat" or msg:find("^chat ") then
+    local n = tonumber(strtrim(msg:sub(5)))
+    if n and n >= 1 and n <= 10 and math.floor(n) == n then
+      ns.S().chatFrame = n
+      print(prefix .. L.CHAT_TAB_SET:format(n))
+      ns.Toast.Chat(L.CHAT_TAB_SET:format(n))
+    else
+      print(prefix .. L.CHAT_TAB_USAGE:format(ns.S().chatFrame or 1))
+    end
   elseif msg == "group" or msg:find("^group ") then
     groupCommand(strtrim(msg:sub(6)))
   elseif msg == "sim" or msg:find("^sim ") then

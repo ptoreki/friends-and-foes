@@ -103,26 +103,35 @@ Rules:
 - **Error log**: the last 50 errors, always kept (`FriendsAndFoesDB.errorLog`).
 - **Per character**: the set of item keys already equipped.
 
-## Toasts
-- **Shown for:** friends' events, plus hitlist sightings (nameplate, target or mouseover,
-  once per player every 5 minutes). Your own events go to the Feed only.
-- **Layout:** movable anchor (`/fnf unlock`), 5 seconds each, at most 3 on screen, the rest queued
-  (at most 30).
+## Alerts (toast, chat or off)
+- **Rule:** if you can act on it in the next 30 seconds, it's a toast. Everything else is a chat line.
+  Each kind can be set to Toast, Chat or Off in Settings (`settings.show`). Defaults:
+  - **Toast:** friend attacked, friend killed
+  - **Chat:** level up, loot/craft, new gear, friend's kill, hitlist sighting, hitlist share
+- **Milestones always toast** (unless that kind is Off): reaching level 60 (`ns.MILESTONE_LEVEL`),
+  a **looted** epic BoE (crafted ones follow the setting), and a revenge kill.
+- Your own events go to the Feed only. Records are kept whatever the display setting.
+- **Chat lines:** "F&F: <feed text>" in the guild-achievement colour, with clickable item links.
+  They go to chat tab 1, or the tab picked with `/fnf chat <n>`. They play no sound, except
+  sightings (a whisper ping).
+- **Hitlist marks** (`settings.mark`, default on):
+  - a skull next to a hitlist player's nameplate
+  - a tooltip line: kills, attacks, who they hit, and your note
+  - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
+    still produce a chat line or toast.
+- **Toast layout:** movable anchor (`/fnf unlock`), 5 seconds each, at most 3 on screen, the rest
+  queued (at most 30).
 - **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
   Queued PvP toasts older than 60 seconds are dropped.
-- **Revenge:** a kill on a hitlist entry adds "revenge!" to the toast and "R<n>" to the Kills
-  column.
-- **Collapse:**
-  - level-ups merge into one toast ("Bob, Alice and 2 others leveled up")
-  - a burst of gear from one friend merges into one toast
-- **Suppression:** "Friend attacked" toasts are suppressed when that friend is in your group
-  and you're in combat.
-- **Clicks:**
-  - a PvP toast opens that enemy in the main window
-  - hovering an item toast shows its tooltip
-- **Chat:** none. Only slash-command replies print anything.
-- **Sounds:** built-in. Separate sounds for PvP, progress and sighting toasts, with a global on/off
-  and one per category.
+- **Revenge:** a kill on a hitlist entry adds "revenge!" and "R<n>" to the Kills column.
+- **Collapse:** level-up toasts merge ("Bob, Alice and 2 others leveled up"), and so does a burst
+  of gear toasts from one friend. Milestones are never merged.
+- **Suppression:** "Friend attacked" is suppressed when that friend is in your group and you're
+  in combat.
+- **Clicks:** a PvP toast opens that enemy in the main window. Hovering an item toast shows its
+  tooltip.
+- **Sounds:** built-in. Separate sounds for PvP, progress and sightings, with a global on/off and
+  one per category. Settings from 0.3 that turned a toast off become Off.
 
 ## UI
 - `/fnf` and a minimap button that can be hidden, both opening a tabbed window:
@@ -132,12 +141,12 @@ Rules:
   - **Feed**: recent events
   - **Settings**:
     - share toggles per type (level, loot, gear, PvP)
-    - toast toggles per type
+    - Toast / Chat / Off per type, and hitlist marks on or off
     - sound toggles
     - minimap, debug, unlock toasts, test toasts
     - which features this client supports
 - Slash commands: `/fnf`, `/fnf settings`, `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
-  `/fnf share`, `/fnf group [name|BattleTag|all]`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
+  `/fnf share`, `/fnf group [name|BattleTag|all]`, `/fnf chat <tab>`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
   `/fnf debug clear`, `/fnf minimap`.
 
 ## Tooling
