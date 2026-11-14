@@ -10,7 +10,7 @@ local WIDTH, HEIGHT = 700, 470
 local ROWS, ROW_H = 15, 20
 local MAX_COLS = 7
 
-local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, filterBar
+local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, filterBar, prevPage, nextPage
 local tabButtons = {}
 local currentTab = "hitlist"
 local playerFilter = "enemies" -- Players tab: "enemies" | "friends"
@@ -70,47 +70,54 @@ end
 ---------------------------------------------------------------------------
 -- tabs
 ---------------------------------------------------------------------------
+-- column: { header, width, cell text, sort key (click the header to sort) }
+local function byName(e) return (e.name or ""):lower() end
+local function byLevel(e) return tonumber(e.level) or 0 end
+local function byGuild(e) return (e.guild or ""):lower() end
+local function byLast(e) return e.lastSeen or 0 end
+local function count(t) local n = 0; for _ in pairs(t or {}) do n = n + 1 end; return n end
+
 local HITLIST_COLS = {
-  { L.COL_NAME, 165, nameCol },
-  { L.COL_LEVEL, 30, lvl },
-  { L.COL_GUILD, 95, guild },
-  { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end },
-  { L.COL_KILLS, 70, hitKills },
-  { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end },
-  { L.COL_LAST, 145, lastText },
+  { L.COL_NAME, 165, nameCol, byName },
+  { L.COL_LEVEL, 30, lvl, byLevel },
+  { L.COL_GUILD, 95, guild, byGuild },
+  { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end, function(e) return e.attacks or 0 end },
+  { L.COL_KILLS, 70, hitKills, function(e) return e.kills or 0 end },
+  { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end, function(e) return count(e.victims) end },
+  { L.COL_LAST, 145, lastText, byLast },
 }
 
 local ENEMY_COLS = {
-  { L.COL_NAME, 170, nameCol },
-  { L.COL_LEVEL, 30, lvl },
-  { L.COL_GUILD, 110, guild },
-  { L.COL_KILLS_ON_US, 75, function(e) return e.k end },
-  { L.COL_DEATHS_TO_US, 70, function(e) return e.d end },
-  { L.COL_ASSISTS, 55, function(e) return e.a end },
-  { L.COL_LAST, 150, lastText },
+  { L.COL_NAME, 170, nameCol, byName },
+  { L.COL_LEVEL, 30, lvl, byLevel },
+  { L.COL_GUILD, 110, guild, byGuild },
+  { L.COL_KILLS_ON_US, 75, function(e) return e.k end, function(e) return e.k or 0 end },
+  { L.COL_DEATHS_TO_US, 70, function(e) return e.d end, function(e) return e.d or 0 end },
+  { L.COL_ASSISTS, 55, function(e) return e.a end, function(e) return e.a or 0 end },
+  { L.COL_LAST, 150, lastText, byLast },
 }
 
 local FRIEND_COLS = {
-  { L.COL_NAME, 165, nameCol },
-  { L.COL_LEVEL, 30, lvl },
+  { L.COL_NAME, 165, nameCol, byName },
+  { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_VERSION, 50, function(e)
     if not e.version then return "" end
     if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
     return e.version
-  end },
-  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end },
-  { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end },
+  end, function(e) return e.version or "" end },
+  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end, function(e) return e.k or -1 end },
+  { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end, function(e) return e.d or -1 end },
   { L.COL_ALERTS, 50, function(e)
     local tag = ns.Comm.TagFor(e.name)
     if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
     if ns.Comm.GroupActive() then return "|cff888888" .. L.ALERTS_OFF .. "|r" end
     return "|cff888888" .. L.ALERTS_ALL .. "|r"
-  end },
+  end, function(e) return ns.Comm.IsPicked(ns.Comm.TagFor(e.name)) and 1 or 0 end },
   { L.COL_LAST_EVENT, 240, function(e)
     if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
     local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
     return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
-  end },
+  end, function(e) return e.pending and math.huge or (e.lastSeen or 0) end },
 }
 
 -- friends we've heard from, plus online Battle.net friends in Forever the addon can see
@@ -166,19 +173,68 @@ end
 
 local function friendsView() return currentTab == "players" and playerFilter == "friends" end
 
+-- sorting: per view, by column; newest first by default
+local sortState = {}
+local function viewKey() return currentTab == "players" and ("players_" .. playerFilter) or currentTab end
+local function sortOf(cols)
+  local st = sortState[viewKey()]
+  if not st then
+    st = { col = #cols, desc = true } -- last column (last seen / time) newest first
+    sortState[viewKey()] = st
+  end
+  return st
+end
+
+local function applySort(list, cols)
+  local st = sortOf(cols)
+  local key = cols[st.col] and cols[st.col][4]
+  if not key then return end
+  table.sort(list, function(a, b)
+    local ka, kb = key(a), key(b)
+    if ka == kb then return (a.name or "") < (b.name or "") end
+    if type(ka) ~= type(kb) then ka, kb = tostring(ka), tostring(kb) end
+    if st.desc then return ka > kb end
+    return ka < kb
+  end)
+end
+
+-- click a column header: sort by it; click again to flip the order
+-- the rows currently listed (sorted), for tests
+function UI.Rows() return data end
+
+function UI.SortBy(col)
+  local st = sortState[viewKey()] or {}
+  if st.col == col then
+    st.desc = not st.desc
+  else
+    st.col, st.desc = col, (col ~= 1) -- names A-Z first, numbers highest first
+  end
+  sortState[viewKey()] = st
+  offset = 0
+  UI.Refresh()
+end
+
 ---------------------------------------------------------------------------
 -- list rendering
 ---------------------------------------------------------------------------
 local function layoutColumns(cols)
   local x = 0
+  local st = sortOf(cols)
   for c = 1, MAX_COLS do
     local col = cols[c]
-    local h = header.cells[c]
+    local h = header.buttons[c]
     if col then
       h:ClearAllPoints()
-      h:SetPoint("LEFT", header, "LEFT", x + 4, 0)
-      h:SetWidth(col[2] - 6)
-      h:SetText(col[1])
+      h:SetPoint("LEFT", header, "LEFT", x, 0)
+      h:SetSize(col[2] - 2, ROW_H)
+      h.text:SetText(col[1])
+      h:EnableMouse(col[4] ~= nil)
+      local sorted = col[4] ~= nil and st.col == c
+      if sorted then h.text:SetTextColor(1, 1, 1) else h.text:SetTextColor(1, 0.82, 0) end
+      h.arrow:SetShown(sorted)
+      if sorted then
+        if st.desc then h.arrow:SetTexCoord(0, 0.5625, 0, 1) else h.arrow:SetTexCoord(0, 0.5625, 1, 0) end
+      end
       h:Show()
       for _, row in ipairs(rows) do
         local cell = row.cells[c]
@@ -242,11 +298,11 @@ function UI.Refresh()
   for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == currentTab) end
   simBanner:SetShown(ns.viewSim and true or false)
   filterBar:SetShown(currentTab == "players")
-  filterBar.enemies:SetEnabled(playerFilter ~= "enemies")
-  filterBar.friends:SetEnabled(playerFilter ~= "friends")
+  filterBar.dropdown.refresh()
 
   local cols = colsOf(def)
   data = def.fetch()
+  applySort(data, cols)
   local maxOffset = math.max(0, #data - ROWS)
   if offset > maxOffset then offset = maxOffset end
   layoutColumns(cols)
@@ -266,11 +322,16 @@ function UI.Refresh()
     end
   end
   emptyText:SetShown(#data == 0)
-  if #data > ROWS then
+  local paged = #data > ROWS
+  if paged then
     pageText:SetText(string.format("%d-%d of %d", offset + 1, math.min(offset + ROWS, #data), #data))
   else
     pageText:SetText(#data > 0 and tostring(#data) or "")
   end
+  prevPage:SetShown(paged)
+  nextPage:SetShown(paged)
+  prevPage:SetEnabled(offset > 0)
+  nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
   friendsHint:SetShown(friendsView() and not ns.viewSim)
   friendsHint:SetText(ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL)
@@ -299,6 +360,44 @@ function UI.SetPlayerFilter(which)
 end
 
 function UI.OpenSettings() ns.Options.Open() end
+
+-- A dropdown: the game's modern dropdown when available, else a  < value >  stepper.
+-- items = { { value, label }, ... }
+function UI.Dropdown(parent, width, items, get, set)
+  local ok, dd = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
+  if ok and dd and dd.SetupMenu then
+    dd:SetWidth(width)
+    dd:SetupMenu(function(_, root)
+      for _, it in ipairs(items) do
+        root:CreateRadio(it[2], function() return get() == it[1] end, function() set(it[1]) end, it[1])
+      end
+    end)
+    dd.refresh = function() if dd.GenerateMenu then dd:GenerateMenu() end end
+    return dd
+  end
+  local f = CreateFrame("Frame", nil, parent)
+  f:SetSize(width, 24)
+  local label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  label:SetPoint("CENTER")
+  local function step(d)
+    local idx = 1
+    for i, it in ipairs(items) do if it[1] == get() then idx = i end end
+    set(items[(idx - 1 + d) % #items + 1][1])
+  end
+  for _, d in ipairs({ -1, 1 }) do
+    local b = CreateFrame("Button", nil, f)
+    b:SetSize(22, 22)
+    local name = d < 0 and "Prev" or "Next"
+    b:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. name .. "Page-Up")
+    b:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. name .. "Page-Down")
+    b:SetPoint(d < 0 and "LEFT" or "RIGHT")
+    b:SetScript("OnClick", function() step(d) end)
+  end
+  f.refresh = function()
+    for _, it in ipairs(items) do if it[1] == get() then label:SetText(it[2]) end end
+  end
+  return f
+end
 UI.RefreshSettings = function() if ns.Options then ns.Options.Refresh() end end
 
 ---------------------------------------------------------------------------
@@ -376,12 +475,15 @@ local function build()
   options:SetPoint("TOPRIGHT", -14, -30)
 
   filterBar = CreateFrame("Frame", nil, win)
-  filterBar:SetSize(200, 22)
-  filterBar:SetPoint("TOPLEFT", 14, -30)
-  filterBar.enemies = button(filterBar, 80, L.FILTER_ENEMIES, function() UI.SetPlayerFilter("enemies") end)
-  filterBar.enemies:SetPoint("LEFT")
-  filterBar.friends = button(filterBar, 80, L.FILTER_FRIENDS, function() UI.SetPlayerFilter("friends") end)
-  filterBar.friends:SetPoint("LEFT", filterBar.enemies, "RIGHT", 4, 0)
+  filterBar:SetSize(220, 24)
+  filterBar:SetPoint("TOPLEFT", 16, -30)
+  local showLabel = filterBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  showLabel:SetPoint("LEFT")
+  showLabel:SetText(L.FILTER_SHOW)
+  filterBar.dropdown = UI.Dropdown(filterBar, 140,
+    { { "enemies", L.FILTER_ENEMIES }, { "friends", L.FILTER_FRIENDS } },
+    function() return playerFilter end, function(v) UI.SetPlayerFilter(v) end)
+  filterBar.dropdown:SetPoint("LEFT", showLabel, "RIGHT", 8, 0)
 
   -- simulation banner
   simBanner = CreateFrame("Frame", nil, win)
@@ -417,12 +519,26 @@ local function build()
   header:SetPoint("TOPLEFT")
   header:SetPoint("TOPRIGHT")
   header:SetHeight(ROW_H)
-  header.cells = {}
+  header.cells, header.buttons = {}, {}
   for c = 1, MAX_COLS do
-    local fs = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    fs:SetJustifyH("LEFT")
-    fs:SetWordWrap(false)
-    header.cells[c] = fs
+    -- click a column header to sort by it; again to flip the order
+    local b = CreateFrame("Button", nil, header)
+    b:SetHeight(ROW_H)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.06)
+    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    b.text:SetPoint("LEFT", 4, 0)
+    b.text:SetJustifyH("LEFT")
+    b.text:SetWordWrap(false)
+    b.arrow = b:CreateTexture(nil, "OVERLAY")
+    b.arrow:SetTexture("Interface\\Buttons\\UI-SortArrow")
+    b.arrow:SetSize(9, 8)
+    b.arrow:SetPoint("LEFT", b.text, "RIGHT", 3, -1)
+    b.arrow:Hide()
+    b:SetScript("OnClick", function() UI.SortBy(c) end)
+    header.buttons[c] = b
+    header.cells[c] = b.text
   end
 
   rows = {}
@@ -485,8 +601,28 @@ local function build()
   emptyText:SetPoint("CENTER")
   emptyText:SetText(L.EMPTY)
 
+  -- paging: < 1-15 of 40 >  (the mouse wheel scrolls too)
+  local function pageButton(dir)
+    local b = CreateFrame("Button", nil, win)
+    b:SetSize(24, 24)
+    local name = dir < 0 and "Prev" or "Next"
+    b:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. name .. "Page-Up")
+    b:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. name .. "Page-Down")
+    b:SetDisabledTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. name .. "Page-Disabled")
+    b:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    b:SetScript("OnClick", function()
+      offset = math.max(0, math.min(offset + dir * ROWS, math.max(0, #data - ROWS)))
+      UI.Refresh()
+    end)
+    b:Hide()
+    return b
+  end
+  nextPage = pageButton(1)
+  nextPage:SetPoint("BOTTOMRIGHT", -12, 4)
   pageText = win:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  pageText:SetPoint("BOTTOMRIGHT", -18, 10)
+  pageText:SetPoint("RIGHT", nextPage, "LEFT", -2, 0)
+  prevPage = pageButton(-1)
+  prevPage:SetPoint("RIGHT", pageText, "LEFT", -2, 0)
 
   friendsHint = win:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   friendsHint:SetPoint("BOTTOMLEFT", 18, 40)

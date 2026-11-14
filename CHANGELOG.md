@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.5
+Compatible with 0.3.x to 0.5.4.
+- **New options**, built into the game's own settings panel (Options → AddOns → Friends & Foes),
+  so they look and work like Blizzard's menus. There are dropdowns with < > arrows, a tooltip on
+  every option, and the options show up in the settings search. Four pages:
+  - **Friends & Foes (Alerts):** one dropdown per event: *Toast + sound*, *Toast*,
+    *Chat line + sound*, *Chat line* or *Off*. Below that: nearby-only, all sounds, do not disturb.
+  - **Appearance:** toast style (dropdown), Preview, Move toasts, message style (*With flavor* or
+    *Short*), and which chat tab gets the lines.
+  - **Friends & sharing:** what you share, *Choose friends...*, hitlist marks, and Share hitlist.
+  - **Advanced:** minimap button, debug logging, Print status, Simulate, and Clear simulated data.
+
+  The old panel stays as a fallback if the game's settings system isn't available.
+- **Window:**
+  - Click a column header to sort by it, and click again to flip the order. An arrow shows the
+    current sort.
+  - Page arrows (< 1-15 of 40 >) next to the count.
+  - The Players tab has a **Show: Enemies / Friends** dropdown.
+
 ## 0.5.4
 Compatible with 0.3.x to 0.5.3.
 - **Toast styles:** choose in Options:

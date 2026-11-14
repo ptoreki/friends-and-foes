@@ -547,6 +547,112 @@ check(minFrame and minFrame.theme == "minimal" and minFrame.label ~= nil, "switc
 drainToasts()
 check(ns.errors == 0, "no errors in themes (" .. tostring(ns.lastError) .. ")")
 
+-- native options (the game's Settings API), with a minimal mock of that API
+do
+  local settings, controls, pages, opened = {}, {}, {}, nil
+  local function category(name)
+    local cat = { name = name, GetID = function() return name end }
+    local layout = { items = {} }
+    function layout:AddInitializer(i) self.items[#self.items + 1] = i end
+    pages[#pages + 1] = { cat = cat, layout = layout }
+    return cat, layout
+  end
+  local function newSetting(var, get, set)
+    local s = { var = var }
+    function s:GetValue() return get() end
+    function s:SetValue(v) set(v); if self.cb then self.cb(self, v) end end
+    function s:SetValueChangedCallback(cb) self.cb = cb end
+    settings[var] = s
+    return s
+  end
+  Settings = {
+    VarType = { Boolean = "boolean", Number = "number", String = "string" },
+    RegisterVerticalLayoutCategory = function(name) return category(name) end,
+    RegisterVerticalLayoutSubcategory = function(_, name) return category(name) end,
+    RegisterAddOnSetting = function(_, var, key, tbl) return newSetting(var, function() return tbl[key] end, function(v) tbl[key] = v end) end,
+    RegisterProxySetting = function(_, var, _, _, _, get, set) return newSetting(var, get, set) end,
+    CreateCheckbox = function(_, s) controls[#controls + 1] = { kind = "checkbox", s = s } end,
+    CreateDropdown = function(_, s, opts) controls[#controls + 1] = { kind = "dropdown", s = s, opts = opts } end,
+    CreateControlTextContainer = function()
+      local d = {}
+      return { Add = function(_, v, l) d[#d + 1] = { value = v, label = l } end, GetData = function() return d end }
+    end,
+    RegisterAddOnCategory = function() end,
+    OpenToCategory = function(id) opened = id end,
+  }
+  CreateSettingsListSectionHeaderInitializer = function(text) return { header = text } end
+  CreateSettingsButtonInitializer = function(name, label, click) return { button = label, click = click } end
+  local ok, err = pcall(ns.Options.BuildNative)
+  check(ok, "native options build: " .. tostring(err))
+  check(#pages == 4, "four pages: Alerts, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
+  local dropdowns = 0
+  for _, c in ipairs(controls) do
+    if c.kind == "dropdown" then
+      dropdowns = dropdowns + 1
+      check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
+    end
+  end
+  check(dropdowns == 11, "8 alert dropdowns + style + message style + chat tab (" .. dropdowns .. ")")
+  -- one dropdown per event = show + sound
+  local kill = settings.FNF_display_kill
+  check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
+  kill:SetValue("chat_sound")
+  check(ns.S().show.kill == "chat" and ns.S().sound.kill == true, "'Chat line + sound' sets show + sound")
+  kill:SetValue("off")
+  check(ns.S().show.kill == "off" and kill:GetValue() == "off", "'Off'")
+  kill:SetValue("toast")
+  check(ns.S().show.kill == "toast" and ns.S().sound.kill == false, "back to 'Toast'")
+  settings.FNF_theme:SetValue("achievement")
+  check(ns.Toast.Theme() == "achievement", "style dropdown sets the toast theme")
+  settings.FNF_theme:SetValue("minimal")
+  settings.FNF_style:SetValue("short")
+  check(ns.S().flavor == false and settings.FNF_style:GetValue() == "short", "message style: short = flavor off")
+  settings.FNF_style:SetValue("flavor")
+  check(ns.S().flavor == true, "message style: with flavor")
+  settings.FNF_mark:SetValue(false)
+  check(ns.S().mark == false, "hitlist marks checkbox")
+  settings.FNF_mark:SetValue(true)
+  settings.FNF_debug:SetValue(true)
+  check(ns.S().debug and ns.S().debugSince, "debug checkbox goes through SetDebug")
+  -- every button runs without error
+  for _, pg in ipairs(pages) do
+    for _, item in ipairs(pg.layout.items) do
+      if item.click and item.button ~= "Choose friends..." then item.click() end
+    end
+  end
+  ns.Options.Open()
+  check(opened == "Friends & Foes", "Options opens the native category")
+  Settings, CreateSettingsListSectionHeaderInitializer, CreateSettingsButtonInitializer = nil, nil, nil
+  check(ns.errors == 0, "no errors in native options (" .. tostring(ns.lastError) .. ")")
+end
+
+-- window: click-to-sort columns, page arrows, Players dropdown
+ns.UI.Show("hitlist")
+local r = ns.UI.Rows()
+check(#r > 1, "hitlist has rows: " .. #r)
+local function sortedBy(key, desc)
+  local rows = ns.UI.Rows()
+  for i = 2, #rows do
+    local a, b = key(rows[i - 1]), key(rows[i])
+    if (desc and a < b) or (not desc and a > b) then return false end
+  end
+  return true
+end
+check(sortedBy(function(e) return e.lastSeen or 0 end, true), "default: newest first")
+ns.UI.SortBy(5) -- Kills
+check(sortedBy(function(e) return e.kills or 0 end, true), "click Kills: most kills first")
+ns.UI.SortBy(5)
+check(sortedBy(function(e) return e.kills or 0 end, false), "click Kills again: fewest first")
+ns.UI.SortBy(1)
+check(sortedBy(function(e) return (e.name or ""):lower() end, false), "click Name: A-Z")
+ns.UI.Show("friends")
+ns.UI.SortBy(2)
+ns.UI.Show("enemies")
+check(sortedBy(function(e) return e.lastSeen or 0 end, true), "each view keeps its own sort")
+ns.UI.Show("friends")
+ns.UI.Show("feed")
+check(ns.errors == 0, "no errors in window sort/paging (" .. tostring(ns.lastError) .. ")")
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

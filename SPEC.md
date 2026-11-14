@@ -199,7 +199,15 @@ Rules:
     - Friends shows level, version, takedowns, deaths and alerts. Click a friend to pick them.
   - **Feed**: recent events
   - Rows show class icons. An **Options** button opens the settings.
-- **Options** live in the game's Options → AddOns panel. If that panel can't be opened, the addon
+- **Options** use the game's native Settings API (`Settings.RegisterVerticalLayoutCategory`, with
+  dropdowns, checkboxes and buttons). Pages: Alerts (main), Appearance, Friends & sharing, Advanced.
+  Each event has one dropdown that combines show and sound: toast + sound / toast /
+  chat + sound / chat / off. If the API is missing or fails, the canvas panel below is used.
+- **Window:** column headers sort (click again to reverse; arrow shows the direction; default
+  newest first; each view keeps its own sort). Page arrows sit beside the count. Players has a
+  Show: Enemies / Friends dropdown, using the modern dropdown when available and a < > stepper
+  otherwise.
+- **Options (fallback canvas)** live in the game's Options → AddOns panel. If that panel can't be opened, the addon
   opens its own window instead.
   - Alerts: for each event, Show (Toast / Chat / Off, click to cycle) and Sound (on / off),
     plus "nearby only" and "Sounds on"

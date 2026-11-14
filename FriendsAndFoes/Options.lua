@@ -206,7 +206,183 @@ function Options.Refresh()
   end
 end
 
+---------------------------------------------------------------------------
+-- Native options (the game's own Settings panel): dropdowns with < > arrows, tooltips, search.
+-- Four pages: Alerts (main), Appearance, Friends & sharing, Advanced.
+-- The canvas panel above is only the fallback when this API isn't available.
+---------------------------------------------------------------------------
+local native -- main native category, once built
+
+local EVENT_ROWS = {
+  { "attacked", L.OPT_ATTACKED, L.TIP_ATTACKED }, { "died", L.OPT_DIED, L.TIP_DIED },
+  { "kill", L.OPT_KILL, L.TIP_KILL }, { "sighting", L.OPT_SIGHTING, L.TIP_SIGHTING },
+  { "level", L.OPT_LEVEL, L.TIP_LEVEL }, { "loot", L.OPT_LOOT, L.TIP_LOOT },
+  { "gear", L.OPT_GEAR, L.TIP_GEAR }, { "share", L.OPT_SHARE, L.TIP_SHARE },
+}
+
+-- one dropdown per event = show + sound together
+local DISPLAY = {
+  { "toast_sound", L.DISPLAY_TOAST_SOUND }, { "toast", L.DISPLAY_TOAST },
+  { "chat_sound", L.DISPLAY_CHAT_SOUND }, { "chat", L.DISPLAY_CHAT }, { "off", L.DISPLAY_OFF },
+}
+
+function Options.DisplayValue(show, sound)
+  if show == "off" then return "off" end
+  return (show or "toast") .. (sound and "_sound" or "")
+end
+
+function Options.SetDisplay(kind, value)
+  local s = S()
+  if value == "off" then
+    s.show[kind] = "off"
+    return
+  end
+  local show, withSound = value:match("^(%a+)(.*)$")
+  s.show[kind] = show == "chat" and "chat" or "toast"
+  s.sound[kind] = withSound == "_sound"
+end
+
+local function nativeAvailable()
+  return Settings and Settings.RegisterVerticalLayoutCategory and Settings.RegisterVerticalLayoutSubcategory
+    and Settings.RegisterAddOnSetting and Settings.RegisterProxySetting and Settings.CreateCheckbox
+    and Settings.CreateDropdown and Settings.CreateControlTextContainer and Settings.RegisterAddOnCategory
+end
+
+local function varType(kind)
+  return (Settings.VarType and Settings.VarType[kind]) or kind:lower()
+end
+
+local function onChange(setting, fn)
+  if setting.SetValueChangedCallback then
+    setting:SetValueChangedCallback(function(_, value) ns.Try("option", fn, value) end)
+  end
+end
+
+local function header(layout, text, tip)
+  if CreateSettingsListSectionHeaderInitializer then
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(text, tip))
+  end
+end
+
+local function choices(list)
+  return function()
+    local c = Settings.CreateControlTextContainer()
+    for _, o in ipairs(type(list) == "function" and list() or list) do c:Add(o[1], o[2], o[3]) end
+    return c:GetData()
+  end
+end
+
+local function checkbox(cat, key, tbl, field, name, default, tip, changed)
+  local s = Settings.RegisterAddOnSetting(cat, "FNF_" .. key, field, tbl, varType("Boolean"), name, default)
+  if changed then onChange(s, changed) end
+  Settings.CreateCheckbox(cat, s, tip)
+  return s
+end
+
+local function proxyDropdown(cat, key, kind, name, default, get, set, list, tip)
+  local s = Settings.RegisterProxySetting(cat, "FNF_" .. key, varType(kind), name, default, get, set)
+  Settings.CreateDropdown(cat, s, choices(list), tip)
+  return s
+end
+
+local function button(layout, name, label, click, tip)
+  if CreateSettingsButtonInitializer then
+    layout:AddInitializer(CreateSettingsButtonInitializer(name, label, function() ns.Try("option", click) end, tip, true))
+  end
+end
+
+local function chatTabs()
+  local out = {}
+  for i = 1, (NUM_CHAT_WINDOWS or 10) do
+    local name = GetChatWindowInfo and GetChatWindowInfo(i)
+    if name and name ~= "" and not ns.issecret(name) then out[#out + 1] = { i, i .. ". " .. name } end
+  end
+  if #out == 0 then out[1] = { 1, "1" } end
+  return out
+end
+
+function Options.BuildNative()
+  local D = ns.DEFAULTS
+  local main, mainLayout = Settings.RegisterVerticalLayoutCategory(L.ADDON)
+
+  -- Alerts (main page)
+  header(mainLayout, L.ALERTS_HEADER, L.MILESTONE_NOTE)
+  for _, row in ipairs(EVENT_ROWS) do
+    local kind = row[1]
+    proxyDropdown(main, "display_" .. kind, "String", row[2],
+      Options.DisplayValue(D.show[kind], D.sound[kind]),
+      function() return Options.DisplayValue(S().show[kind], S().sound[kind]) end,
+      function(v) Options.SetDisplay(kind, v) end,
+      DISPLAY, row[3] .. "\n\n" .. L.MILESTONE_NOTE)
+  end
+  checkbox(main, "nearbyOnly", S(), "nearbyOnly", L.OPT_NEARBY_ONLY, D.nearbyOnly, L.TIP_NEARBY_ONLY)
+  checkbox(main, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
+  header(mainLayout, L.DND_HEADER)
+  checkbox(main, "dndCombat", S().dnd, "combat", L.OPT_DND_COMBAT, D.dnd.combat, L.TIP_DND_COMBAT)
+  checkbox(main, "dndInstance", S().dnd, "instance", L.OPT_DND_INSTANCE, D.dnd.instance, L.TIP_DND_INSTANCE)
+
+  -- Appearance
+  local look, lookLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_APPEARANCE)
+  header(lookLayout, L.TOASTS_HEADER)
+  local themes = {}
+  for _, name in ipairs(ns.Toast.THEMES) do themes[#themes + 1] = { name, L.THEME_NAMES[name] or name, L.THEME_TIPS[name] } end
+  proxyDropdown(look, "theme", "String", L.OPT_THEME, D.theme,
+    function() return ns.Toast.Theme() end, function(v) S().theme = v end, themes, L.TIP_THEME)
+  button(lookLayout, L.OPT_PREVIEW, L.BTN_PREVIEW, function() ns.Toast.Test() end, L.TIP_PREVIEW)
+  button(lookLayout, L.OPT_POSITION, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end, L.TIP_POSITION)
+  header(lookLayout, L.MESSAGES_HEADER)
+  proxyDropdown(look, "style", "String", L.OPT_STYLE, "flavor",
+    function() return S().flavor == false and "short" or "flavor" end,
+    function(v) S().flavor = (v ~= "short") end,
+    { { "flavor", L.STYLE_FLAVOR, L.TIP_STYLE_FLAVOR }, { "short", L.STYLE_SHORT, L.TIP_STYLE_SHORT } }, L.TIP_STYLE)
+  proxyDropdown(look, "chatTab", "Number", L.OPT_CHAT_TAB, D.chatFrame,
+    function() return tonumber(S().chatFrame) or 1 end, function(v) S().chatFrame = v end, chatTabs, L.TIP_CHAT_TAB)
+
+  -- Friends & sharing
+  local friends, friendsLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_FRIENDS)
+  header(friendsLayout, L.SHARE_HEADER, L.TIP_SHARE_HEADER)
+  for _, o in ipairs({ { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR }, { "pvp", L.OPT_PVP } }) do
+    checkbox(friends, "share_" .. o[1], S().share, o[1], o[2], D.share[o[1]], L.TIP_SHARE_KIND)
+  end
+  header(friendsLayout, L.PICK_HEADER)
+  button(friendsLayout, L.OPT_PICK, L.BTN_PICK, function()
+    if SettingsPanel and SettingsPanel.Hide then SettingsPanel:Hide() end
+    ns.UI.Show("friends")
+  end, L.TIP_PICK)
+  header(friendsLayout, L.HITLIST_HEADER)
+  checkbox(friends, "mark", S(), "mark", L.OPT_MARK, D.mark, L.TIP_MARK, function()
+    if ns.Marks then ns.Marks.Refresh() end
+  end)
+  button(friendsLayout, L.OPT_SHARE_NOW, L.BTN_SHARE, function() ns.UI.ShareHitlist() end, L.TIP_SHARE_NOW)
+
+  -- Advanced
+  local adv, advLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_ADVANCED)
+  local mm = Settings.RegisterProxySetting(adv, "FNF_minimap", varType("Boolean"), L.OPT_MINIMAP_SHOW, false,
+    function() return not S().minimap.hide end,
+    function(v)
+      S().minimap.hide = not v
+      if ns.Minimap then ns.Minimap.Update() end
+    end)
+  Settings.CreateCheckbox(adv, mm, L.TIP_MINIMAP)
+  local dbg = Settings.RegisterProxySetting(adv, "FNF_debug", varType("Boolean"), L.OPT_DEBUG, false,
+    function() return S().debug and true or false end, function(v) ns.SetDebug(v) end)
+  Settings.CreateCheckbox(adv, dbg, L.TIP_DEBUG)
+  header(advLayout, L.TOOLS_HEADER)
+  button(advLayout, L.OPT_STATUS, L.BTN_STATUS, function() ns.PrintStatus() end, L.TIP_STATUS)
+  button(advLayout, L.OPT_SIM, L.BTN_SIM, function() ns.Sim.RunAll(false) end, L.TIP_SIM)
+  button(advLayout, L.OPT_SIM_CLEAR, L.BTN_SIM_CLEAR, function() ns.Sim.Clear() end, L.TIP_SIM_CLEAR)
+
+  Settings.RegisterAddOnCategory(main)
+  native = main
+  return main
+end
+
 local function create()
+  if nativeAvailable() then
+    local ok, err = pcall(Options.BuildNative)
+    if ok then return end
+    ns.Debug("ERR:options-native", err) -- fall back to the canvas panel
+  end
   panel = CreateFrame("Frame")
   panel.name = L.ADDON
   panel:Hide()
@@ -225,6 +401,11 @@ end
 
 -- own window, if the game's options panel can't be opened
 local function openStandalone()
+  if not panel then
+    panel = CreateFrame("Frame")
+    panel:Hide()
+    build(panel)
+  end
   if not standalone then
     local ok, f = pcall(CreateFrame, "Frame", "FriendsAndFoesOptions", UIParent, "BasicFrameTemplateWithInset")
     if not ok or not f then f = CreateFrame("Frame", "FriendsAndFoesOptions", UIParent) end
@@ -248,12 +429,15 @@ local function openStandalone()
   Options.Refresh()
 end
 
+local function openCategory(cat)
+  if not (cat and Settings and Settings.OpenToCategory) then return false end
+  return pcall(Settings.OpenToCategory, cat.GetID and cat:GetID() or cat)
+end
+
 function Options.Open()
-  if not panel then create() end
-  if category and Settings and Settings.OpenToCategory then
-    local ok = pcall(Settings.OpenToCategory, category.GetID and category:GetID() or category)
-    if ok then return end
-  elseif InterfaceOptionsFrame_OpenToCategory and not category then
+  if not (native or panel) then create() end
+  if openCategory(native) or openCategory(category) then return end
+  if panel and not category and InterfaceOptionsFrame_OpenToCategory then
     if pcall(InterfaceOptionsFrame_OpenToCategory, panel) then
       pcall(InterfaceOptionsFrame_OpenToCategory, panel) -- the old panel needs it twice
       return
@@ -262,4 +446,4 @@ function Options.Open()
   openStandalone()
 end
 
-ns.OnReady(function() if not panel then create() end end)
+ns.OnReady(function() if not (native or panel) then create() end end)

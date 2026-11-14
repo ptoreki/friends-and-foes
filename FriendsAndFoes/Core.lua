@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.5.4"
+ns.VERSION = "0.5.5"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -28,6 +28,7 @@ local DEFAULTS = {
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
 }
+ns.DEFAULTS = DEFAULTS
 
 local function fillDefaults(dst, src)
   for k, v in pairs(src) do
