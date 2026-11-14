@@ -50,6 +50,18 @@ function PvP.ZoneText()
   return text
 end
 
+-- Is a zone text from a friend's message ("Zone" or "Zone (Subzone)", maybe cut short) in the
+-- zone I'm in right now? Unknown either side counts as "no".
+function PvP.IsMyZone(text)
+  if type(text) ~= "string" or text == "" or text == "?" then return false end
+  local mine = GetRealZoneText()
+  if issecret(mine) or type(mine) ~= "string" or mine == "" then return false end
+  if text == mine then return true end
+  if text:sub(1, #mine + 2) == mine .. " (" then return true end
+  -- the sender cut the text at ZONE_MAX_LEN: a cut-off prefix of my zone still matches
+  return #text >= ZONE_MAX_LEN and mine:sub(1, #text) == text
+end
+
 ---------------------------------------------------------------------------
 -- reading enemy players (never branches on a secret value)
 ---------------------------------------------------------------------------

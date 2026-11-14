@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+Compatible with 0.3.x and 0.4.x.
+- **"Friend attacked" only pops up when you could help.** If they're in your zone, it's a
+  toast. If they're anywhere else, it's a chat line. You can switch this off with "Fights
+  outside my zone: chat only" in Settings.
+
 ## 0.4.1
 Compatible with 0.3.x and 0.4.0.
 - **Faster login, logout and /reload with debug on.** The debug log keeps the newest 2,000

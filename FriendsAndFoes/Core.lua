@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.4.1"
+ns.VERSION = "0.4.2"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -17,6 +17,7 @@ local DEFAULTS = {
   -- Milestones (level 60, looted epic BoE, revenge kill) toast anyway unless "off".
   show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "chat", sighting = "chat", share = "chat" },
   chatFrame = 1,
+  nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   sound = { enabled = true, pvp = true, progress = true, sighting = true },
   dnd = { combat = true, instance = true },

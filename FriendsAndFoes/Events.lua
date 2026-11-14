@@ -222,7 +222,9 @@ H.ATK = function(msg, isSelf, p, f)
   feed(p, "attacked", line)
   if isSelf or suppressAttackToast(msg.from) then return end
   ns.Toast.Push({
-    chat = line, kind = "attacked", category = "pvp", icon = ICON.attacked,
+    chat = line, kind = "attacked",
+    -- you can only help if you're in the same zone: elsewhere it's a chat line
+    far = ns.S().nearbyOnly and not ns.PvP.IsMyZone(f.zone), category = "pvp", icon = ICON.attacked,
     title = L.TOAST_ATTACKED:format(who(p)), text = L.TOAST_ATTACKED_TEXT:format(f.zone, by),
     player = attackers[1] and attackers[1].name,
   })

@@ -108,6 +108,8 @@ Rules:
   Each kind can be set to Toast, Chat or Off in Settings (`settings.show`). Defaults:
   - **Toast:** friend attacked, friend killed
   - **Chat:** level up, loot/craft, new gear, friend's kill, hitlist sighting, hitlist share
+- **Nearby only** (`settings.nearbyOnly`, default on): "friend attacked" is shown as a toast only when the
+  friend's zone (from the message) is your current zone. Otherwise it's a chat line.
 - **Milestones always toast** (unless that kind is Off): reaching level 60 (`ns.MILESTONE_LEVEL`),
   a **looted** epic BoE (crafted ones follow the setting), and a revenge kill.
 - Your own events go to the Feed only. Records are kept whatever the display setting.

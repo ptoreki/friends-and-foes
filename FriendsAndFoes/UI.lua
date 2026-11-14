@@ -336,6 +336,10 @@ local function buildSettings(parent)
   check(parent, x1, y, L.OPT_DND_COMBAT, toggle("dnd", "combat"))
   y = y - STEP
   check(parent, x1, y, L.OPT_DND_INSTANCE, toggle("dnd", "instance"))
+  y = y - STEP
+  check(parent, x1, y, L.OPT_NEARBY_ONLY,
+    function() return S().nearbyOnly end,
+    function(v) S().nearbyOnly = v end)
 
   heading(parent, x2, -5, L.TOAST_HEADER)
   y = -24

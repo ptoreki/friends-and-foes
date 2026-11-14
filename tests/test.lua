@@ -297,8 +297,16 @@ local t3 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LOOT", 
 check(t3 and #CHAT == 0, "looted epic BoE is a toast")
 local t4 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LOOT", { link = epic, source = "craft" }, "r4"), "WHISPER", 77) end)
 check(not t4 and #CHAT == 1, "crafted epic goes to chat")
-local t5 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "e9", zone = "Duskwood", attackers = "Zed Q:ROGUE:60:" }, "r5"), "WHISPER", 77) end)
-check(t5 and #CHAT == 0, "friend attacked is a toast")
+local t5 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "e9", zone = "Hillsbrad Foothills (Tarren Mill)", attackers = "Zed Q:ROGUE:60:" }, "r5"), "WHISPER", 77) end)
+check(t5 and #CHAT == 0, "friend attacked in my zone is a toast")
+local t5b = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "e10", zone = "Duskwood", attackers = "Zed Q:ROGUE:60:" }, "r5b"), "WHISPER", 77) end)
+check(not t5b and #CHAT == 1 and CHAT[1]:find("Duskwood", 1, true) ~= nil, "friend attacked in another zone is a chat line")
+ns.S().nearbyOnly = false
+local t5c = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "e11", zone = "Duskwood", attackers = "Zed Q:ROGUE:60:" }, "r5c"), "WHISPER", 77) end)
+check(t5c, "nearby-only off: far fights toast again")
+ns.S().nearbyOnly = true
+check(ns.PvP.IsMyZone("Hillsbrad Foothills") and ns.PvP.IsMyZone("Hillsbrad Foothills (Southshore)")
+  and not ns.PvP.IsMyZone("Hillsbrad") and not ns.PvP.IsMyZone("?") and not ns.PvP.IsMyZone(nil), "IsMyZone matching")
 ns.S().show.level = "off"
 local t6 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r6"), "WHISPER", 77) end)
 check(not t6 and #CHAT == 0, "off silences even milestones")

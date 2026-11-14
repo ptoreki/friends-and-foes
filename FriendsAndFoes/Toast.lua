@@ -229,6 +229,7 @@ function Toast.Mode(spec)
   local mode = ns.S().show[spec.kind] or "toast"
   if mode == "off" then return "off" end
   if spec.milestone then return "toast" end
+  if spec.far and mode == "toast" then return "chat" end
   return mode
 end
 
