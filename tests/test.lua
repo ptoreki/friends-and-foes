@@ -592,7 +592,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 24, "9 alerts + 3 places + 9 sounds + style + message style + chat tab (" .. dropdowns .. ")")
+  check(dropdowns == 25, "9 alerts + 3 places + 9 sounds + style + message style + chat tab + forget (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -1058,6 +1058,42 @@ do
   check(ns.ClassColored("Nobody Known", nil) == "Nobody Known", "unknown class: plain name")
   real.players["Known Mage"] = nil
   RAID_CLASS_COLORS = orig
+end
+
+-- old data: faded hitlist entries, old levels, gone friends, optional forgetting
+do
+  local day = 86400
+  real.hitlist["Fresh Foe"] = { name = "Fresh Foe", kills = 1, attacks = 0, victims = {}, lastSeen = time() - 2 * day, level = 30 }
+  real.hitlist["Old Foe"] = { name = "Old Foe", kills = 9, attacks = 0, victims = {}, lastSeen = time() - 100 * day, level = 20 }
+  real.hitlist["Old Noted"] = { name = "Old Noted", kills = 1, attacks = 0, victims = {}, lastSeen = time() - 400 * day, note = "keep" }
+  check(not ns.Data.IsStale(real.hitlist["Fresh Foe"]) and ns.Data.IsStale(real.hitlist["Old Foe"]), "stale after 90 days unseen")
+  ns.UI.Show("hitlist")
+  ns.UI.SortBy(4) -- kills, most first: Old Foe (9) would lead, but faded entries go last
+  ns.UI.SortBy(4)
+  ns.UI.SortBy(4)
+  local rows = ns.UI.Rows()
+  local posFresh, posOld
+  for i, e in ipairs(rows) do
+    if e.name == "Fresh Foe" then posFresh = i end
+    if e.name == "Old Foe" then posOld = i end
+  end
+  check(posFresh and posOld and posOld > posFresh, "faded entries are listed after active ones")
+  check(ns.Data.LevelIsOld(real.hitlist["Old Foe"]) and not ns.Data.LevelIsOld(real.hitlist["Fresh Foe"]), "old levels detected")
+  -- forgetting (off by default)
+  check(ns.Data.ForgetOld(FriendsAndFoesDB) == 0 and real.hitlist["Old Foe"], "forgetting is off by default")
+  ns.S().forgetAfter = 90
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(real.hitlist["Old Foe"] == nil and real.hitlist["Fresh Foe"] and real.hitlist["Old Noted"], "forget after 90 days: removed, but fresh and noted entries kept")
+  ns.S().forgetAfter = 0
+  real.hitlist["Fresh Foe"], real.hitlist["Old Noted"] = nil, nil
+  -- a friend not heard from in 6 months leaves the Friends list
+  real.players["Gone Friend"] = { name = "Gone Friend", friend = true, k = 0, d = 0, a = 0, lastSeen = time() - 200 * day }
+  ns.UI.Show("friends")
+  local goneListed = false
+  for _, e in ipairs(ns.UI.Rows()) do if e.name == "Gone Friend" then goneListed = true end end
+  check(not goneListed and real.players["Gone Friend"], "friend gone 6 months: hidden, record kept")
+  real.players["Gone Friend"] = nil
+  check(ns.errors == 0, "no errors with old data (" .. tostring(ns.lastError) .. ")")
 end
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent

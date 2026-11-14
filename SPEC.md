@@ -118,7 +118,12 @@ Rules:
     killed), last seen and zone, a note, and who shared it.
   - A shared entry with no kills (from an older client) isn't added.
   - From 0.5.4, a one-time cleanup removes entries with no kills, unless they have a note.
-  - Entries never expire. Remove one (Remove button or right-click), or clear the whole list
+  - Entries fade (grey, listed last) after 90 days unseen (`Data.IsStale`); seeing them again
+    revives them. Optional removal after N unseen days (`settings.forgetAfter`: 0 = never, 90,
+    180 or 365), never for entries with a note.
+  - Levels seen over 30 days ago show as "N+". Friends unheard of for 180 days are hidden from
+    the Friends list unless online (records kept).
+  - Otherwise entries never expire. Remove one (Remove button or right-click), or clear the whole list
     (Clear hitlist). Both ask Yes/No first. Player records (Players tab) can be removed by
     right-click too, also with confirmation.
 - **Pruning** at login: enemies not seen for 90 days, with no kills or assists on us and not on

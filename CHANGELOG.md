@@ -16,6 +16,16 @@ Compatible with 0.3.x to 0.6.1.
 - **More names in class colours:** if a message doesn't say a player's class, the addon uses the
   class it already knows for them (e.g. a killer named by the death recap), so fewer names show
   up white.
+- **Old data fades instead of piling up:**
+  - **Hitlist players nobody has seen for 90 days** are greyed out and listed at the bottom. As
+    soon as you or a friend sees them again, they're back to normal.
+  - **Optional forgetting:** Options → Friends & sharing → "Forget hitlist players not seen for":
+    Never (the default), 3 months, 6 months or 1 year. Entries you wrote a note on are always
+    kept.
+  - **Old levels** (seen over 30 days ago) show as "24+" in grey, since they've probably levelled
+    since.
+  - **Friends you haven't heard from in 6 months** leave the Friends list while they're offline.
+    Their record is kept, and they're back as soon as they come online.
 - **Attacks are no longer shown** on the hitlist: not in the hover, the Attacks column (removed),
   the nameplate tooltip, or sighting messages. Kills are what count. Attacks are still counted
   in the background.

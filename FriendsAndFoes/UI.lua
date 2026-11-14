@@ -49,9 +49,12 @@ local function lastText(e)
   return ns.Ago(e.lastSeen) .. (e.lastZone and (" - " .. e.lastZone) or "")
 end
 
+-- a level seen long ago is probably higher now: "24+" in grey
 local function lvl(e)
   local n = ns.Count(e.level)
-  return n > 0 and tostring(n) or "?"
+  if n <= 0 then return "?" end
+  if not e.pending and not e.friend and ns.Data.LevelIsOld(e) then return "|cff888888" .. n .. "+|r" end
+  return tostring(n)
 end
 local C = ns.Count
 local function guild(e) return e.guild and ("<" .. e.guild .. ">") or "" end
@@ -133,9 +136,15 @@ local FRIEND_COLS = {
 -- but hasn't received anything from yet (so you can tell "not detected" from "silent")
 local function fetchFriends()
   -- you are not your own friend; friends on the other faction aren't shown
+  -- friends you haven't heard from in 6 months leave the list (unless they're online now)
+  local online = {}
+  for _, name in ipairs(ns.Comm.EveryoneNames()) do
+    online[ns.Data.Resolve(R().players, name) or name] = true
+  end
   local list = sortedValues(R().players, function(p)
     return p.friend and not p.self and p.name ~= ns.me
       and not (p.faction and ns.myFaction and p.faction ~= ns.myFaction)
+      and (online[p.name] or ns.viewSim or not ns.Data.FriendIsGone(p))
   end)
   if ns.viewSim then return list end
   wipe(onlineNow)
@@ -202,7 +211,13 @@ local function applySort(list, cols)
   local st = sortOf(cols)
   local key = cols[st.col] and cols[st.col][4]
   if not key then return end
+  local hitlist = currentTab == "hitlist"
   table.sort(list, function(a, b)
+    -- faded hitlist entries (not seen for 90 days) always go last
+    if hitlist then
+      local sa, sb = ns.Data.IsStale(a), ns.Data.IsStale(b)
+      if sa ~= sb then return sb end
+    end
     local ka, kb = key(a), key(b)
     if ka == kb then return (a.name or "") < (b.name or "") end
     if type(ka) ~= type(kb) then ka, kb = tostring(ka), tostring(kb) end
@@ -361,9 +376,12 @@ function UI.Refresh()
     local e = data[offset + i]
     row.entry = e
     if e then
+      local faded = currentTab == "hitlist" and ns.Data.IsStale(e) -- not seen for 90 days: grey
       for c, col in ipairs(cols) do
         local ok, val = pcall(col[3], e)
-        row.cells[c]:SetText(ok and tostring(val) or "?")
+        local text = ok and tostring(val) or "?"
+        if faded then text = "|cff777777" .. ns.Plain(text) .. "|r" end
+        row.cells[c]:SetText(text)
       end
       row.sel:SetShown(currentTab == "hitlist" and e.name ~= nil and e.name == selected)
       row:Show()

@@ -404,6 +404,14 @@ function Options.BuildNative()
   checkbox(friends, "mark", S(), "mark", L.OPT_MARK, D.mark, L.TIP_MARK, function()
     if ns.Marks then ns.Marks.Refresh() end
   end)
+  proxyDropdown(friends, "forgetAfter", "Number", L.OPT_FORGET, 0,
+    function() return tonumber(S().forgetAfter) or 0 end,
+    function(v)
+      S().forgetAfter = v
+      ns.Data.ForgetOld(FriendsAndFoesDB)
+      if ns.UI then ns.UI.Refresh() end
+    end,
+    { { 0, L.FORGET_NEVER }, { 90, L.FORGET_3M }, { 180, L.FORGET_6M }, { 365, L.FORGET_1Y } }, L.TIP_FORGET)
   button(friendsLayout, L.OPT_SHARE_NOW, L.BTN_SHARE, function() ns.UI.ShareHitlist() end, L.TIP_SHARE_NOW)
 
   -- Advanced

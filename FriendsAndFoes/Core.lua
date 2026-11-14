@@ -27,6 +27,7 @@ local DEFAULTS = {
   soundPick = { attacked = "default", engage = "default", died = "default", kill = "default", sighting = "default",
     level = "default", loot = "default", gear = "default", share = "default" },
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
+  forgetAfter = 0, -- days unseen before a hitlist entry (without a note) is removed; 0 = never
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, engage = false, died = true, kill = false, sighting = true, share = false },
   dnd = { combat = true },

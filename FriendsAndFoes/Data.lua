@@ -282,6 +282,47 @@ ns.OnReady(function()
 end)
 
 -- Drop enemies not seen for 90 days who never hurt us and aren't on the hitlist.
+---------------------------------------------------------------------------
+-- old data
+---------------------------------------------------------------------------
+Data.STALE_DAYS = 90        -- hitlist entries fade (grey, listed last) after this long unseen
+Data.OLD_LEVEL_DAYS = 30    -- a level seen longer ago than this is shown as "24+"
+Data.FRIEND_HIDE_DAYS = 180 -- offline friends not heard from this long leave the Friends list
+
+local function daysSince(t) return t and (time() - t) / 86400 or math.huge end
+
+function Data.IsStale(rec)
+  return rec ~= nil and daysSince(rec.lastSeen or rec.firstSeen) > Data.STALE_DAYS
+end
+
+function Data.LevelIsOld(rec)
+  return rec ~= nil and daysSince(rec.lastSeen) > Data.OLD_LEVEL_DAYS
+end
+
+function Data.FriendIsGone(rec)
+  return rec ~= nil and daysSince(rec.lastSeen) > Data.FRIEND_HIDE_DAYS
+end
+
+-- Options: forget hitlist players not seen for N days. Entries with a note are always kept.
+function Data.ForgetOld(db)
+  local days = tonumber(db.settings and db.settings.forgetAfter) or 0
+  if days <= 0 then return 0 end
+  local removed = 0
+  for _, r in pairs(db.realms or {}) do
+    ensure(r)
+    local drop = {}
+    for name, h in pairs(r.hitlist) do
+      if not h.note and daysSince(h.lastSeen or h.firstSeen) > days then drop[#drop + 1] = name end
+    end
+    for _, name in ipairs(drop) do r.hitlist[name] = nil end
+    removed = removed + #drop
+  end
+  ns.Debug("FORGET-OLD", days, removed)
+  return removed
+end
+
+ns.OnReady(function() ns.Try("forget-old", Data.ForgetOld, FriendsAndFoesDB) end)
+
 function Data.Prune()
   local cutoff = time() - PRUNE_AFTER
   local removed = 0
