@@ -313,10 +313,19 @@ function ns.ToPattern(fmt)
   return "^" .. p
 end
 
+-- a name in its class colour. If the class isn't given, use what we know about that player.
 function ns.ClassColored(name, class)
   if not name then return "?" end
+  if (not class or class == "") and ns.Data and FriendsAndFoesDB and FriendsAndFoesDB.realms then
+    local ok, rec = pcall(ns.Data.FindPlayer, name)
+    if ok and rec and rec.class then class = rec.class end
+  end
   local c = class and class ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
-  if c and c.colorStr then return "|c" .. c.colorStr .. name .. "|r" end
+  if not c then return name end
+  if c.colorStr then return "|c" .. c.colorStr .. name .. "|r" end
+  if c.r and c.g and c.b then
+    return ("|cff%02x%02x%02x%s|r"):format(math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255), name)
+  end
   return name
 end
 

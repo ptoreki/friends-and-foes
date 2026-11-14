@@ -13,6 +13,9 @@ Compatible with 0.3.x to 0.6.1.
   - Each has its faction crest faded behind the text, a header saying what happened, and a thin
     stripe in the event's colour.
   - Choose in Options → Appearance → Toast style.
+- **More names in class colours:** if a message doesn't say a player's class, the addon uses the
+  class it already knows for them (e.g. a killer named by the death recap), so fewer names show
+  up white.
 - **Attacks are no longer shown** on the hitlist: not in the hover, the Attacks column (removed),
   the nameplate tooltip, or sighting messages. Kills are what count. Attacks are still counted
   in the background.

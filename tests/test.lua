@@ -1048,6 +1048,18 @@ ns.S().theme = "minimal"
 check(#ns.Toast.THEMES == 4, "four toast styles to choose from")
 check(ns.errors == 0, "no errors in faction styles (" .. tostring(ns.lastError) .. ")")
 
+-- class colours: given class, known class, or built from r/g/b
+do
+  local orig = RAID_CLASS_COLORS
+  RAID_CLASS_COLORS = { ROGUE = { colorStr = "fffff468" }, MAGE = { r = 0.25, g = 0.78, b = 0.92 } }
+  check(ns.ClassColored("Ro Gue", "ROGUE") == "|cfffff468Ro Gue|r", "class colour from the class")
+  real.players["Known Mage"] = { name = "Known Mage", class = "MAGE", enemy = true, k = 0, d = 0, a = 0 }
+  check(ns.ClassColored("Known Mage", nil) == "|cff3fc6eaKnown Mage|r", "missing class: looked up, colour built from r/g/b: " .. ns.ClassColored("Known Mage", nil))
+  check(ns.ClassColored("Nobody Known", nil) == "Nobody Known", "unknown class: plain name")
+  real.players["Known Mage"] = nil
+  RAID_CLASS_COLORS = orig
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true
