@@ -4,86 +4,128 @@
 See your Battle.net friends' level-ups, epic loot and world PvP fights, and keep a hitlist of everyone who ganks your group.
 
 **Longer summary (for an intro paragraph, Wago's description, or a forum post):**
-Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a Battle.net friend with the addon levels up, loots an epic BoE or gears up, you see it as a short chat line. When they're attacked in your zone, killed, or score a kill in world PvP, you get an alert telling you who and where. Everyone who kills one of you goes on a shared hitlist, with a skull on their nameplate and their record in the tooltip, so you'll recognize them next time. Every alert can be set to a toast, a chat line or off, with sound on or off, and it stays quiet until something worth knowing happens.
+Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you see a short line in chat. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you goes on a shared hitlist. They get a skull on their nameplate, and you're told when you or a friend spots them again. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
 
 ---
 
 ## Friends & Foes
 
-Leveling with friends in WoW Forever, but not always in the same group? Friends & Foes keeps your circle connected. You see your friends' big moments, you know when they're in a fight nearby, and you keep a shared grudge list of everyone who's ganked any of you.
+**Leveling with friends, but not always side by side?** Friends & Foes keeps your group connected. You'll know when a friend dings, loots something great, or gets jumped in world PvP. And nobody who ganks your group gets forgotten.
 
-It stays out of your way until something worth knowing happens.
+It stays out of your way until something happens that's worth knowing.
 
-> **Beta:** the addon is in active testing. Please report anything odd (see *Reporting bugs* below).
+> **Beta:** still being tested with real players. If something looks wrong, see *Something not working?* below.
 
-### What it does
+---
 
-**Friends' progress**
-- Level-ups, epic BoE loot and new gear, shown as a short line in chat with clickable items.
-- Milestones pop up as a small toast: reaching **level 60**, **looting an epic BoE**, **revenge kills**, and **kill streaks** (5 and 10 in a row).
+### What you'll see
 
-**World PvP alerts**
-- **Friend attacked:** a toast when a friend is attacked in **your zone**, so you can go help. Fights elsewhere get a chat line instead.
-- **Friend killed:** shows who did it and where.
-- **Friend got a kill:** with revenge called out when the victim was on your hitlist.
+**Your friends' progress**
+- Level-ups, epic loot and new gear, as a short line in chat. Click the item to see it.
+- Big moments pop up as a toast: **reaching level 60**, **looting an epic BoE**, **revenge**, and **kill streaks**.
+
+**World PvP**
+- **A friend is attacked:** a toast if they're in your zone, so you can go help. Fights elsewhere are a chat line.
+- **A friend is killed:** who did it, and where.
+- **A friend gets a kill:** including revenge on someone from your hitlist and kills in a row.
 
 **The hitlist**
-- Anyone who **kills** you or a friend goes on a shared list. It records their kills and attacks on your group, who they killed, their guild, where they were last seen, and your own notes. An attack alone only triggers an alert.
-- Hitlist players get a **skull next to their nameplate** and a line in their **tooltip**, e.g. *"Hitlist: 3 kills, 5 attacks on us"*.
-- You get a quiet alert when one of them shows up near you, or near a friend: *"Rogz Fang spotted by Bob · Astranaar"*.
-- You can share your hitlist with friends in one click.
+- Anyone who **kills** you or a friend lands on your hitlist. It shows:
+  - their kills and attacks on your group
+  - who they killed
+  - their guild
+  - where they were last seen
+  - your own note
+- Hitlist players get a **skull next to their nameplate**, and their record shows in their **tooltip**.
+- You're told when one of them turns up, whether you see them or a friend does: *"Rogz Fang spotted by Bob · Astranaar"*
+- Share your hitlist with your friends in one click.
 
-**K/D/A tracking**
-- Kills, deaths and assists for every enemy player you meet, and takedowns and deaths for you and your friends.
+**Kill and death tracking**
+- **Enemies:** how often each one killed one of you, died to you, or helped in a kill.
+- **You and your friends:** takedowns and deaths.
+- Once a week you get a short summary of your PvP week, including your **nemesis**.
 
-**Messages with some personality**, or short and plain if you prefer:
-- *"Rogz Fang killed Bob again (3rd) · 5th today · Tarren Mill"*
+**Messages with a bit of personality**
+- *"Rogz Fang killed Bob again (3rd) · Tarren Mill"*
 - *"Alice avenged Bob on Rogz Fang · Duskwood"*
-- *"Bob owns Rogz Fang (3rd) · Duskwood"*
-- *"Bob killed Kragg Bear · 5 in a row! · Southshore"*, and when it ends: *"Bob killed by Rogz Fang · ended a 5-kill streak · Southshore"*
-- With flavor text off: *"Bob killed by Rogz Fang · Duskwood"*
+- *"Bob killed Kragg Bear · 5 in a row! · Southshore"*
+- *"Bob killed by Rogz Fang · ended a 5-kill streak · Southshore"*
 
-### Your choice, per event
-In **Options → AddOns → Friends & Foes**, every event gets its own choice:
-- **Show:** Toast, Chat or Off
-- **Sound:** on or off
+Prefer it plain? Switch to **Short** messages and you get just who did what, and where: *"Bob killed by Rogz Fang · Duskwood"*.
 
-Toasts come in two styles, and their size and duration can be adjusted: **Modern**, a slim one-line strip, or **Classic**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
+---
 
-The defaults are quiet: toasts for your friends' fights (attacked nearby, killed, or scoring a kill) and for milestones, a chat line for everything else, and soft built-in game sounds.
+### Getting started
+1. Install it, and have your friends install it too. It only works between people who have the addon.
+2. Log in. That's it: anyone on your **Battle.net friends list** who's playing WoW Forever on **your faction** is picked up automatically.
+3. Type **/fnf** to open the window, or find it in the **minimap's addon menu**.
 
-You can also choose:
-- **Which friends** you exchange alerts with: everyone, or only the friends you pick.
-- **What you share:** levels, loot, gear and PvP, each separately.
-- **Do not disturb:** hold progress toasts in combat.
-- **Where it works:** for dungeons, raids and battlegrounds separately, choose whether alerts show, wait until you're out, become chat lines, or stay off. You also choose whether your own PvP is tracked in the open world and in battlegrounds.
+You don't need to be in a group, on the same server, or in the same zone.
 
-### How it works
-- Your friends need the addon too. Each player's addon reports only **their own** events (their level-ups, loot, and the fights they're in) and sends them to friends who have it.
-- It works with your **Battle.net friends** who are online in WoW Forever **on your faction**. You don't need to be grouped, on the same server, or in the same zone.
-- No external servers, websites or accounts are involved. Everything goes through the game's own addon messaging, and your data stays in your own SavedVariables.
-- It uses only the standard addon API: no automation, no combat log, nothing outside the game.
+---
+
+### The window (/fnf)
+- **Hitlist:** everyone on your hitlist. Click someone to add a note.
+- **Players:** switch between **Enemies** and **Friends**. Friends shows who's online, where they are, and their version of the addon.
+- **Feed:** everything that happened recently.
+
+Click any column header to sort, and use the **search box** to find someone quickly. **Right-click** a player to remove them, or use **Clear hitlist** to start over. You'll always be asked to confirm first.
+
+---
+
+### Make it yours
+Everything is in **Options → AddOns → Friends & Foes**. Hover any option for an explanation.
+
+**Alerts:** for each kind of event, choose:
+- *Toast + sound*
+- *Toast*
+- *Chat line + sound*
+- *Chat line*
+- *Off*
+
+**Where it works:**
+- For **dungeons**, **raids** and **battlegrounds** separately, choose whether alerts show, wait until you're out, become chat lines, or stay off.
+- Choose whether your own fights count in battlegrounds too.
+
+**Appearance:**
+- Pick a toast style: **Modern** (a slim strip) or **Classic** (like WoW's achievement pop-up).
+- Adjust the toast **size** and how **long** toasts stay.
+- Move toasts anywhere on screen.
+- Choose **flavor** or **short** messages, and which chat tab gets the lines.
+
+**Friends & sharing:**
+- Choose what you share about yourself.
+- Pick **specific friends** to exchange alerts with, instead of everyone.
+- Turn the nameplate skulls on or off.
+
+The defaults are quiet. Toasts come only for your friends' fights and for big moments; everything else is a chat line.
+
+---
+
+### Good to know
+- **It's safe and simple.** Everything happens inside the game. There are no websites, accounts or outside programs, and it doesn't play for you.
+- **Friends only see what you choose to share.** If you've picked specific friends, only they get your updates.
+- **Kills count as "takedowns".** The game doesn't tell addons who landed the killing blow, so any honorable kill you took part in counts.
+- **Alerts are live.** Things that happened while you were offline aren't shown afterwards.
+- **Options can't be opened during combat.** That's a game rule, so wait until the fight is over.
+- **English only**, for now.
+
+---
+
+### Something not working?
+1. Open **Options → AddOns → Friends & Foes → Advanced** and turn on **Debug logging**.
+2. Play until the problem happens, then type **/reload**.
+3. Send the file `World of Warcraft\_forever_\WTF\Account\<your account>\SavedVariables\FriendsAndFoes.lua` along with a short description.
+
+Debug logging turns itself off after a week, so you won't forget it.
+
+---
 
 ### Commands
 | Command | What it does |
 |---|---|
-| `/fnf` | Open the window (Hitlist, Players, Feed) |
+| `/fnf` | Open or close the window |
 | `/fnf options` | Open the options |
-| `/fnf group` | List friends and pick who you exchange alerts with |
+| `/fnf group` | See your friends and choose who you exchange alerts with |
 | `/fnf unlock` / `/fnf lock` | Move the toasts |
-| `/fnf chat <tab>` | Choose the chat tab for alert lines |
-| `/fnf status` | Show which friends were found and what works on your client |
-
-The addon is also in the minimap's addon menu.
-
-### Reporting bugs
-1. Type `/fnf debug`, then play until the problem happens.
-2. Type `/reload`.
-3. Attach `WTF\Account\<YOUR ACCOUNT>\SavedVariables\FriendsAndFoes.lua` to a comment or issue.
-
-Debug logging switches itself off after 7 days.
-
-### Known limitations
-- WoW Forever restricts some combat information for addons, so **killing blows can't be detected**. Friends' honorable kills count as *takedowns*.
-- Alerts are live only. Events that happened while you were offline aren't replayed.
-- English only for now.
+| `/fnf status` | Check which friends were found |
