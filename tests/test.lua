@@ -791,6 +791,22 @@ do
   check(ns.errors == 0, "no errors in toast logging (" .. tostring(ns.lastError) .. ")")
 end
 
+-- options in combat: not allowed (the game blocks it), nothing queued
+do
+  local lockdown = true
+  InCombatLockdown = function() return lockdown end
+  PRINTED = {}
+  ns.Options.Open()
+  ns.Options.Open()
+  local said = 0
+  for _, line in ipairs(PRINTED) do if line:find("during combat", 1, true) then said = said + 1 end end
+  check(said == 2, "in combat: refused with a message each time (" .. said .. ")")
+  lockdown = false
+  FIRE("PLAYER_REGEN_ENABLED")
+  InCombatLockdown = nil
+  check(ns.errors == 0, "no errors refusing options in combat (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

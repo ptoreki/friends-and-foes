@@ -451,7 +451,20 @@ local function openCategory(cat)
   return pcall(Settings.OpenToCategory, cat.GetID and cat:GetID() or cat)
 end
 
+-- The game's settings window can't be opened by an addon during combat (protected UI),
+-- so Options simply isn't available in combat.
+
+local function inCombat()
+  if not InCombatLockdown then return false end
+  local ok, locked = pcall(InCombatLockdown)
+  return ok and not ns.issecret(locked) and locked and true or false
+end
+
 function Options.Open()
+  if inCombat() then
+    print("|cff33ff99" .. L.ADDON .. "|r " .. L.OPTIONS_IN_COMBAT)
+    return
+  end
   if not (native or panel) then create() end
   if openCategory(native) or openCategory(category) then return end
   if panel and not category and InterfaceOptionsFrame_OpenToCategory then
@@ -463,4 +476,15 @@ function Options.Open()
   openStandalone()
 end
 
-ns.OnReady(function() if not (native or panel) then create() end end)
+-- set up the options at login; after combat if you logged in or reloaded mid-fight
+local createAfterCombat = false
+ns.OnReady(function()
+  if native or panel then return end
+  if inCombat() then createAfterCombat = true else create() end
+end)
+ns.On("PLAYER_REGEN_ENABLED", function()
+  if createAfterCombat and not (native or panel) then
+    createAfterCombat = false
+    create()
+  end
+end)
