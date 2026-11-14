@@ -23,6 +23,9 @@ local DEFAULTS = {
   toastScale = 1,    -- toast size (0.7 - 1.5)
   toastDuration = 3, -- seconds a toast stays (PvP toasts 2 longer)
   weekly = true,     -- weekly PvP summary in chat
+  -- which sound each event plays ("default" = the built-in choice for that kind of event)
+  soundPick = { attacked = "default", died = "default", kill = "default", sighting = "default",
+    level = "default", loot = "default", gear = "default", share = "default" },
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
@@ -49,6 +52,13 @@ local function fillDefaults(dst, src)
 end
 
 function ns.S() return FriendsAndFoesDB.settings end
+
+-- a count for display: a whole number, never negative and never "-0"
+function ns.Count(v)
+  v = tonumber(v)
+  if not v or v ~= v or v <= 0 then return 0 end -- also turns -0 (and NaN) into 0
+  return math.floor(v)
+end
 
 -- text without colour codes, links or inline textures (for logs and searching)
 function ns.Plain(s)

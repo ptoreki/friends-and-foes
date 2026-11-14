@@ -584,7 +584,7 @@ do
   CreateSettingsButtonInitializer = function(name, label, click) return { button = label, click = click } end
   local ok, err = pcall(ns.Options.BuildNative)
   check(ok, "native options build: " .. tostring(err))
-  check(#pages == 5, "five pages: Alerts, Where it works, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
+  check(#pages == 6, "six pages: Alerts, Where it works, Sounds, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
   local dropdowns = 0
   for _, c in ipairs(controls) do
     if c.kind == "dropdown" then
@@ -592,7 +592,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 14, "8 alerts + 3 places + style + message style + chat tab (" .. dropdowns .. ")")
+  check(dropdowns == 22, "8 alerts + 3 places + 8 sounds + style + message style + chat tab (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -615,6 +615,10 @@ do
   settings.FNF_track_pvp:SetValue(true)
   check(ns.S().track.pvp == true, "track PvP in battlegrounds checkbox")
   settings.FNF_track_pvp:SetValue(false)
+  local played = SOUNDS_PLAYED or 0
+  settings.FNF_soundPick_kill:SetValue("raidwarning")
+  check(ns.S().soundPick.kill == "raidwarning" and (SOUNDS_PLAYED or 0) == played + 1, "picking a sound sets it and plays it")
+  settings.FNF_soundPick_kill:SetValue("default")
   settings.FNF_mark:SetValue(false)
   check(ns.S().mark == false, "hitlist marks checkbox")
   settings.FNF_mark:SetValue(true)
@@ -920,6 +924,35 @@ do
   ADVANCE(15) -- let the send queue's allowance refill for later tests
   RUN_TICKERS(2)
   check(ns.errors == 0, "no errors in 0.6 features (" .. tostring(ns.lastError) .. ")")
+end
+
+-- counts are never shown as -0 or negative
+check(ns.Count(-0) == 0 and tostring(ns.Count(-0)) == "0" and ns.Count(-3) == 0 and ns.Count(nil) == 0 and ns.Count("5") == 5 and ns.Count(2.7) == 2, "ns.Count")
+real.players["Neg Zero"] = { name = "Neg Zero", enemy = true, k = -0.0, d = -1, a = 0, lastSeen = time() }
+ns.UI.Show("enemies")
+ns.UI.SetSearch("neg zero")
+local nz = ns.UI.Rows()[1]
+check(nz and nz.name == "Neg Zero", "test player listed")
+ns.UI.SetSearch("")
+real.players["Neg Zero"] = nil
+-- picked sounds play instead of the default
+do
+  local lastId
+  local origPS = PlaySound
+  PlaySound = function(id) lastId = id; SOUNDS_PLAYED = (SOUNDS_PLAYED or 0) + 1 end
+  ns.S().soundPick.died = "coin"
+  ns.S().sound.died = true
+  drainToasts()
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "snd" })
+  local coinId
+  for _, c in ipairs(ns.Toast.SOUND_CHOICES) do if c[1] == "coin" then coinId = c[3] end end
+  check(lastId == coinId, "picked sound plays for that event")
+  ns.S().soundPick.died = "default"
+  drainToasts()
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "snd2" })
+  check(lastId ~= coinId, "default plays the built-in sound")
+  drainToasts()
+  PlaySound = origPS
 end
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent

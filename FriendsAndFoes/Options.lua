@@ -318,7 +318,6 @@ function Options.BuildNative()
       DISPLAY, row[3] .. "\n\n" .. L.MILESTONE_NOTE)
   end
   checkbox(main, "nearbyOnly", S(), "nearbyOnly", L.OPT_NEARBY_ONLY, D.nearbyOnly, L.TIP_NEARBY_ONLY)
-  checkbox(main, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
   header(mainLayout, L.DND_HEADER)
   checkbox(main, "dndCombat", S().dnd, "combat", L.OPT_DND_COMBAT, D.dnd.combat, L.TIP_DND_COMBAT)
 
@@ -336,6 +335,24 @@ function Options.BuildNative()
   header(whereLayout, L.TRACK_HEADER, L.TIP_TRACK)
   checkbox(where, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
   checkbox(where, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
+
+  -- Sounds: which sound each event plays (picking one plays it)
+  local snd, sndLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_SOUNDS)
+  checkbox(snd, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
+  header(sndLayout, L.SOUNDS_HEADER, L.TIP_SOUNDS_HEADER)
+  local CATEGORY = { attacked = "pvp", died = "pvp", kill = "pvp", sighting = "sighting",
+    level = "progress", loot = "progress", gear = "progress", share = "progress" }
+  for _, row in ipairs(EVENT_ROWS) do
+    local kind = row[1]
+    local list = { { "default", L.SND_DEFAULT } }
+    for _, c in ipairs(ns.Toast.SOUND_CHOICES) do list[#list + 1] = { c[1], c[2] } end
+    proxyDropdown(snd, "soundPick_" .. kind, "String", row[2], "default",
+      function() return S().soundPick[kind] or "default" end,
+      function(v)
+        S().soundPick[kind] = v
+        ns.Toast.PlayChoice(v, CATEGORY[kind]) -- hear it straight away
+      end, list, L.TIP_SOUND_PICK)
+  end
 
   -- Appearance
   local look, lookLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_APPEARANCE)

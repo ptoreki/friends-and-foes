@@ -27,6 +27,35 @@ local SOUNDS = {
   sighting = SK.TELL_MESSAGE or 3081,            -- the whisper ping
 }
 
+-- Sounds a player can pick per event (Options -> Sounds). Built-in game sounds only.
+-- { key, label, sound id }
+Toast.SOUND_CHOICES = {
+  { "whisper", L.SND_WHISPER, SK.TELL_MESSAGE or 3081 },
+  { "bnet", L.SND_BNET, SK.UI_BNET_TOAST or 18019 },
+  { "bosswhisper", L.SND_BOSS_WHISPER, SK.UI_RAID_BOSS_WHISPER_WARNING or 37666 },
+  { "raidwarning", L.SND_RAID_WARNING, SK.RAID_WARNING or 8959 },
+  { "readycheck", L.SND_READY_CHECK, SK.READY_CHECK or 8960 },
+  { "levelup", L.SND_LEVEL_UP, SK.LEVEL_UP or 888 },
+  { "quest", L.SND_QUEST, SK.IG_QUEST_LIST_COMPLETE or 878 },
+  { "invite", L.SND_INVITE, SK.IG_PLAYER_INVITE or 880 },
+  { "mapping", L.SND_MAP_PING, SK.MAP_PING or 3175 },
+  { "alarm", L.SND_ALARM, SK.ALARM_CLOCK_WARNING_3 or 12889 },
+  { "coin", L.SND_COIN, SK.LOOT_WINDOW_COIN_SOUND or 120 },
+}
+local SOUND_BY_KEY = {}
+for _, c in ipairs(Toast.SOUND_CHOICES) do SOUND_BY_KEY[c[1]] = c[3] end
+
+-- the sound an event plays: the player's pick, else the default for its kind
+function Toast.SoundFor(kind, category)
+  local pick = kind and ns.S().soundPick and ns.S().soundPick[kind]
+  return (pick and SOUND_BY_KEY[pick]) or SOUNDS[category] or SOUNDS.progress
+end
+
+function Toast.PlayChoice(key, category)
+  local id = SOUND_BY_KEY[key] or SOUNDS[category] or SOUNDS.progress
+  ns.Try("sound", PlaySound, id, "Master")
+end
+
 local queue, active = {}, {}
 local pools = {} -- theme -> spare frames
 local anchor, holder
@@ -289,9 +318,11 @@ local function playSound(spec)
   if not s.enabled then return end
   local id
   if spec.kind and s[spec.kind] then
-    id = SOUNDS[spec.category] or SOUNDS.progress
+    id = Toast.SoundFor(spec.kind, spec.category)
   elseif spec.milestone then
-    id = SOUNDS.progress
+    -- a milestone chimes even when its event is silent: its picked sound, else the chime
+    local pick = ns.S().soundPick and ns.S().soundPick[spec.kind]
+    id = (pick and pick ~= "default" and SOUND_BY_KEY[pick]) or SOUNDS.progress
   end
   if id then ns.Try("sound", PlaySound, id, "Master") end
 end
@@ -466,7 +497,7 @@ function Toast.Sighting(name, class, zone, hit, by)
   -- flavor off: who and where only; on: their record too
   local text = place
   if ns.S().flavor ~= false and hit then
-    text = L.SIGHTING_RECORD:format(hit.kills or 0, hit.attacks or 0) .. ns.Flavor.SEP .. place
+    text = L.SIGHTING_RECORD:format(ns.Count(hit.kills), ns.Count(hit.attacks)) .. ns.Flavor.SEP .. place
   end
   local line = title .. ns.Flavor.SEP .. text
   Toast.Push({

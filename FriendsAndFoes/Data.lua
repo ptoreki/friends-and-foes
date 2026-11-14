@@ -63,7 +63,7 @@ local function mergeInto(dst, src)
     if k == "name" then
       -- keep the key
     elseif COUNTERS[k] then
-      dst[k] = (tonumber(cur) or 0) + (tonumber(v) or 0)
+      dst[k] = ns.Count(cur) + ns.Count(v) -- never negative
     elseif k == "level" then
       dst[k] = math.max(tonumber(cur) or 0, tonumber(v) or 0)
     elseif k == "firstSeen" then

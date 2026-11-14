@@ -6,6 +6,9 @@ Compatible with 0.3.x to 0.5.5. Friends need 0.6.0 to send or receive sightings.
   "Rogz Fang spotted by Bob · 2 kills, 3 attacks · Astranaar". You're alerted once per player
   every 5 minutes, whoever spots them. This uses the Hitlist sighting alert setting and the
   World PvP share setting.
+- **Choose the sound for each event:** a new Options → Sounds page with one dropdown per event.
+  There are 11 built-in game sounds to pick from, plus Default. Picking one plays it so you can
+  hear it. Whether an event makes a sound at all is still set on the main page.
 - **Toast size and duration:** sliders in Options → Appearance (70-150%, 2-10 seconds; PvP toasts
   stay 2 seconds longer). Also `/fnf size 120` and `/fnf duration 5`.
 - **Search box** in the window. It filters the Hitlist and Players lists by name or guild, and
@@ -16,6 +19,9 @@ Compatible with 0.3.x to 0.5.5. Friends need 0.6.0 to send or receive sightings.
 - **Minimap and addon-menu tooltip** shows friends online, hitlist size and your last fight.
 - **Welcome message** the first time the addon runs.
 - The simulation banner moved to the bottom of the window.
+- The tabs under the window (Hitlist, Players, Feed) are now evenly spaced and the same width;
+  they used to overlap.
+- Counts in the window, tooltips and messages are never shown as "-0" or below zero.
 - **New Options page: Where it works.**
   - **Alerts while you're in:** a dropdown each for Dungeons, Raids and Battlegrounds.
     Choices: *Show*, *Wait until I'm out* (the default, same as before), *Chat line only*, or *Off*.

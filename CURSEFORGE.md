@@ -21,7 +21,7 @@ Stay connected with your friends in WoW Forever. See their level-ups, epic loot 
 Install it, and have your friends install it too. Battle.net friends playing WoW Forever on your faction are found automatically; no grouping needed. Type **/fnf** or use the minimap addon menu.
 ### Options
 In **Options → AddOns → Friends & Foes**:
-- Per event: toast, chat line or off, with or without sound.
+- Per event: toast, chat line or off, with or without sound, and which sound.
 - Dungeons, raids and battlegrounds: show alerts, wait until you're out, or turn them off.
 - Toast style (**Modern** or **Classic**), size, duration and position.
 - What you share, and which friends you share with.

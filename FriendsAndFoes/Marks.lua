@@ -74,7 +74,7 @@ local function onUnitTooltip(tt)
   local _, unit = tt:GetUnit()
   local h = Marks.HitFor(safe(unit))
   if not h then return end
-  local line = L.TOOLTIP_HIT:format(h.kills or 0, h.attacks or 0)
+  local line = L.TOOLTIP_HIT:format(ns.Count(h.kills), ns.Count(h.attacks))
   local victims = victimsText(h)
   if victims ~= "" then line = line .. " - " .. L.TOOLTIP_VICTIMS:format(victims) end
   tt:AddLine("|T" .. SKULL .. ":0|t " .. line, 1, 0.35, 0.3, true)

@@ -49,7 +49,11 @@ local function lastText(e)
   return ns.Ago(e.lastSeen) .. (e.lastZone and (" - " .. e.lastZone) or "")
 end
 
-local function lvl(e) return e.level and tostring(e.level) or "?" end
+local function lvl(e)
+  local n = ns.Count(e.level)
+  return n > 0 and tostring(n) or "?"
+end
+local C = ns.Count
 local function guild(e) return e.guild and ("<" .. e.guild .. ">") or "" end
 
 -- small class icon, inline (|T path:h:w:x:y:texW:texH:l:r:t:b|t)
@@ -63,9 +67,9 @@ end
 local function nameCol(e) return classIcon(e.class) .. ns.ClassColored(e.name, e.class) end
 
 local function hitKills(e)
-  local s = tostring(e.kills or 0)
-  if (e.suspect or 0) > 0 then s = s .. "*" end
-  if (e.revenge or 0) > 0 then s = s .. "  |cff33ff33" .. L.REVENGE_SHORT:format(e.revenge) .. "|r" end
+  local s = tostring(C(e.kills))
+  if C(e.suspect) > 0 then s = s .. "*" end
+  if C(e.revenge) > 0 then s = s .. "  |cff33ff33" .. L.REVENGE_SHORT:format(C(e.revenge)) .. "|r" end
   return s
 end
 
@@ -83,7 +87,7 @@ local HITLIST_COLS = {
   { L.COL_NAME, 165, nameCol, byName },
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_GUILD, 95, guild, byGuild },
-  { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end, function(e) return e.attacks or 0 end },
+  { L.COL_ATTACKS, 50, function(e) return C(e.attacks) end, function(e) return C(e.attacks) end },
   { L.COL_KILLS, 70, hitKills, function(e) return e.kills or 0 end },
   { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end, function(e) return count(e.victims) end },
   { L.COL_LAST, 145, lastText, byLast },
@@ -93,9 +97,9 @@ local ENEMY_COLS = {
   { L.COL_NAME, 170, nameCol, byName },
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_GUILD, 110, guild, byGuild },
-  { L.COL_KILLS_ON_US, 75, function(e) return e.k end, function(e) return e.k or 0 end },
-  { L.COL_DEATHS_TO_US, 70, function(e) return e.d end, function(e) return e.d or 0 end },
-  { L.COL_ASSISTS, 55, function(e) return e.a end, function(e) return e.a or 0 end },
+  { L.COL_KILLS_ON_US, 75, function(e) return C(e.k) end, function(e) return C(e.k) end },
+  { L.COL_DEATHS_TO_US, 70, function(e) return C(e.d) end, function(e) return C(e.d) end },
+  { L.COL_ASSISTS, 55, function(e) return C(e.a) end, function(e) return C(e.a) end },
   { L.COL_LAST, 150, lastText, byLast },
 }
 
@@ -107,8 +111,8 @@ local FRIEND_COLS = {
     if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
     return e.version
   end, function(e) return e.version or "" end },
-  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end, function(e) return e.k or -1 end },
-  { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end, function(e) return e.d or -1 end },
+  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or C(e.k) end, function(e) return e.pending and -1 or C(e.k) end },
+  { L.COL_DEATHS, 55, function(e) return e.pending and "" or C(e.d) end, function(e) return e.pending and -1 or C(e.d) end },
   { L.COL_ALERTS, 50, function(e)
     local tag = ns.Comm.TagFor(e.name)
     if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
@@ -523,10 +527,11 @@ local function createTab(parent, key, label, prev, index)
   end
   b:SetText(label)
   b.isPanelTab = isPanelTab
-  if isPanelTab then pcall(PanelTemplates_TabResize, b, 0) end
+  -- equal widths (at least 90), with a small gap between tabs like the game's own windows
+  if isPanelTab then pcall(PanelTemplates_TabResize, b, 0, nil, 90) end
   b:SetScript("OnClick", function() UI.SelectTab(key) end)
   if prev then
-    b:SetPoint("LEFT", prev, "RIGHT", isPanelTab and -14 or 4, 0)
+    b:SetPoint("LEFT", prev, "RIGHT", 3, 0)
   else
     b:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 12, isPanelTab and 2 or -2)
   end
@@ -899,7 +904,7 @@ ns.OnReady(function()
   if now - (w.start or now) < 7 * 86400 then return end
   db.weekly = { start = now, k = 0, d = 0, killers = {} }
   if ns.S().weekly == false or ((w.k or 0) + (w.d or 0)) == 0 then return end
-  local line = L.WEEKLY:format(w.k or 0, w.d or 0)
+  local line = L.WEEKLY:format(ns.Count(w.k), ns.Count(w.d))
   local nemesis, most = nil, 0
   for name, n in pairs(w.killers or {}) do
     if n > most then nemesis, most = name, n end

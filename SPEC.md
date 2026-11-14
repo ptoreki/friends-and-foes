@@ -161,6 +161,10 @@ Rules:
 - **Sightings:** your own sightings are sent as SIGHT. A received one shows "X spotted by Y" with
   your record of X (if X is on your hitlist) and the place. One alert per player every 5 minutes,
   shared between your own and friends' sightings (`PvP.SightingDue`).
+- **Sounds per event** (`settings.soundPick[kind]`): "default" (the built-in sound for its kind)
+  or one of `Toast.SOUND_CHOICES`, the curated built-in game sounds. A milestone uses its pick,
+  else the chime.
+- **Counts** are always shown through `ns.Count`: whole numbers, never negative or "-0".
 - **Toast size and duration:** `settings.toastScale` (0.7–1.5) scales a holder frame under the
   anchor; `settings.toastDuration` (2–10 s, PvP +2).
 - **Toast layout:** one compact line (icon, title, details; long text wraps to at most 3 lines) on a dark strip with a thin coloured
