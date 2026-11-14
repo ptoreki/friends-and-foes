@@ -81,11 +81,10 @@ Rules:
   - the recap's name isn't used to guess "player" from its shape, since Forever player names
     ("Kragg Bear") look like NPC names
   - otherwise the most recent attacker in the encounter (suspected)
-  - the other encounter attackers, plus other players in the recap, count as assists and are
-    added to the hitlist
+  - the other encounter attackers, plus other players in the recap, count as assists. Assists
+    are not added to the hitlist.
 - **Names-unreadable fallback:** a death the recap shows came from a player is recorded even
-  when no encounter was detected. The hitlist then fills from deaths alone. The Settings tab
-  shows which fallback mode is active.
+  when no encounter was detected. The Settings tab shows which fallback mode is active.
 - **Kill vs. assist:** killing blows can't be detected without the combat log, so a friend's honorable
   kills are counted as **takedowns**.
 
@@ -93,9 +92,14 @@ Rules:
 - **Players**: K/D/A per name.
   - Friends and you: takedowns and deaths.
   - Enemies: kills on us, deaths to us, and assists on our deaths.
-- **Hitlist**: anyone who attacked or killed you or a friend.
-  - Stores guild, attacks, kills (with a suspected count), revenge count, victims, last seen and
-    zone, a note, and who shared it.
+- **Hitlist**: anyone who **killed** you or a friend. Only a kill adds someone; an attack alone
+  only alerts.
+  - An enemy's attacks are counted on their player record (`atk`) and carried over when a kill
+    adds them. Attacks keep being counted while they're on the list.
+  - Stores guild, attacks, kills (with a suspected count), revenge count, victims (who they
+    killed), last seen and zone, a note, and who shared it.
+  - A shared entry with no kills (from an older client) isn't added.
+  - From 0.5.4, a one-time cleanup removes entries with no kills, unless they have a note.
   - Entries never expire. They can be removed by hand.
 - **Pruning** at login: enemies not seen for 90 days, with no kills or assists on us and not on
   the hitlist, are removed.
@@ -124,7 +128,7 @@ Rules:
   - sightings: the whisper ping
 - **Hitlist marks** (`settings.mark`, default on):
   - a skull next to a hitlist player's nameplate
-  - a tooltip line: kills, attacks, who they hit, and your note
+  - a tooltip line: kills, attacks, who they killed, and your note
   - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
     still produce a chat line or toast.
 - **Toast layout:** one compact line (icon, title, details) on a dark strip with a thin coloured

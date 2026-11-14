@@ -236,8 +236,29 @@ function Data.MergeServerStores(db)
   return merged
 end
 
+-- 0.5.3 and earlier put anyone who attacked on the hitlist. Now only kills do: once, drop
+-- entries with no kills (kept: anything with a note you wrote).
+function Data.DropAttackOnly(db)
+  if db.hitlistKillsOnly then return 0 end
+  local dropped = 0
+  local function store(r)
+    ensure(r)
+    local drop = {}
+    for name, h in pairs(r.hitlist) do
+      if (tonumber(h.kills) or 0) == 0 and not h.note then drop[#drop + 1] = name end
+    end
+    for _, name in ipairs(drop) do r.hitlist[name] = nil end
+    dropped = dropped + #drop
+  end
+  for _, r in pairs(db.realms or {}) do store(r) end
+  if db.sim then store(db.sim) end
+  db.hitlistKillsOnly = true
+  return dropped
+end
+
 ns.OnReady(function()
   ns.Try("servers", function() ns.Debug("MERGE-SERVERS", Data.MergeServerStores(FriendsAndFoesDB)) end)
+  ns.Try("kills-only", function() ns.Debug("HITLIST-KILLS-ONLY", Data.DropAttackOnly(FriendsAndFoesDB)) end)
   ns.Try("fold", function() ns.Debug("FOLD", Data.FoldFirstNames(FriendsAndFoesDB)) end)
 end)
 

@@ -4,7 +4,7 @@
 See your Battle.net friends' level-ups, epic loot and world PvP fights, and keep a hitlist of everyone who ganks your group.
 
 **Longer summary (for an intro paragraph, Wago's description, or a forum post):**
-Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a Battle.net friend with the addon levels up, loots an epic BoE or gears up, you see it as a short chat line. When they're attacked in your zone, killed, or score a kill in world PvP, you get an alert telling you who and where. Everyone who attacks or kills one of you goes on a shared hitlist, with a skull on their nameplate and their record in the tooltip, so you'll recognize them next time. Every alert can be set to a toast, a chat line or off, with sound on or off, and it stays quiet until something worth knowing happens.
+Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a Battle.net friend with the addon levels up, loots an epic BoE or gears up, you see it as a short chat line. When they're attacked in your zone, killed, or score a kill in world PvP, you get an alert telling you who and where. Everyone who kills one of you goes on a shared hitlist, with a skull on their nameplate and their record in the tooltip, so you'll recognize them next time. Every alert can be set to a toast, a chat line or off, with sound on or off, and it stays quiet until something worth knowing happens.
 
 ---
 
@@ -28,7 +28,7 @@ It stays out of your way until something worth knowing happens.
 - **Friend got a kill:** with revenge called out when the victim was on your hitlist.
 
 **The hitlist**
-- Anyone who attacks or kills you or a friend goes on a shared list. It records attacks, kills, who they hit, their guild, where they were last seen, and your own notes.
+- Anyone who **kills** you or a friend goes on a shared list. It records their kills and attacks on your group, who they killed, their guild, where they were last seen, and your own notes. An attack alone only triggers an alert.
 - Hitlist players get a **skull next to their nameplate** and a line in their **tooltip**, e.g. *"Hitlist: 3 kills, 5 attacks on us"*.
 - You get a quiet alert when one of them shows up near you.
 - You can share your hitlist with friends in one click.

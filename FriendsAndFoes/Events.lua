@@ -82,10 +82,24 @@ local function enemyTouch(u, zone)
   return e
 end
 
+-- Only a kill puts someone on the hitlist. Attacks before that are counted on their enemy
+-- record (e.atk) and carried over when the kill adds them.
 local function hitTouch(u, zone, victim)
+  local isNew = ns.Data.FindHit(u.name) == nil
   local h = ns.Data.Hit(u.name)
   ns.Data.Touch(h, { class = u.class, level = u.level, guild = u.guild, zone = zone })
   h.victims[victim] = true
+  if isNew then
+    local e = ns.Data.FindPlayer(u.name)
+    if e and e.atk then h.attacks = math.max(h.attacks or 0, e.atk) end
+  end
+  return h
+end
+
+-- update someone already on the hitlist; never adds them
+local function hitUpdate(u, zone)
+  local h = ns.Data.FindHit(u.name)
+  if h then ns.Data.Touch(h, { class = u.class, level = u.level, guild = u.guild, zone = zone }) end
   return h
 end
 
@@ -207,9 +221,10 @@ H.ATK = function(msg, isSelf, p, f)
       if not atkSeen[k] then
         atkSeen[k] = true
         atkSeenCount = atkSeenCount + 1
-        enemyTouch(u, f.zone)
-        local h = hitTouch(u, f.zone, msg.from)
-        h.attacks = h.attacks + 1
+        local e = enemyTouch(u, f.zone)
+        e.atk = (e.atk or 0) + 1
+        local h = hitUpdate(u, f.zone) -- an attack alone doesn't add anyone to the hitlist
+        if h then h.attacks = (h.attacks or 0) + 1 end
       end
     end
   end
@@ -247,7 +262,7 @@ H.DIE = function(msg, isSelf, p, f)
     if u.name then
       local e = enemyTouch(u, f.zone)
       e.a = e.a + 1
-      hitTouch(u, f.zone, msg.from) -- they attacked a friend: make sure they're on the hitlist
+      hitUpdate(u, f.zone) -- assists don't add anyone; only the killer goes on the hitlist
     end
   end
 
@@ -297,8 +312,9 @@ H.HIT = function(msg, isSelf, p, f)
   for _, raw in ipairs(ns.Split(f.entries or "", ";")) do
     local e = ns.Split(raw, ":")
     local name = ns.CleanName(e[1])
-    if name then
-      local isNew = ns.Data.FindHit(name) == nil
+    local isNew = name and ns.Data.FindHit(name) == nil
+    -- older clients also share attack-only entries; only someone with kills is added
+    if name and (not isNew or (tonumber(e[6]) or 0) > 0) then
       local h = ns.Data.Hit(name)
       if e[2] and e[2] ~= "" then h.class = h.class or e[2] end
       local lvl = tonumber(e[3])

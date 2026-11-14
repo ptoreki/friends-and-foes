@@ -38,7 +38,7 @@ check(sf and sf.k == 1 and sf.d == 1 and sf.level == 43,
   "Simfriend K/D/level in sim store: " .. tostring(sf and sf.k) .. "/" .. tostring(sf and sf.d) .. "/" .. tostring(sf and sf.level))
 local sg = sim.hitlist["Simganker Shade"]
 check(sg and sg.attacks == 1 and sg.kills == 1 and sg.revenge == 1 and sg.guild == "Sim Gankers", "Simganker hitlist: attacks/kills/revenge/guild")
-check(sim.hitlist["Simhelper Shade"] ~= nil, "assist added to hitlist")
+check(sim.hitlist["Simhelper Shade"] == nil, "assist not added to hitlist (kills only)")
 check(sim.players["Simhelper Shade"] and sim.players["Simhelper Shade"].a == 1, "assist counted")
 check(sim.players["Simganker Shade"].d == 1 and sim.players["Simganker Shade"].k == 1, "enemy K and D")
 check(#sim.feed >= 6, "sim feed entries: " .. #sim.feed)
@@ -259,10 +259,11 @@ end
 check(maxLen <= 255 and hitMsgs > 0, "share payloads <=255 (max " .. maxLen .. ", msgs " .. hitMsgs .. ")")
 -- receive a share chunk from Buddy
 local before = count(real.hitlist)
-FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s1", entries = "Newguy Hunt:HUNTER:59:Their Guild:3:2:0:5;Enemy1 Foe:MAGE:60::99:7:1:1" }, "h1"), "WHISPER", 77)
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s1", entries = "Newguy Hunt:HUNTER:59:Their Guild:3:2:0:5;Enemy1 Foe:MAGE:60::99:7:1:1;Peaceful Pete:MAGE:20::4:0:0:2" }, "h1"), "WHISPER", 77)
 check(count(real.hitlist) == before + 1, "share adds new entry")
 check(real.hitlist["Enemy1 Foe"].attacks == 99 and real.hitlist["Enemy1 Foe"].kills == 7, "share merges with max()")
 check(real.hitlist["Newguy Hunt"].sharedBy == "Buddy Pal", "sharedBy recorded")
+check(real.hitlist["Peaceful Pete"] == nil, "shared entry with no kills is not added")
 
 -- do-not-disturb: progress held in combat, pvp shown
 local function drainToasts()
@@ -311,7 +312,12 @@ ns.S().show.level = "off"
 local t6 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r6"), "WHISPER", 77) end)
 check(not t6 and #CHAT == 0, "off silences even milestones")
 ns.S().show.level = "chat"
-check(real.hitlist["Zed Q"] ~= nil and #real.feed > 0, "records still kept regardless of display")
+check(real.hitlist["Zed Q"] == nil and real.players["Zed Q"].atk == 3 and #real.feed > 0,
+  "attacks alone: toasts/feed and enemy record, but not on the hitlist")
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Zed Q:ROGUE:60:", conf = "c", assists = "Ass Ist:MAGE:60:" }, "zk1"), "WHISPER", 77)
+check(real.hitlist["Zed Q"] and real.hitlist["Zed Q"].kills == 1 and real.hitlist["Zed Q"].attacks == 3,
+  "a kill adds them, carrying over earlier attacks")
+check(real.hitlist["Ass Ist"] == nil and real.players["Ass Ist"].a == 1, "assist counted, but not added to the hitlist")
 
 -- hitlist marks: nameplate skull + tooltip line
 local plate = CreateFrame()
@@ -329,6 +335,15 @@ FIRE("NAME_PLATE_UNIT_REMOVED", "nameplate1")
 check(not plate.fnfMark:IsShown(), "skull hidden when plate removed")
 UnitName, UnitIsPlayer, C_NamePlate = origUnitName, origIsPlayer, nil
 check(ns.errors == 0, "no errors in routing/marks (" .. tostring(ns.lastError) .. ")")
+
+-- once: attack-only hitlist entries (no kills, no note) are dropped
+local mdb = { realms = { Forever = { players = {}, feed = {}, hitlist = {
+  A = { name = "A", attacks = 2, kills = 0 }, B = { name = "B", attacks = 1, kills = 1 }, C = { name = "C", attacks = 1, kills = 0, note = "watch" } } } } }
+local dropped = ns.Data.DropAttackOnly(mdb)
+local mh = mdb.realms.Forever.hitlist
+check(dropped == 1 and mh.A == nil and mh.B and mh.C and mdb.hitlistKillsOnly, "attack-only entries dropped, kills and notes kept")
+mh.D = { name = "D", attacks = 1, kills = 0 }
+check(ns.Data.DropAttackOnly(mdb) == 0 and mh.D, "cleanup runs only once")
 
 -- prune
 local old = ns.Data.Player("Oldie")

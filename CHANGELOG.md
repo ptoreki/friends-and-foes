@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4
+Compatible with 0.3.x to 0.5.3.
+- **Only kills add someone to the hitlist.** An attack on you or a friend still triggers an alert
+  but no longer adds the attacker. Assists don't add anyone either.
+- When a kill adds someone, the attacks they made before that are carried over, so the count
+  stays right.
+- **One-time cleanup:** hitlist entries with no kills are removed, unless you wrote a note on them.
+- Hitlists shared from older versions no longer add anyone without kills.
+
 ## 0.5.2
 Compatible with 0.3.x to 0.5.1.
 - **Flavor text can be turned off for short, plain messages:** who did what, then where. With it
