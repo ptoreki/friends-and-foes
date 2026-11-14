@@ -2,12 +2,13 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.5.2
+## Version: 0.5.3
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## IconTexture: Interface\Icons\Ability_DualWield
 ## AddonCompartmentFunc: FriendsAndFoes_OnAddonCompartmentClick
 ## X-Curse-Project-ID: 1804389
+## X-Wago-ID: EGPapeN1
 
 Locale.lua
 Core.lua
