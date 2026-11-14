@@ -250,7 +250,11 @@ H.ATK = function(msg, isSelf, p, f)
   local by = (#names > 0) and ns.JoinNames(names) or L.UNKNOWN_ENEMY
   local title, text, line = ns.Flavor.Attacked(p, who(p), by, attackers, f.zone)
   feed(p, "attacked", line)
-  if isSelf or suppressAttackToast(msg.from) then return end
+  if isSelf then return end
+  if suppressAttackToast(msg.from) then
+    ns.Debug("TOAST", "attacked", msg.from, "skipped: they're in your group and you're in combat")
+    return
+  end
   ns.Toast.Push({
     chat = line, kind = "attacked",
     -- you can only help if you're in the same zone: elsewhere it's a chat line

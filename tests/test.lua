@@ -762,6 +762,35 @@ do
   check(ns.errors == 0, "no errors in where-it-works (" .. tostring(ns.lastError) .. ")")
 end
 
+-- debug log: every alert's outcome is logged as a [TOAST] line
+do
+  ns.SetDebug(true)
+  local log = FriendsAndFoesDB.debugLog
+  local function lastToastLine()
+    for i = #log, 1, -1 do if log[i]:find("[TOAST]", 1, true) then return log[i] end end
+    return ""
+  end
+  drainToasts()
+  ns.S().show.level = "chat"
+  ns.Toast.Push({ kind = "level", category = "progress", title = "x", chat = "|cff00ff00Bob|r reached level 30" })
+  check(lastToastLine():find("level | Bob reached level 30 | chat line: your alert setting", 1, true) ~= nil, "log: chat line + why: " .. lastToastLine())
+  ns.S().show.level = "off"
+  ns.Toast.Push({ kind = "level", category = "progress", title = "x", chat = "Bob reached level 31" })
+  check(lastToastLine():find("off: your alert setting", 1, true) ~= nil, "log: off + why")
+  ns.S().show.level = "chat"
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "x", chat = "Bob killed by Rogz" })
+  check(lastToastLine():find("shown as toast", 1, true) ~= nil, "log: shown")
+  drainToasts()
+  IN_COMBAT = true
+  ns.Toast.Push({ kind = "loot", category = "progress", title = "x", chat = "Bob looted [Sword]", milestone = true })
+  check(lastToastLine():find("waiting: in combat", 1, true) ~= nil, "log: held, and why: " .. lastToastLine())
+  IN_COMBAT = false
+  FIRE("PLAYER_REGEN_ENABLED")
+  check(lastToastLine():find("Bob looted [Sword] | shown as toast", 1, true) ~= nil, "log: shown after the wait: " .. lastToastLine())
+  drainToasts()
+  check(ns.errors == 0, "no errors in toast logging (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

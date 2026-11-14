@@ -247,6 +247,8 @@ or logout, to `WTF\Account\<ACCOUNT>\SavedVariables\FriendsAndFoes.lua`. It reco
 - secret or readable results for each capability (bnet, whisper, unitNames, deathRecap, honor)
 - caught errors
 - messages sent and received
+- each alert's outcome (`[TOAST] kind | line | outcome`): toast / chat line / off / waiting (combat,
+  instance) / merged / dropped (stale, queue full) / dismissed, each with its reason
 
 ## Known risks to check in beta
 1. Whether attacker names are readable (`unitNames` capability). If not, no ATK events fire and

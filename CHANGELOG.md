@@ -8,6 +8,9 @@ Compatible with 0.3.x to 0.5.5.
   - **Track my PvP in:** Open world (on) and Battlegrounds (off). If you turn on battlegrounds,
     your fights there count, and anyone who kills you there goes on the
     hitlist.
+- **Debug log: every alert's outcome.** One `[TOAST]` line per alert: shown as a toast, a chat line,
+  off, waiting (in combat or in a dungeon), merged, or dropped, always with the reason. Now a
+  missing toast can be traced.
 - The old "hold all toasts in dungeons/raids" checkbox is replaced by the dropdowns. If you had it
   off, they start on *Show*.
 

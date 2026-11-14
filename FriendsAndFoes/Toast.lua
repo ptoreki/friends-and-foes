@@ -282,14 +282,27 @@ local function playSound(spec)
 end
 
 -- Do-not-disturb: in combat only PvP/sighting toasts get through; in instances everything waits.
-local function isHeld(spec)
-  local dnd = ns.S().dnd
-  if not spec.force and ns.S().where[ns.InstanceType()] == "hold" then return true end
-  if dnd.combat and spec.category ~= "pvp" and spec.category ~= "sighting" then
-    local inCombat = UnitAffectingCombat("player")
-    if not ns.issecret(inCombat) and inCombat then return true end
+-- Debug log: one [TOAST] line per alert outcome, so "I didn't see it" can be traced.
+-- kind | what it was about | outcome
+local function plain(s)
+  if type(s) ~= "string" then return tostring(s) end
+  return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"):gsub("|T.-|t", ""))
+end
+function Toast.Log(spec, outcome)
+  if not ns.S().debug then return end
+  ns.Debug("TOAST", spec.kind or "notice", plain(spec.chat or spec.title or ""), outcome)
+end
+
+-- why a queued toast has to wait, or nil if it can show now
+local function heldBecause(spec)
+  if not spec.force and ns.S().where[ns.InstanceType()] == "hold" then
+    return "waiting: in " .. ns.InstanceType() .. " (Where it works)"
   end
-  return false
+  if ns.S().dnd.combat and spec.category ~= "pvp" and spec.category ~= "sighting" then
+    local inCombat = UnitAffectingCombat("player")
+    if not ns.issecret(inCombat) and inCombat then return "waiting: in combat (Do not disturb)" end
+  end
+  return nil
 end
 
 local function show(spec)
@@ -308,13 +321,20 @@ function Toast.Pump()
   local i = 1
   while #active < MAX_VISIBLE and i <= #queue do
     local spec = queue[i]
+    local held = heldBecause(spec)
     if spec.category == "pvp" and GetTime() - spec.created > STALE_PVP then
       table.remove(queue, i) -- a fight from minutes ago is no longer actionable
-    elseif isHeld(spec) then
+      Toast.Log(spec, "dropped: fight over a minute old by the time it could show")
+    elseif held then
+      if spec.heldLogged ~= held then
+        spec.heldLogged = held
+        Toast.Log(spec, held)
+      end
       i = i + 1
     else
       table.remove(queue, i)
       show(spec)
+      Toast.Log(spec, "shown as toast (" .. Toast.Theme() .. ")")
     end
   end
 end
@@ -327,17 +347,19 @@ end
 -- routing: each kind shows as "toast", "chat" or "off" (settings.show).
 -- Milestones (level 60, a looted epic BoE, a revenge kill) always toast unless "off".
 ---------------------------------------------------------------------------
+-- returns mode, reason
 function Toast.Mode(spec)
-  if spec.force or not spec.kind then return "toast" end
+  if spec.force or not spec.kind then return "toast", "always shown" end
   local mode = ns.S().show[spec.kind] or "toast"
-  if mode == "off" then return "off" end
+  if mode == "off" then return "off", "your alert setting" end
   -- inside an instance, its rule wins (Options -> Where it works)
-  local rule = ns.S().where[ns.InstanceType()]
-  if rule == "off" then return "off" end
-  if rule == "chat" then return "chat" end
-  if spec.milestone then return "toast" end
-  if spec.far and mode == "toast" then return "chat" end
-  return mode
+  local where = ns.InstanceType()
+  local rule = ns.S().where[where]
+  if rule == "off" then return "off", "in " .. where .. " (Where it works)" end
+  if rule == "chat" then return "chat", "in " .. where .. " (Where it works)" end
+  if spec.milestone then return "toast", "milestone" end
+  if spec.far and mode == "toast" then return "chat", "friend is in another zone" end
+  return mode, "your alert setting"
 end
 
 local function chatFrame()
@@ -358,7 +380,7 @@ end
 -- remove simulated toasts, queued and on screen
 function Toast.DropSim()
   for i = #queue, 1, -1 do
-    if queue[i].sim then table.remove(queue, i) end
+    if queue[i].sim then Toast.Log(table.remove(queue, i), "dismissed: simulation stopped") end
   end
   for i = #active, 1, -1 do
     local f = active[i]
@@ -367,13 +389,22 @@ function Toast.DropSim()
 end
 
 function Toast.Push(spec)
-  if not anchor then return end
-  local mode = Toast.Mode(spec)
-  if mode == "off" then return end
+  if not anchor then
+    Toast.Log(spec, "not shown: toasts not ready yet (still loading)")
+    return
+  end
+  local mode, why = Toast.Mode(spec)
+  if mode == "off" then
+    Toast.Log(spec, "off: " .. why)
+    return
+  end
   spec.sim = spec.sim or ns.simulating or nil
   if mode == "chat" then
-    if not spec.quiet then Toast.Chat(spec.chat or spec.title, spec.sim) end
-    if not spec.quiet then playSound(spec) end
+    if not spec.quiet then
+      Toast.Chat(spec.chat or spec.title, spec.sim)
+      playSound(spec)
+      Toast.Log(spec, "chat line: " .. why)
+    end
     return
   end
   if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast
@@ -388,18 +419,23 @@ function Toast.Push(spec)
         f.spec.merge(f.spec, spec)
         render(f)
         Toast.Layout() -- merged text may need more lines
+        Toast.Log(spec, "merged into a toast already on screen")
         return
       end
     end
     for _, q in ipairs(queue) do
       if q.collapseKey == spec.collapseKey then
         q.merge(q, spec)
+        Toast.Log(spec, "merged into a waiting toast")
         return
       end
     end
   end
   queue[#queue + 1] = spec
-  while #queue > QUEUE_MAX do table.remove(queue, 1) end
+  while #queue > QUEUE_MAX do
+    Toast.Log(table.remove(queue, 1), "dropped: more than " .. QUEUE_MAX .. " toasts waiting")
+  end
+  if #active >= MAX_VISIBLE then Toast.Log(spec, "queued: " .. MAX_VISIBLE .. " toasts already on screen") end
   Toast.Pump()
 end
 
