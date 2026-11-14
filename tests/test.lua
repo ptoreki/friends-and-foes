@@ -18,6 +18,25 @@ FIRE("PLAYER_LOGIN")
 FIRE("PLAYER_ENTERING_WORLD")
 RUN_TIMERS()
 ns.SetDebug(true) -- testers run with debug on
+-- the defaults a new player gets
+do
+  local s = ns.S()
+  local okShow = s.show.level == "toast" and s.show.loot == "toast" and s.show.gear == "toast" and s.show.attacked == "toast"
+    and s.show.engage == "toast" and s.show.died == "toast" and s.show.kill == "toast" and s.show.sighting == "toast" and s.show.share == "chat"
+  local okSound = s.sound.enabled and not s.sound.level and s.sound.loot and s.sound.gear and s.sound.attacked and not s.sound.engage
+    and s.sound.died and s.sound.kill and s.sound.sighting and not s.sound.share
+  local okPick = s.soundPick.attacked == "alarm" and s.soundPick.died == "raidwarning" and s.soundPick.kill == "levelup"
+    and s.soundPick.sighting == "mapping" and s.soundPick.engage == "default"
+  check(okShow and okSound and okPick, "default alerts and sounds")
+  check(s.nearbyOnly == false and s.dnd.combat == false and s.toastDuration == 5 and s.theme == "minimal" and s.toastScale == 1
+    and s.flavor and s.weekly and s.mark and s.markTooltip and s.milestones and s.levelEvery == 1 and s.gearMin == 3
+    and s.toastGrow == "down" and s.toastMax == 2 and s.share.pvp and s.chatFrame == 1, "default appearance, sharing and behaviour")
+  -- the rest of these tests were written against the earlier, quieter defaults
+  s.show.level, s.show.loot, s.show.gear, s.show.sighting = "chat", "chat", "chat", "chat"
+  s.sound.kill, s.sound.gear = false, false
+  for k in pairs(s.soundPick) do s.soundPick[k] = "default" end
+  s.nearbyOnly, s.dnd.combat, s.toastDuration = true, true, 3
+end
 check(ns.Comm.roster.Buddy ~= nil, "roster contains same-realm friend Buddy (first name from Battle.net)")
 check(ns.me == "Testme Tester", "own name is First Last: " .. tostring(ns.me))
 
@@ -592,7 +611,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 25, "9 alerts + 3 places + 9 sounds + style + message style + chat tab + forget (" .. dropdowns .. ")")
+  check(dropdowns == 28, "9 alerts + level-ups + gear + 3 places + 9 sounds + style + stacking + message style + chat tab + forget (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -1094,6 +1113,62 @@ do
   check(not goneListed and real.players["Gone Friend"], "friend gone 6 months: hidden, record kept")
   real.players["Gone Friend"] = nil
   check(ns.errors == 0, "no errors with old data (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.6.2 options: level-up frequency, gear quality, milestones switch, stacking, skull/tooltip
+do
+  drainToasts()
+  ns.S().show.level = "toast"
+  ns.S().levelEvery = 5
+  local before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 23 }, "le1"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before and lastFeed():find("23", 1, true), "every 5 levels: 23 skipped (still in the Feed)")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 25 }, "le2"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before + 1, "every 5 levels: 25 shown")
+  drainToasts()
+  ns.S().levelEvery = 60
+  before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 30 }, "le3"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "le4"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before + 1, "only level 60")
+  drainToasts()
+  ns.S().levelEvery = 1
+  ns.S().show.level = "chat"
+  -- gear quality
+  check(ns.ItemQuality("|cnIQ3:|Hitem:1|h[x]|h|r") == 3 and ns.ItemQuality("|cffa335ee|Hitem:2|h[y]|h|r") == 4 and ns.ItemQuality("plain") == nil, "item quality from links")
+  ns.S().show.gear = "toast"
+  ns.S().gearMin = 4
+  before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cff0070dd|Hitem:5|h[Blue Thing]|h|r", count = "1" }, "gq1"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before, "epic only: blue gear skipped")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:6|h[Epic Thing]|h|r", count = "1" }, "gq2"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before + 1, "epic only: epic gear shown")
+  drainToasts()
+  ns.S().gearMin = 3
+  ns.S().show.gear = "chat"
+  -- milestones switch
+  ns.S().milestones = false
+  ns.S().show.level = "chat"
+  CHAT = {}
+  before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "ms1"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before and #CHAT == 1, "milestones off: level 60 follows the chat setting")
+  ns.S().milestones = true
+  -- stacking direction and count
+  ns.S().toastGrow = "up"
+  ns.Toast.ApplyScale()
+  ns.S().toastMax = 3
+  before = ns.Toast.shown or 0
+  for i = 1, 3 do ns.Toast.Push({ kind = "died", category = "pvp", title = "stack" .. i, force = true }) end
+  check((ns.Toast.shown or 0) == before + 3, "three toasts on screen when set to 3")
+  drainToasts()
+  ns.S().toastGrow, ns.S().toastMax = "down", 2
+  ns.Toast.ApplyScale()
+  -- skull and tooltip separately
+  ns.S().markTooltip = false
+  check(ns.S().mark == true, "skull stays on when the tooltip line is off")
+  ns.S().markTooltip = true
+  check(ns.errors == 0, "no errors in 0.6.2 options (" .. tostring(ns.lastError) .. ")")
 end
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent

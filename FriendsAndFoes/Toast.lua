@@ -5,7 +5,8 @@ local Toast = {}
 ns.Toast = Toast
 
 -- Compact, quiet toasts: one line, a thin coloured edge, gone in a few seconds.
-local MAX_VISIBLE = 2
+-- toasts on screen at once: Options -> Appearance (1-4)
+local function maxVisible() return math.max(1, math.min(4, tonumber(ns.S().toastMax) or 2)) end
 local DURATION, DURATION_PVP = 3, 5
 local FADE_IN, FADE = 0.2, 0.5
 local HEIGHT, WIDTH, GAP = 26, 420, 4 -- HEIGHT is the one-line minimum; long text wraps
@@ -93,7 +94,6 @@ local function createAnchor()
   -- toasts hang from a holder under the anchor, so their size can be scaled as a group
   holder = CreateFrame("Frame", nil, UIParent)
   holder:SetSize(WIDTH, 1)
-  holder:SetPoint("TOP", anchor, "BOTTOM", 0, 0)
   holder:SetFrameStrata("HIGH")
   Toast.ApplyScale()
 end
@@ -103,6 +103,14 @@ function Toast.ApplyScale()
   if not holder then return end
   local s = tonumber(ns.S().toastScale) or 1
   holder:SetScale(math.max(0.7, math.min(1.5, s)))
+  -- Options -> Appearance: stack down from the position, or up from it
+  holder:ClearAllPoints()
+  if ns.S().toastGrow == "up" then
+    holder:SetPoint("BOTTOM", anchor, "TOP", 0, 0)
+  else
+    holder:SetPoint("TOP", anchor, "BOTTOM", 0, 0)
+  end
+  if Toast.Layout then Toast.Layout() end
 end
 
 function Toast.SetUnlocked(unlocked)
@@ -392,9 +400,14 @@ end
 
 function Toast.Layout()
   local y = 0
+  local up = ns.S().toastGrow == "up"
   for _, f in ipairs(active) do
     f:ClearAllPoints()
-    f:SetPoint("TOP", holder or anchor, holder and "TOP" or "BOTTOM", 0, -y)
+    if up then
+      f:SetPoint("BOTTOM", holder or anchor, holder and "BOTTOM" or "TOP", 0, y)
+    else
+      f:SetPoint("TOP", holder or anchor, holder and "TOP" or "BOTTOM", 0, -y)
+    end
     y = y + (tonumber(f:GetHeight()) or HEIGHT) + GAP
   end
 end
@@ -406,7 +419,7 @@ local function playSound(spec)
   local id
   if spec.kind and s[spec.kind] then
     id = Toast.SoundFor(spec.kind, spec.category)
-  elseif spec.milestone then
+  elseif spec.milestone and ns.S().milestones ~= false then
     -- a milestone chimes even when its event is silent: its picked sound, else the chime
     local pick = ns.S().soundPick and ns.S().soundPick[spec.kind]
     id = (pick and pick ~= "default" and SOUND_BY_KEY[pick]) or SOUNDS.progress
@@ -452,7 +465,7 @@ end
 
 function Toast.Pump()
   local i = 1
-  while #active < MAX_VISIBLE and i <= #queue do
+  while #active < maxVisible() and i <= #queue do
     local spec = queue[i]
     local held = heldBecause(spec)
     if spec.category == "pvp" and GetTime() - spec.created > STALE_PVP then
@@ -490,7 +503,7 @@ function Toast.Mode(spec)
   local rule = ns.S().where[where]
   if rule == "off" then return "off", "in " .. where .. " (Where it works)" end
   if rule == "chat" then return "chat", "in " .. where .. " (Where it works)" end
-  if spec.milestone then return "toast", "milestone" end
+  if spec.milestone and ns.S().milestones ~= false then return "toast", "milestone" end
   if spec.far and mode == "toast" then return "chat", "friend is in another zone" end
   return mode, "your alert setting"
 end
@@ -568,7 +581,7 @@ function Toast.Push(spec)
   while #queue > QUEUE_MAX do
     Toast.Log(table.remove(queue, 1), "dropped: more than " .. QUEUE_MAX .. " toasts waiting")
   end
-  if #active >= MAX_VISIBLE then Toast.Log(spec, "queued: " .. MAX_VISIBLE .. " toasts already on screen") end
+  if #active >= maxVisible() then Toast.Log(spec, "queued: " .. maxVisible() .. " toasts already on screen") end
   Toast.Pump()
 end
 

@@ -184,6 +184,12 @@ H.LVL = function(_, isSelf, p, f)
   feed(p, "level", line)
   if isSelf then return end
   local milestone = lvl >= ns.MILESTONE_LEVEL
+  -- Options: every level, every 5, every 10, or only max level (still in the Feed)
+  local every = tonumber(ns.S().levelEvery) or 1
+  if not milestone and every > 1 and lvl % every ~= 0 then
+    ns.Debug("TOAST", "level", ns.Plain(line), "skipped: only every " .. every .. " levels (your setting)")
+    return
+  end
   ns.Toast.Push({
     kind = "level", category = "progress", icon = ICON.level, chat = line, milestone = milestone,
     subjects = { who(p) }, title = milestone and L.TOAST_LEVEL_MAX:format(who(p), lvl) or line,
@@ -211,6 +217,13 @@ H.GEAR = function(_, isSelf, p, f)
   local line = L.FEED_GEAR:format(who(p), text)
   feed(p, "gear", line)
   if isSelf then return end
+  -- Options: blue or better, or epic only (still in the Feed)
+  local q = ns.ItemQuality(f.link)
+  local min = tonumber(ns.S().gearMin) or 3
+  if q and q < min then
+    ns.Debug("TOAST", "gear", ns.Plain(line), "skipped: below the gear quality you chose")
+    return
+  end
   ns.Toast.Push({
     chat = line, kind = "gear", category = "progress", icon = itemIcon(f.link), link = f.link, firstLink = f.link, count = count,
     title = line, who = who(p),

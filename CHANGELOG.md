@@ -16,6 +16,20 @@ Compatible with 0.3.x to 0.6.1.
 - **More names in class colours:** if a message doesn't say a player's class, the addon uses the
   class it already knows for them (e.g. a killer named by the death recap), so fewer names show
   up white.
+- **New options:**
+  - **Toasts stack** downward or upward, and **Toasts on screen** 1-4 (Appearance).
+  - **Level-ups to show:** every level, every 5, every 10, or only 60 (Alerts).
+  - **New gear to show:** blue or better, or epic only (Alerts).
+  - **Milestones always pop up:** on/off (Alerts).
+  - **Skull on hitlist players** and **Hitlist info in tooltips** are now separate switches.
+- **New defaults** for new installs (the Defaults button resets to these):
+  - Toasts for everything except Hitlist shared (chat line).
+  - Sound for all of those except Friend attacks someone and Level ups.
+  - Sounds: Alarm for attacked, Raid warning for killed, Level-up fanfare for a kill, Map ping
+    for sightings.
+  - Toasts stay 5 seconds. Fights in other zones and in combat aren't held back.
+
+  Your own settings don't change.
 - **Old data fades instead of piling up:**
   - **Hitlist players nobody has seen for 90 days** are greyed out and listed at the bottom. As
     soon as you or a friend sees them again, they're back to normal.

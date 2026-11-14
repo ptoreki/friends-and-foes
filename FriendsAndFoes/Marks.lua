@@ -75,7 +75,7 @@ ns.On("NAME_PLATE_UNIT_REMOVED", function(unit)
 end)
 
 local function onUnitTooltip(tt)
-  if not ns.S().mark or not tt.GetUnit then return end
+  if ns.S().markTooltip == false or not tt.GetUnit then return end
   local _, unit = tt:GetUnit()
   local h = Marks.HitFor(safe(unit))
   if not h then return end

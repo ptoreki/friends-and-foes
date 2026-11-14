@@ -318,6 +318,13 @@ function Options.BuildNative()
       function(v) Options.SetDisplay(kind, v) end,
       DISPLAY, row[3] .. "\n\n" .. L.MILESTONE_NOTE)
   end
+  checkbox(main, "milestones", S(), "milestones", L.OPT_MILESTONES, D.milestones, L.TIP_MILESTONES)
+  proxyDropdown(main, "levelEvery", "Number", L.OPT_LEVEL_EVERY, D.levelEvery,
+    function() return tonumber(S().levelEvery) or 1 end, function(v) S().levelEvery = v end,
+    { { 1, L.LEVEL_EVERY_1 }, { 5, L.LEVEL_EVERY_5 }, { 10, L.LEVEL_EVERY_10 }, { 60, L.LEVEL_EVERY_MAX } }, L.TIP_LEVEL_EVERY)
+  proxyDropdown(main, "gearMin", "Number", L.OPT_GEAR_MIN, D.gearMin,
+    function() return tonumber(S().gearMin) or 3 end, function(v) S().gearMin = v end,
+    { { 3, L.GEAR_MIN_BLUE }, { 4, L.GEAR_MIN_EPIC } }, L.TIP_GEAR_MIN)
   checkbox(main, "nearbyOnly", S(), "nearbyOnly", L.OPT_NEARBY_ONLY, D.nearbyOnly, L.TIP_NEARBY_ONLY)
   header(mainLayout, L.DND_HEADER)
   checkbox(main, "dndCombat", S().dnd, "combat", L.OPT_DND_COMBAT, D.dnd.combat, L.TIP_DND_COMBAT)
@@ -347,7 +354,7 @@ function Options.BuildNative()
     local kind = row[1]
     local list = { { "default", L.SND_DEFAULT } }
     for _, c in ipairs(ns.Toast.SOUND_CHOICES) do list[#list + 1] = { c[1], c[2] } end
-    proxyDropdown(snd, "soundPick_" .. kind, "String", row[2], "default",
+    proxyDropdown(snd, "soundPick_" .. kind, "String", row[2], D.soundPick[kind] or "default",
       function() return S().soundPick[kind] or "default" end,
       function(v)
         S().soundPick[kind] = v
@@ -378,6 +385,19 @@ function Options.BuildNative()
       function() return tonumber(S().toastDuration) or 3 end,
       function(v) S().toastDuration = v end, 2, 10, 1, "%d s", L.TIP_TOAST_DURATION)
   end
+  proxyDropdown(look, "toastGrow", "String", L.OPT_TOAST_GROW, D.toastGrow,
+    function() return S().toastGrow == "up" and "up" or "down" end,
+    function(v) S().toastGrow = v; ns.Toast.ApplyScale() end,
+    { { "down", L.GROW_DOWN }, { "up", L.GROW_UP } }, L.TIP_TOAST_GROW)
+  if Settings.CreateSlider and Settings.CreateSliderOptions then
+    local s = Settings.RegisterProxySetting(look, "FNF_toastMax", varType("Number"), L.OPT_TOAST_MAX, D.toastMax,
+      function() return tonumber(S().toastMax) or 2 end, function(v) S().toastMax = v; ns.Toast.Pump() end)
+    local o = Settings.CreateSliderOptions(1, 4, 1)
+    if o.SetLabelFormatter and MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
+      o:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(v) return tostring(v) end)
+    end
+    Settings.CreateSlider(look, s, o, L.TIP_TOAST_MAX)
+  end
   button(lookLayout, L.OPT_PREVIEW, L.BTN_PREVIEW, function() ns.Toast.Test() end, L.TIP_PREVIEW)
   button(lookLayout, L.OPT_POSITION, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end, L.TIP_POSITION)
   header(lookLayout, L.MESSAGES_HEADER)
@@ -404,6 +424,7 @@ function Options.BuildNative()
   checkbox(friends, "mark", S(), "mark", L.OPT_MARK, D.mark, L.TIP_MARK, function()
     if ns.Marks then ns.Marks.Refresh() end
   end)
+  checkbox(friends, "markTooltip", S(), "markTooltip", L.OPT_MARK_TOOLTIP, D.markTooltip, L.TIP_MARK_TOOLTIP)
   proxyDropdown(friends, "forgetAfter", "Number", L.OPT_FORGET, 0,
     function() return tonumber(S().forgetAfter) or 0 end,
     function(v)

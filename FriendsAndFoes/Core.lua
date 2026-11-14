@@ -13,24 +13,29 @@ ns.issecret = issecret
 ---------------------------------------------------------------------------
 local DEFAULTS = {
   share = { level = true, loot = true, gear = true, pvp = true },
-  -- how each kind shows: "toast" | "chat" | "off". Urgent PvP toasts; progress goes to chat.
-  -- Milestones (level 60, looted epic BoE, revenge kill) toast anyway unless "off".
-  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "chat", share = "chat" },
+  -- how each kind shows: "toast" | "chat" | "off"
+  show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", share = "chat" },
+  milestones = true, -- level 60, looted epic BoE, revenge and kill streaks always pop up as a toast
+  levelEvery = 1,    -- show friends' level-ups: every level (1), every 5, every 10, or only 60
+  gearMin = 3,       -- "new gear" alerts from this quality up: 3 = blue, 4 = epic
+  toastGrow = "down", -- toasts stack "down" or "up" from their position
+  toastMax = 2,      -- toasts on screen at once (1-4)
   chatFrame = 1,
-  nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
+  nearbyOnly = false, -- true: fights outside your zone become chat lines
   flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
   theme = "minimal", -- toast look: "minimal" | "achievement"
   toastScale = 1,    -- toast size (0.7 - 1.5)
-  toastDuration = 3, -- seconds a toast stays (PvP toasts 2 longer)
+  toastDuration = 5, -- seconds a toast stays (PvP toasts 2 longer)
   weekly = true,     -- weekly PvP summary in chat
   -- which sound each event plays ("default" = the built-in choice for that kind of event)
-  soundPick = { attacked = "default", engage = "default", died = "default", kill = "default", sighting = "default",
+  soundPick = { attacked = "alarm", engage = "default", died = "raidwarning", kill = "levelup", sighting = "mapping",
     level = "default", loot = "default", gear = "default", share = "default" },
-  mark = true, -- skull on hitlist players' nameplates + a tooltip line
+  mark = true,        -- skull next to hitlist players' nameplates
+  markTooltip = true, -- hitlist record in hitlist players' tooltips
   forgetAfter = 0, -- days unseen before a hitlist entry (without a note) is removed; 0 = never
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
-  sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, engage = false, died = true, kill = false, sighting = true, share = false },
-  dnd = { combat = true },
+  sound = { enabled = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false },
+  dnd = { combat = false },
   -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
   where = { party = "hold", raid = "hold", pvp = "hold" },
   -- where your own PvP (attacks, deaths, kills, sightings) is tracked
@@ -53,6 +58,16 @@ local function fillDefaults(dst, src)
 end
 
 function ns.S() return FriendsAndFoesDB.settings end
+
+-- an item link's quality (2 green, 3 blue, 4 epic...), or nil if it can't be told
+local QUALITY_COLOR = { ["1eff00"] = 2, ["0070dd"] = 3, ["a335ee"] = 4, ["ff8000"] = 5 }
+function ns.ItemQuality(link)
+  if type(link) ~= "string" then return nil end
+  local q = link:match("|cnIQ(%d):")
+  if q then return tonumber(q) end
+  local color = link:match("|cff(%x%x%x%x%x%x)")
+  return color and QUALITY_COLOR[color:lower()] or nil
+end
 
 -- a count for display: a whole number, never negative and never "-0"
 function ns.Count(v)
