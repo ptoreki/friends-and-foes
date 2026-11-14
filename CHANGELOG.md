@@ -40,6 +40,12 @@ Compatible with 0.3.x to 0.6.1.
   - A just-shared hitlist entry no longer shows an old level.
   - Every item quality colour is recognised, including white and grey.
   - Class colours are looked up faster, and use simulation data while in simulation view.
+  - Combining two records for the same enemy now adds up their per-friend kill counts too, so
+    "Bob 4x" matches the total.
+  - A shared hitlist no longer imports players your "Forget" setting would remove at the next
+    login.
+  - With "Epic only", the Feed still records the whole gear batch.
+  - The fallback options panel has the tooltip and milestone switches too.
 - **Old data fades instead of piling up:**
   - **Hitlist players nobody has seen for 90 days** are greyed out and listed at the bottom. As
     soon as you or a friend sees them again, they're back to normal.

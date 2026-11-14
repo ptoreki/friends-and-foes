@@ -213,13 +213,17 @@ end
 H.GEAR = function(_, isSelf, p, f)
   if f.link == "" then return end
   local count = tonumber(f.count) or 1
-  -- "Epic only": count just the epics of the batch (senders before 0.6.2 don't say; keep the total)
-  local epics = tonumber(f.epics)
-  if not isSelf and epics and (tonumber(ns.S().gearMin) or 3) >= 4 and epics >= 1 then count = epics end
   local text = (count > 1) and L.TOAST_GEAR_MORE:format(f.link, count - 1) or f.link
-  local line = L.FEED_GEAR:format(who(p), text)
+  local line = L.FEED_GEAR:format(who(p), text) -- the Feed keeps the whole batch
   feed(p, "gear", line)
   if isSelf then return end
+  -- "Epic only": the toast counts just the epics of the batch (senders before 0.6.2 don't say)
+  local epics = tonumber(f.epics)
+  if epics and (tonumber(ns.S().gearMin) or 3) >= 4 and epics >= 1 and epics ~= count then
+    count = epics
+    text = (count > 1) and L.TOAST_GEAR_MORE:format(f.link, count - 1) or f.link
+    line = L.FEED_GEAR:format(who(p), text)
+  end
   -- Options: blue or better, or epic only (still in the Feed)
   local q = ns.ItemQuality(f.link)
   local min = tonumber(ns.S().gearMin) or 3
@@ -411,8 +415,12 @@ H.HIT = function(msg, isSelf, p, f)
     local e = ns.Split(raw, ":")
     local name = ns.CleanName(e[1])
     local isNew = name and ns.Data.FindHit(name) == nil
+    -- don't add someone your "Forget hitlist players" setting would remove at the next login
+    local hours = tonumber(e[8])
+    local forget = tonumber(ns.S().forgetAfter) or 0
+    local tooOld = isNew and forget > 0 and hours and hours / 24 > forget
     -- older clients also share attack-only entries; only someone with kills is added
-    if name and (not isNew or (tonumber(e[6]) or 0) > 0) then
+    if name and not tooOld and (not isNew or (tonumber(e[6]) or 0) > 0) then
       local h = ns.Data.Hit(name)
       if e[2] and e[2] ~= "" then h.class = h.class or e[2] end
       local lvl = tonumber(e[3])
@@ -421,7 +429,6 @@ H.HIT = function(msg, isSelf, p, f)
       h.attacks = math.max(h.attacks or 0, tonumber(e[5]) or 0)
       h.kills = math.max(h.kills or 0, tonumber(e[6]) or 0)
       h.revenge = math.max(h.revenge or 0, tonumber(e[7]) or 0)
-      local hours = tonumber(e[8])
       if hours then
         local seenAt = time() - hours * 3600
         if not h.lastSeen or seenAt > h.lastSeen then h.lastSeen = seenAt end

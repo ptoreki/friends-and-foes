@@ -1211,6 +1211,28 @@ do
   check(ns.errors == 0, "no errors in review fixes (" .. tostring(ns.lastError) .. ")")
 end
 
+-- cloud review fixes
+do
+  -- 1) "Epic only": the Feed still records the whole batch
+  drainToasts()
+  ns.S().show.gear, ns.S().gearMin = "toast", 4
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:10|h[Epic Two]|h|r", count = "3", epics = "1" }, "cr1"), "WHISPER", 77)
+  check(ns.Plain(lastFeed()):find("+2 more", 1, true) ~= nil, "Feed keeps the full gear batch: " .. ns.Plain(lastFeed()))
+  drainToasts()
+  ns.S().show.gear, ns.S().gearMin = "chat", 3
+  -- 3) a share doesn't import entries "Forget" would remove anyway
+  ns.S().forgetAfter = 90
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s9", entries = "Very Old:ROGUE:30::0:2:0:2600;Quite New:MAGE:30::0:1:0:5" }, "cr3"), "WHISPER", 77)
+  check(real.hitlist["Very Old"] == nil and real.hitlist["Quite New"] ~= nil, "share: entries older than the forget period aren't imported")
+  ns.S().forgetAfter = 0
+  real.hitlist["Quite New"] = nil
+  -- 7) merging two records adds up the per-friend kill counts
+  local dst = { name = "Kragg Bear", kills = 2, kv = { Bob = 2 } }
+  ns.Data.MergeInto(dst, { name = "Kragg", kills = 2, kv = { Bob = 2, Alice = 1 } })
+  check(dst.kills == 4 and dst.kv.Bob == 4 and dst.kv.Alice == 1, "merge: per-friend counts add up like the total")
+  check(ns.errors == 0, "no errors in cloud review fixes (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

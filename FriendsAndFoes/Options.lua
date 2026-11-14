@@ -100,6 +100,8 @@ local function build(p)
   check(p, x, y, L.OPT_ALL_SOUNDS, toggle("sound", "enabled"))
   y = y - 22
   check(p, x, y, L.OPT_FLAVOR, function() return S().flavor end, function(v) S().flavor = v end)
+  y = y - 22
+  check(p, x, y, L.OPT_MILESTONES, function() return S().milestones ~= false end, function(v) S().milestones = v end)
 
   -- right column
   x = 340
@@ -125,6 +127,8 @@ local function build(p)
     S().mark = v
     if ns.Marks then ns.Marks.Refresh() end
   end)
+  y = y - 21
+  check(p, x, y, L.OPT_MARK_TOOLTIP, function() return S().markTooltip ~= false end, function(v) S().markTooltip = v end)
   y = y - 21
   check(p, x, y, L.OPT_MINIMAP, function() return not S().minimap.hide end, function(v)
     S().minimap.hide = not v
@@ -156,7 +160,7 @@ local function build(p)
 
   -- beta tools: only while debug logging is on
   beta = CreateFrame("Frame", nil, p)
-  beta:SetPoint("TOPLEFT", 16, -400)
+  beta:SetPoint("TOPLEFT", 16, -430)
   beta:SetSize(600, 200)
   text(beta, "GameFontNormal", 0, 0, L.BETA_HEADER)
   local test = button(beta, 110, L.BTN_TEST, function() ns.Toast.Test() end)

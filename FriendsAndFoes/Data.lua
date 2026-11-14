@@ -77,6 +77,8 @@ local function mergeInto(dst, src)
       dst[k] = cur or v
     elseif type(v) == "boolean" then
       dst[k] = cur or v
+    elseif k == "kv" and type(v) == "table" and type(cur) == "table" then
+      for kk, vv in pairs(v) do cur[kk] = ns.Count(cur[kk]) + ns.Count(vv) end -- per-friend kills add up
     elseif type(v) == "table" and type(cur) == "table" then
       for kk, vv in pairs(v) do cur[kk] = cur[kk] or vv end
     elseif cur == nil then
@@ -281,7 +283,6 @@ ns.OnReady(function()
   ns.Try("fold", function() ns.Debug("FOLD", Data.FoldFirstNames(FriendsAndFoesDB)) end)
 end)
 
--- Drop enemies not seen for 90 days who never hurt us and aren't on the hitlist.
 ---------------------------------------------------------------------------
 -- old data
 ---------------------------------------------------------------------------
@@ -335,6 +336,7 @@ end
 
 ns.OnReady(function() ns.Try("forget-old", Data.ForgetOld, FriendsAndFoesDB) end)
 
+-- Drop enemies not seen for 90 days who never hurt us and aren't on the hitlist.
 function Data.Prune()
   local cutoff = time() - PRUNE_AFTER
   local removed = 0

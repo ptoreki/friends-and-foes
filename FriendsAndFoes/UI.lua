@@ -39,8 +39,7 @@ end
 local function victimsText(h)
   local list = {}
   for _, v in ipairs(ns.Data.KillsOn(h)) do
-    local p = R().players[v[1]]
-    local name = ns.ClassColored(v[1], p and p.class)
+    local name = ns.ClassColored(v[1])
     list[#list + 1] = v[2] and L.KILLS_ON_COUNT:format(name, v[2]) or name
   end
   return table.concat(list, ", ")
@@ -209,13 +208,14 @@ local function applySort(list, cols)
   local st = sortOf(cols)
   local key = cols[st.col] and cols[st.col][4]
   if not key then return end
-  local hitlist = currentTab == "hitlist"
+  -- faded hitlist entries (not seen for 90 days) always go last; decided once, before sorting
+  local stale
+  if currentTab == "hitlist" then
+    stale = {}
+    for _, e in ipairs(list) do stale[e] = ns.Data.IsStale(e) end
+  end
   table.sort(list, function(a, b)
-    -- faded hitlist entries (not seen for 90 days) always go last
-    if hitlist then
-      local sa, sb = ns.Data.IsStale(a), ns.Data.IsStale(b)
-      if sa ~= sb then return sb end
-    end
+    if stale and stale[a] ~= stale[b] then return stale[b] end
     local ka, kb = key(a), key(b)
     if ka == kb then return (a.name or "") < (b.name or "") end
     if type(ka) ~= type(kb) then ka, kb = tostring(ka), tostring(kb) end
@@ -241,9 +241,8 @@ function UI.HitTooltip(owner, h)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(L.HIT_TIP_KILLED, 1, 0.82, 0)
     for _, v in ipairs(kills) do
-      local rec = R().players[v[1]]
       local right = v[2] and L.HIT_TIP_TIMES:format(v[2]) or L.HIT_TIP_EARLIER
-      GameTooltip:AddDoubleLine(ns.ClassColored(v[1], rec and rec.class), right, 1, 1, 1, 1, 1, 1)
+      GameTooltip:AddDoubleLine(ns.ClassColored(v[1]), right, 1, 1, 1, 1, 1, 1)
     end
   end
   GameTooltip:AddLine(" ")
