@@ -1,41 +1,79 @@
 # Friends & Foes
 
-A WoW Forever addon that:
-- pops up a toast when a friend is attacked or killed in world PvP, reaches level 60, loots an
-  epic BoE, or gets revenge
-- adds a quiet chat line for everything else (level-ups, gear, kills), with clickable items
-- keeps a hitlist and marks those players with a skull on their nameplate and a tooltip line
-- tracks per-player K/D/A
+A WoW Forever addon that keeps your friend group connected: see your Battle.net friends' level-ups,
+epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks your group.
 
-For each event you choose Toast, Chat or Off, and sound on or off, in Options (the Options button
-in the window, or `/fnf options`).
+> **Beta.** Being tested with real players. Report anything odd (see *Reporting a bug*).
 
-## Install (for friends)
-1. Download `FriendsAndFoes-<version>.zip`.
-2. Extract it into `World of Warcraft\_forever_\Interface\AddOns\`. You should end up with
-   `AddOns\FriendsAndFoes\FriendsAndFoes.toc`.
-3. Log in. Type `/fnf`, or open it from the minimap's addon menu.
+## What it does
+- **Friends' progress:** level-ups, epic loot and new gear. Big moments (level 60, epic BoE,
+  revenge, kill streaks) always pop up.
+- **World PvP alerts:** a friend is attacked, attacks someone, is killed, or gets a kill, with who
+  and where.
+- **Hitlist:** anyone who kills you or a friend.
+  - Hover them to see who of your friends they killed and how often.
+  - They get a skull on their nameplate.
+  - You're alerted when you or a friend spots them.
+  - Entries fade after 90 days unseen.
+- **Tracking:** kills, deaths and takedowns per player, and a weekly summary with your nemesis.
+- **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short
+  (*"Bob killed by Rogz · Duskwood"*).
+- **Toasts** in four styles: Modern, Classic, Alliance and Horde. You can set their size, duration,
+  position and stacking.
 
-Only Battle.net friends who are **online in WoW Forever** and **also have the addon** can see your events. (Forever has no realms, so the server name the game shows doesn't matter.)
+Everything is set up in **Options → AddOns → Friends & Foes**:
+- each event: toast, chat line or off, with or without sound, and which sound
+- how often level-ups show, and which gear quality counts
+- what happens in dungeons, raids and battlegrounds
+- what you share, and with which friends
 
-To get alerts only from certain friends, click them in **Players → Friends** (or `/fnf group <name>`).
-Once anyone is picked, you only exchange events with your picks. `/fnf group all` goes back to everyone.
+## Install
+- **CurseForge app** or **WowUp** (via Wago): search for *Friends & Foes*. Set the game to
+  **WoW Forever**, and set the addon's release channel to **Beta** while it's in beta. Updates then
+  install automatically.
+- **WowUp from GitHub:** *Install from URL* → `https://github.com/ptoreki/friends-and-foes`.
+- **By hand:** download the zip from [Releases](https://github.com/ptoreki/friends-and-foes/releases)
+  and extract it into `World of Warcraft\_forever_\Interface\AddOns\`.
 
-## Beta testing
-- `/fnf sim all` shows every toast type, using fake data that never mixes with real records.
-  `/fnf sim clear` removes it.
-- `/fnf sim all self` also sends the fake events to your friends, to test that sync works.
-- With `/fnf debug` on, Options also shows beta tools and which features work on your client.
-- To report a bug:
-  1. Turn on `/fnf debug` and play until it happens.
-  2. `/reload`.
-  3. Send `WTF\Account\<ACCOUNT>\SavedVariables\FriendsAndFoes.lua`.
+Then log in and type `/fnf`, or use the minimap's addon menu.
+
+**Your friends need the addon too.** It works with Battle.net friends who are online in WoW Forever
+on your faction. You don't need to group, share a server, or be in the same zone.
 
 ## Commands
-`/fnf` · `/fnf options` · `/fnf group [name|all]` · `/fnf chat <tab>` · `/fnf unlock` / `lock` ·
-`/fnf test` · `/fnf status` · `/fnf share` · `/fnf sim …` · `/fnf debug` · `/fnf debug clear` · `/fnf minimap`
+| Command | What it does |
+|---|---|
+| `/fnf` | Open or close the window (Hitlist, Players, Feed) |
+| `/fnf options` | Open the options |
+| `/fnf group [name\|all]` | List friends, pick who you exchange alerts with, or go back to everyone |
+| `/fnf unlock` / `/fnf lock` | Move the toasts |
+| `/fnf size <70-150>` / `/fnf duration <2-10>` | Toast size and how long toasts stay |
+| `/fnf chat <tab>` | Which chat tab gets the chat lines |
+| `/fnf status` | Which friends were found and what works on your client |
+| `/fnf share` | Send your hitlist to your friends |
+| `/fnf sim all [self]` / `/fnf sim stop` / `/fnf sim clear` | Simulate every alert with fake data (`self` also sends it to friends) |
+| `/fnf debug` / `/fnf debug clear` | Debug logging on/off, or clear the log |
+
+## Reporting a bug
+1. Turn on **Debug logging** (Options → Advanced, or `/fnf debug`).
+2. Play until it happens, then type `/reload`.
+3. Send `World of Warcraft\_forever_\WTF\Account\<account>\SavedVariables\FriendsAndFoes.lua`
+   with a short description, or open an [issue](https://github.com/ptoreki/friends-and-foes/issues).
+
+Debug logging turns itself off after 7 days.
+
+## Good to know
+- Everything runs inside the game, using the game's own addon messages. There are no accounts,
+  websites or outside programs.
+- Addons can't see who landed the killing blow in WoW Forever, so any honorable kill you took part in
+  counts as a *takedown*.
+- Alerts are live only. Things that happened while you were offline aren't shown afterwards.
+- Options can't be opened during combat. That's a game rule.
 
 ## Development
-- `npm install`, then `npm test` to run the syntax check and the logic tests in a mocked WoW API.
-- `npm run package` builds the release zip in `dist/`.
-- Design and decisions are in [SPEC.md](SPEC.md). Version history is in [CHANGELOG.md](CHANGELOG.md).
+- `npm install`, then `npm test`. That runs a Lua syntax check, then loads the whole addon in a Lua
+  VM with a mocked WoW API (`tests/mock.lua`) and runs the tests (`tests/test.lua`).
+- `npm run package` builds a local zip in `dist/`.
+- Releases are automatic: push a `vX.Y.Z` or `vX.Y.Z-beta` tag. A GitHub Action then runs the tests
+  and uploads the zip to CurseForge, Wago and GitHub Releases. See [PUBLISHING.md](PUBLISHING.md).
+- Design notes are in [SPEC.md](SPEC.md), and version history is in [CHANGELOG.md](CHANGELOG.md).
