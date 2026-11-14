@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1
+Compatible with 0.3.x to 0.5.0.
+- **Varied PvP messages.** Deaths, kills and attacks now use different wordings and call out
+  history:
+  - a repeat killer: "Rogz killed Bob again (3rd time)", "Rogz has Bob's number",
+    "Bob's nemesis strikes again"
+  - a death spree or a bad day: "4 deaths in 12 min", "5th death today"
+  - kill streaks: "Bob owns Rogz (3rd kill on them)", "3 kills in 8 min", "rampage!",
+    "6th kill today"
+  - revenge for a friend: "Bob avenged Alice - Rogz is down"
+  - an attacker's record: "... Rogz has killed them 4 times before"
+- You can turn this off with "Varied PvP messages" in Options.
+
 ## 0.5.0
 Compatible with 0.3.x and 0.4.x.
 - **Choose per event:** Show (Toast / Chat / Off) and Sound (on / off) for each event. The

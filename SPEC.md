@@ -133,6 +133,20 @@ Rules:
   movable (`/fnf unlock`).
 - **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
   Queued PvP toasts older than 60 seconds are dropped.
+- **Varied wording** (`Flavor.lua`, `settings.flavor`, default on): built from history kept locally.
+  - Hitlist `kv[victim]` counts that enemy's kills on each friend:
+    - 2 or more: "killed X again (Nth time)"
+    - 5 or more: "has X's number"
+    - 10 or more: "X's nemesis strikes again"
+  - Each player's `deathTimes` and `killTimes` keep the last 2 days, at most 50 each:
+    - 3 or more deaths in 15 min: a spree ("N deaths in M min"); otherwise 3 or more today: "Nth death today"
+    - 3 or more kills in 10 min: a streak (5 or more: "rampage!"); otherwise 5 or more today: "Nth kill today"
+  - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "owns".
+  - Revenge names the friends that enemy had hit ("avenged").
+  - An attack mentions the attacker's past kills on that friend.
+  - Otherwise one plain wording is picked at random.
+  The same line goes to the toast, the chat line and the Feed. Counts are per client, since each
+  client builds them from the events it received.
 - **Revenge:** a kill on a hitlist entry adds "revenge!" and "R<n>" to the Kills column.
 - **Collapse:** level-up toasts merge ("Bob, Alice and 2 others leveled up"), and so does a burst
   of gear toasts from one friend. Milestones are never merged.

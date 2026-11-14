@@ -3,7 +3,7 @@ FRAMES = {}
 local now = 1000
 function GetTime() return now end
 function ADVANCE(s) now = now + s end
-time = function() return os.time() end
+time = function(t) return os.time(t) end
 date = os.date
 
 local function newObj()

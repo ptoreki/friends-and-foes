@@ -19,7 +19,6 @@ L.TOAST_ATTACKED = "%s is under attack!"
 L.TOAST_ATTACKED_TEXT = "%s - by %s"
 L.TOAST_DIED = "%s was killed"
 L.TOAST_DIED_TEXT = "by %s in %s"
-L.TOAST_DIED_UNKNOWN = "by an enemy player in %s"
 L.TOAST_KILL = "%s got a kill"
 L.TOAST_KILL_TEXT = "%s in %s"
 L.TOAST_LEVEL_MAX = "%s reached max level!"
@@ -31,15 +30,34 @@ L.TOOLTIP_VICTIMS = "hit %s"
 L.TOAST_SIGHTING = "Hitlist: %s spotted"
 L.TOAST_SIGHTING_TEXT = "%s - %d attacks, %d kills on us"
 
+-- PvP wording (Flavor.lua). Lists: one is picked at random for variety.
+L.IN_ZONE = "in %s"
+L.DIED = { "%s was killed by %s", "%s fell to %s", "%s got ganked by %s", "%s was taken down by %s" }
+L.DIED_UNKNOWN = { "%s was killed by an enemy player", "%s fell to an unseen enemy", "%s got ganked" }
+L.DIED_AGAIN = "%s killed %s again"
+L.DIED_NUMBER = "%s has %s's number"
+L.DIED_NEMESIS = "%s's nemesis strikes again: %s"
+L.NTH_TIME = "%s time"
+L.SPREE_DEATHS = "%d deaths in %d min"
+L.DEATHS_TODAY = "%s death today"
+L.KILL = { "%s killed %s", "%s took down %s", "%s dropped %s", "%s sent %s to the spirit healer" }
+L.KILL_REVENGE = "%s got revenge on %s"
+L.KILL_AVENGED = "%s avenged %s - %s is down"
+L.KILL_OWNS = "%s owns %s"
+L.NTH_KILL_ON = "%s kill on them"
+L.STREAK = "%d kills in %d min"
+L.RAMPAGE = "rampage! %d kills in %d min"
+L.KILLS_TODAY = "%s kill today"
+L.ATTACKED = { "%s is under attack!", "%s is in a fight!", "%s got jumped!" }
+L.ATTACKED_BY = "by %s"
+L.ATTACKER_HISTORY = "%s has killed them %d times before"
+L.OPT_FLAVOR = "Varied PvP messages"
+
 -- feed
 L.FEED_LEVEL = "%s reached level %d"
 L.FEED_LOOT = "%s looted %s"
 L.FEED_CRAFT = "%s crafted %s"
 L.FEED_GEAR = "%s equipped %s"
-L.FEED_ATTACKED = "%s was attacked by %s in %s"
-L.FEED_DIED = "%s was killed by %s in %s"
-L.FEED_DIED_UNKNOWN = "%s was killed by an enemy player in %s"
-L.FEED_KILL = "%s killed %s in %s"
 
 -- window
 L.TAB_HITLIST = "Hitlist"
@@ -138,7 +156,6 @@ L.TOAST_OLDER_PROTOCOL_TEXT = "%s runs an old, incompatible version - send them 
 L.TOAST_SHARE = "%s shared their hitlist"
 L.TOAST_SHARE_TEXT = "%d new entries added"
 L.FEED_SHARE = "%s shared their hitlist (%d new entries)"
-L.REVENGE_SUFFIX = " - revenge!"
 L.REVENGE_SHORT = "R%d"
 L.COL_GUILD = "Guild"
 L.COL_VERSION = "Ver"

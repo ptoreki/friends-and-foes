@@ -358,6 +358,43 @@ check(ns.errors == 0, "no errors after UI/slash exercise (" .. tostring(ns.lastE
 check(#FriendsAndFoesDB.errorLog == 0, "error log empty")
 
 -- error log always on: force an error in a handler
+-- flavor: varied PvP wording from history (deterministic picks in tests)
+ns.Flavor.random = function() return 1 end
+local O = ns.Flavor.Ordinal
+check(O(1) == "1st" and O(2) == "2nd" and O(3) == "3rd" and O(4) == "4th" and O(11) == "11th" and O(12) == "12th"
+  and O(13) == "13th" and O(21) == "21st" and O(22) == "22nd" and O(111) == "111th", "ordinals")
+local function lastFeed() return real.feed[#real.feed].text end
+for i = 1, 3 do
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
+end
+check(lastFeed():find("killed", 1, true) and lastFeed():find("again", 1, true) and lastFeed():find("3rd time", 1, true)
+  and lastFeed():find("deaths in 1 min", 1, true), "repeat killer + death spree: " .. lastFeed())
+check(real.hitlist["Nem Esis"].kv["Buddy Pal"] == 3, "per-victim kill count kept on the hitlist entry")
+for i = 4, 5 do
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
+end
+check(lastFeed():find("has", 1, true) and lastFeed():find("number", 1, true) and lastFeed():find("5th time", 1, true), "5th death to the same killer: " .. lastFeed())
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "fa1", zone = "Duskwood", attackers = "Nem Esis:ROGUE:60:" }, "fa1"), "WHISPER", 77)
+check(lastFeed():find("has killed them 5 times before", 1, true) ~= nil, "attacker's history on this friend: " .. lastFeed())
+for i = 1, 3 do
+  ADVANCE(20)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk" .. i), "WHISPER", 77)
+end
+check(lastFeed():find("owns", 1, true) and lastFeed():find("3rd kill on them", 1, true) and lastFeed():find("kills in", 1, true),
+  "repeat kill + streak: " .. lastFeed())
+-- revenge on behalf of another friend
+local nem = real.hitlist["Nem Esis"]
+nem.victims["Alice Ally"] = true
+ADVANCE(20)
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Nem Esis", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk9"), "WHISPER", 77)
+check(lastFeed():find("avenged", 1, true) and lastFeed():find("Alice Ally", 1, true) and nem.revenge >= 1, "revenge names the avenged friend: " .. lastFeed())
+ns.S().flavor = false
+ADVANCE(20)
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk10"), "WHISPER", 77)
+check(lastFeed():find("killed", 1, true) and not lastFeed():find("owns", 1, true), "flavor off: plain wording: " .. lastFeed())
+ns.S().flavor = true
+check(ns.errors == 0, "no errors in flavor (" .. tostring(ns.lastError) .. ")")
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

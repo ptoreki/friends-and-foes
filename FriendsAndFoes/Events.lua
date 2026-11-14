@@ -218,14 +218,14 @@ H.ATK = function(msg, isSelf, p, f)
   atkSeenCount = atkSeenCount + 1
 
   local by = (#names > 0) and ns.JoinNames(names) or L.UNKNOWN_ENEMY
-  local line = L.FEED_ATTACKED:format(who(p), by, f.zone)
+  local title, text, line = ns.Flavor.Attacked(p, who(p), by, attackers, f.zone)
   feed(p, "attacked", line)
   if isSelf or suppressAttackToast(msg.from) then return end
   ns.Toast.Push({
     chat = line, kind = "attacked",
     -- you can only help if you're in the same zone: elsewhere it's a chat line
     far = ns.S().nearbyOnly and not ns.PvP.IsMyZone(f.zone), category = "pvp", icon = ICON.attacked,
-    title = L.TOAST_ATTACKED:format(who(p)), text = L.TOAST_ATTACKED_TEXT:format(f.zone, by),
+    title = title, text = text,
     player = attackers[1] and attackers[1].name,
   })
 end
@@ -234,11 +234,11 @@ H.DIE = function(msg, isSelf, p, f)
   p.d = p.d + 1
   local killer = ns.DecodeUnit(f.killer)
   local suspect = f.conf == "s"
-  local by
+  local by, h
   if killer and killer.name then
     local e = enemyTouch(killer, f.zone)
     e.k = e.k + 1
-    local h = hitTouch(killer, f.zone, msg.from)
+    h = hitTouch(killer, f.zone, msg.from)
     h.kills = h.kills + 1
     if suspect then h.suspect = h.suspect + 1 end
     by = ns.ClassColored(killer.name, killer.class) .. (suspect and "?" or "")
@@ -251,13 +251,12 @@ H.DIE = function(msg, isSelf, p, f)
     end
   end
 
-  local line = by and L.FEED_DIED:format(who(p), by, f.zone) or L.FEED_DIED_UNKNOWN:format(who(p), f.zone)
+  local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone)
   feed(p, "died", line)
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "died", category = "pvp", icon = ICON.died,
-    title = L.TOAST_DIED:format(who(p)),
-    text = by and L.TOAST_DIED_TEXT:format(by, f.zone) or L.TOAST_DIED_UNKNOWN:format(f.zone),
+    title = title, text = text,
     player = killer and killer.name,
   })
 end
@@ -267,24 +266,24 @@ H.KILL = function(_, isSelf, p, f)
   if not name then return end
   p.k = p.k + 1
   local victim = { name = name, class = f.vclass ~= "" and f.vclass or nil, level = f.vlevel, guild = f.vguild ~= "" and f.vguild or nil }
-  enemyTouch(victim, f.zone)
+  local e = enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
 
   local hit = ns.Data.FindHit(name)
-  local revenge = ""
+  local revenge = false
   if hit and counted then
     hit.revenge = (hit.revenge or 0) + 1
     hit.lastRevenge = time()
-    revenge = L.REVENGE_SUFFIX
+    revenge = true
   end
 
   local v = ns.ClassColored(name, victim.class)
-  local line = L.FEED_KILL:format(who(p), v, f.zone) .. revenge
+  local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone)
   feed(p, "kill", line)
   if isSelf then return end
   ns.Toast.Push({
-    chat = line, milestone = revenge ~= "", kind = "kill", category = "pvp", icon = ICON.kill,
-    title = L.TOAST_KILL:format(who(p)) .. revenge, text = L.TOAST_KILL_TEXT:format(v, f.zone),
+    chat = line, milestone = revenge, kind = "kill", category = "pvp", icon = ICON.kill,
+    title = title, text = text,
     player = name,
   })
 end

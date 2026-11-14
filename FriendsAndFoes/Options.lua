@@ -98,6 +98,8 @@ local function build(p)
   check(p, x, y, L.OPT_NEARBY_ONLY, function() return S().nearbyOnly end, function(v) S().nearbyOnly = v end)
   y = y - 22
   check(p, x, y, L.OPT_ALL_SOUNDS, toggle("sound", "enabled"))
+  y = y - 22
+  check(p, x, y, L.OPT_FLAVOR, function() return S().flavor end, function(v) S().flavor = v end)
 
   -- right column
   x = 340
@@ -133,7 +135,7 @@ local function build(p)
 
   -- beta tools: only while debug logging is on
   beta = CreateFrame("Frame", nil, p)
-  beta:SetPoint("TOPLEFT", 16, -380)
+  beta:SetPoint("TOPLEFT", 16, -400)
   beta:SetSize(600, 200)
   text(beta, "GameFontNormal", 0, 0, L.BETA_HEADER)
   local test = button(beta, 110, L.BTN_TEST, function() ns.Toast.Test() end)

@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.5.0"
+ns.VERSION = "0.5.1"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -18,6 +18,7 @@ local DEFAULTS = {
   show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "chat", sighting = "chat", share = "chat" },
   chatFrame = 1,
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
+  flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
