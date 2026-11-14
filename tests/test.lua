@@ -584,7 +584,7 @@ do
   CreateSettingsButtonInitializer = function(name, label, click) return { button = label, click = click } end
   local ok, err = pcall(ns.Options.BuildNative)
   check(ok, "native options build: " .. tostring(err))
-  check(#pages == 4, "four pages: Alerts, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
+  check(#pages == 5, "five pages: Alerts, Where it works, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
   local dropdowns = 0
   for _, c in ipairs(controls) do
     if c.kind == "dropdown" then
@@ -592,7 +592,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 11, "8 alert dropdowns + style + message style + chat tab (" .. dropdowns .. ")")
+  check(dropdowns == 15, "8 alerts + 4 places + style + message style + chat tab (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -609,6 +609,12 @@ do
   check(ns.S().flavor == false and settings.FNF_style:GetValue() == "short", "message style: short = flavor off")
   settings.FNF_style:SetValue("flavor")
   check(ns.S().flavor == true, "message style: with flavor")
+  settings.FNF_where_pvp:SetValue("chat")
+  check(ns.S().where.pvp == "chat", "battleground alerts dropdown")
+  settings.FNF_where_pvp:SetValue("hold")
+  settings.FNF_track_pvp:SetValue(true)
+  check(ns.S().track.pvp == true, "track PvP in battlegrounds checkbox")
+  settings.FNF_track_pvp:SetValue(false)
   settings.FNF_mark:SetValue(false)
   check(ns.S().mark == false, "hitlist marks checkbox")
   settings.FNF_mark:SetValue(true)
@@ -696,6 +702,64 @@ do
   check(not simShown, "simulated toasts dismissed")
   SlashCmdList.FRIENDSANDFOES("sim stop")
   check(ns.errors == 0, "no errors stopping simulation (" .. tostring(ns.lastError) .. ")")
+end
+
+-- where it works: alerts per instance type, and where your own PvP is tracked
+do
+  local origII = IsInInstance
+  local here = "none"
+  IsInInstance = function() return here ~= "none", here end
+  drainToasts()
+  local function shownIn(kind)
+    here = kind
+    local s = ns.Toast.shown or 0
+    CHAT = {}
+    ns.Toast.Push({ kind = "died", category = "pvp", title = "x", chat = "line" })
+    drainToasts()
+    here = "none"
+    ns.Toast.Pump()
+    drainToasts()
+    return (ns.Toast.shown or 0) > s, #CHAT
+  end
+  -- default: wait until you're out
+  here = "party"
+  local s0 = ns.Toast.shown or 0
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "held", chat = "line" })
+  check((ns.Toast.shown or 0) == s0, "in a dungeon, toasts wait by default")
+  here = "none"
+  ns.Toast.Pump()
+  check((ns.Toast.shown or 0) == s0 + 1, "...and show once you're out")
+  drainToasts()
+  ns.S().where.party = "chat"
+  local toasted1, chats1 = shownIn("party")
+  check(not toasted1 and chats1 == 1, "dungeon: chat line only")
+  ns.S().where.party = "off"
+  local toasted2, chats2 = shownIn("party")
+  check(not toasted2 and chats2 == 0, "dungeon: off")
+  ns.S().where.party = "show"
+  local toasted3 = shownIn("party")
+  check(toasted3, "dungeon: show")
+  ns.S().where.party = "hold"
+  -- tracking your own PvP
+  here = "pvp"
+  check(not ns.PvP.InWorldPvPContext(), "battlegrounds not tracked by default")
+  ns.S().track.pvp = true
+  check(ns.PvP.InWorldPvPContext(), "battlegrounds tracked when turned on")
+  ns.S().track.pvp = false
+  here = "arena"
+  check(not ns.PvP.InWorldPvPContext(), "arenas not tracked by default")
+  here = "none"
+  check(ns.PvP.InWorldPvPContext(), "open world tracked")
+  ns.S().track.world = false
+  check(not ns.PvP.InWorldPvPContext(), "open world can be turned off")
+  ns.S().track.world = true
+  -- old "hold in instances" switch turned off = show everywhere
+  ns.S().dnd.instance = false
+  FIRE("ADDON_LOADED", "FriendsAndFoes")
+  check(ns.S().dnd.instance == nil and ns.S().where.party == "show" and ns.S().where.pvp == "show", "old instance switch migrated")
+  for k in pairs(ns.S().where) do ns.S().where[k] = "hold" end
+  IsInInstance = origII
+  check(ns.errors == 0, "no errors in where-it-works (" .. tostring(ns.lastError) .. ")")
 end
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent

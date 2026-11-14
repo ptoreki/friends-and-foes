@@ -75,9 +75,12 @@ Rules:
 - **Gear identity** is item ID plus random suffix; enchants are ignored. Shirt, tabard and ammo are excluded.
 - **Seeding:** items already equipped when the addon first runs on a character are recorded silently.
 - **Collapse:** a GEAR event isn't sent if the same item was shared as LOOT within the last 5 minutes.
-- **World PvP context:** outside all instances (so no BGs, arenas, dungeons or raids), and not in an
-  objective subzone (the EPL towers). Duels are excluded automatically, because attackers must be the
-  opposite faction. Cities count.
+- **Where your PvP is tracked** (`settings.track`, Options → Where it works):
+  - the open world (on): cities count, objective subzones (the EPL towers) never do
+  - battlegrounds (off)
+  - arenas (off)
+  - Dungeons and raids are never tracked. Duels are excluded automatically, because attackers must
+    be the opposite faction.
 - **Encounter:** starts when you take a hit while a hostile player is targeting you. It ends after
   **30 seconds** without hits.
 - **Killer:**
@@ -157,7 +160,11 @@ Rules:
   edge: red for PvP, gold for progress, purple for sightings. It fades in and out. PvP toasts stay
   5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is
   movable (`/fnf unlock`).
-- **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
+- **Do not disturb:** in combat only PvP and sighting toasts show.
+- **Alerts while in an instance** (`settings.where[party|raid|pvp|arena]`): show, hold (the default:
+  toasts wait until you leave), chat (everything becomes a chat line, even milestones), or off
+  (nothing shown; still recorded). Previews ignore this. The old `dnd.instance` false migrates to
+  show everywhere.
   Queued PvP toasts older than 60 seconds are dropped.
 - **Message shape:** short. Who did what, then extras, then the place, separated by " · ", e.g.
   "Rogz killed Bob again (3rd) · 5th today · Tarren Mill". The place is the subzone if the

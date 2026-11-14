@@ -31,12 +31,17 @@ local sightCooldown = {}
 ---------------------------------------------------------------------------
 -- context
 ---------------------------------------------------------------------------
+-- Is your own PvP tracked where you are? Open world (minus objective subzones) unless turned
+-- off; battlegrounds and arenas only if turned on (Options -> Where it works).
 function PvP.InWorldPvPContext()
-  local inInstance = IsInInstance()
-  if issecret(inInstance) or inInstance then return false end
-  local sub = GetSubZoneText()
-  if sub and not issecret(sub) and OBJECTIVE_SUBZONES[sub] then return false end
-  return true
+  local where, track = ns.InstanceType(), ns.S().track
+  if where == "world" then
+    if not track.world then return false end
+    local sub = GetSubZoneText()
+    if sub and not issecret(sub) and OBJECTIVE_SUBZONES[sub] then return false end
+    return true
+  end
+  return (where == "pvp" and track.pvp) or (where == "arena" and track.arena) or false
 end
 
 function PvP.ZoneText()

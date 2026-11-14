@@ -115,7 +115,9 @@ local function build(p)
   y = y - 20
   check(p, x, y, L.OPT_DND_COMBAT, toggle("dnd", "combat"))
   y = y - 21
-  check(p, x, y, L.OPT_DND_INSTANCE, toggle("dnd", "instance"))
+  check(p, x, y, L.OPT_DND_INSTANCE,
+    function() return S().where.party == "hold" end,
+    function(v) for k in pairs(S().where) do S().where[k] = v and "hold" or "show" end end)
   y = y - 31
   text(p, "GameFontNormal", x, y, L.MISC_HEADER)
   y = y - 20
@@ -319,7 +321,22 @@ function Options.BuildNative()
   checkbox(main, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
   header(mainLayout, L.DND_HEADER)
   checkbox(main, "dndCombat", S().dnd, "combat", L.OPT_DND_COMBAT, D.dnd.combat, L.TIP_DND_COMBAT)
-  checkbox(main, "dndInstance", S().dnd, "instance", L.OPT_DND_INSTANCE, D.dnd.instance, L.TIP_DND_INSTANCE)
+
+  -- Where it works
+  local where, whereLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_WHERE)
+  header(whereLayout, L.WHERE_ALERTS_HEADER, L.TIP_WHERE_ALERTS)
+  local rules = {
+    { "show", L.WHERE_SHOW, L.TIP_WHERE_SHOW }, { "hold", L.WHERE_HOLD, L.TIP_WHERE_HOLD },
+    { "chat", L.WHERE_CHAT, L.TIP_WHERE_CHAT }, { "off", L.WHERE_OFF, L.TIP_WHERE_OFF },
+  }
+  for _, w in ipairs({ { "party", L.WHERE_PARTY }, { "raid", L.WHERE_RAID }, { "pvp", L.WHERE_PVP }, { "arena", L.WHERE_ARENA } }) do
+    local s = Settings.RegisterAddOnSetting(where, "FNF_where_" .. w[1], w[1], S().where, varType("String"), w[2], D.where[w[1]])
+    Settings.CreateDropdown(where, s, choices(rules), L.TIP_WHERE_ALERTS)
+  end
+  header(whereLayout, L.TRACK_HEADER, L.TIP_TRACK)
+  checkbox(where, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
+  checkbox(where, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
+  checkbox(where, "track_arena", S().track, "arena", L.TRACK_ARENA, D.track.arena, L.TIP_TRACK_ARENA)
 
   -- Appearance
   local look, lookLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_APPEARANCE)

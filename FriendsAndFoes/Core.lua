@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.5.5"
+ns.VERSION = "0.5.6"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -23,7 +23,11 @@ local DEFAULTS = {
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
-  dnd = { combat = true, instance = true },
+  dnd = { combat = true },
+  -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
+  where = { party = "hold", raid = "hold", pvp = "hold", arena = "hold" },
+  -- where your own PvP (attacks, deaths, kills, sightings) is tracked
+  track = { world = true, pvp = false, arena = false },
   minimap = { hide = false, angle = 210 }, -- hidden by default where the minimap addon menu exists
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
@@ -42,6 +46,16 @@ local function fillDefaults(dst, src)
 end
 
 function ns.S() return FriendsAndFoesDB.settings end
+
+-- where you are: "world", "party" (dungeon or scenario), "raid", "pvp" (battleground), "arena",
+-- or "unknown" if the game won't say
+function ns.InstanceType()
+  local inInstance, kind = IsInInstance()
+  if issecret(inInstance) or issecret(kind) then return "unknown" end
+  if not inInstance then return "world" end
+  if kind == "scenario" or kind == nil or kind == "none" then return "party" end
+  return kind
+end
 
 ---------------------------------------------------------------------------
 -- debug log + error containment
@@ -164,6 +178,13 @@ ns.On("ADDON_LOADED", function(name)
       if v == false and db.settings.show[k] then db.settings.show[k] = "off" end
     end
     db.settings.toast = nil
+  end
+  -- 0.5.6 and earlier: one "hold toasts in instances" switch; off meant show everywhere
+  if db.settings.dnd.instance ~= nil then
+    if db.settings.dnd.instance == false then
+      for k in pairs(db.settings.where) do db.settings.where[k] = "show" end
+    end
+    db.settings.dnd.instance = nil
   end
   -- 0.5.3 and earlier defaulted a friend's kill to chat; it's a toast now (once).
   if not db.settings.killToast then

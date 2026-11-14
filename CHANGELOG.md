@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.6
+Compatible with 0.3.x to 0.5.5.
+- **New Options page: Where it works.**
+  - **Alerts while you're in:** a dropdown each for Dungeons, Raids, Battlegrounds and Arenas.
+    Choices: *Show*, *Wait until I'm out* (the default, same as before), *Chat line only*, or *Off*.
+  - **Track my PvP in:** Open world (on), Battlegrounds (off) and Arenas (off). If you turn on
+    battlegrounds or arenas, your fights there count, and anyone who kills you there goes on the
+    hitlist.
+- The old "hold all toasts in dungeons/raids" checkbox is replaced by the dropdowns. If you had it
+  off, they start on *Show*.
+
 ## 0.5.5
 Compatible with 0.3.x to 0.5.4.
 - **New options**, built into the game's own settings panel (Options → AddOns → Friends & Foes),

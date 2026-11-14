@@ -55,7 +55,8 @@ The defaults are quiet: toasts for your friends' fights (attacked nearby, killed
 You can also choose:
 - **Which friends** you exchange alerts with: everyone, or only the friends you pick.
 - **What you share:** levels, loot, gear and PvP, each separately.
-- **Do not disturb:** hold progress toasts in combat, and all toasts in dungeons and raids.
+- **Do not disturb:** hold progress toasts in combat.
+- **Where it works:** for dungeons, raids, battlegrounds and arenas separately, choose whether alerts show, wait until you're out, become chat lines, or stay off. You also choose whether your own PvP is tracked in the open world, battlegrounds and arenas.
 
 ### How it works
 - Your friends need the addon too. Each player's addon reports only **their own** events (their level-ups, loot, and the fights they're in) and sends them to friends who have it.

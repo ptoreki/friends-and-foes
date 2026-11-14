@@ -284,10 +284,7 @@ end
 -- Do-not-disturb: in combat only PvP/sighting toasts get through; in instances everything waits.
 local function isHeld(spec)
   local dnd = ns.S().dnd
-  if dnd.instance then
-    local inInstance = IsInInstance()
-    if not ns.issecret(inInstance) and inInstance then return true end
-  end
+  if not spec.force and ns.S().where[ns.InstanceType()] == "hold" then return true end
   if dnd.combat and spec.category ~= "pvp" and spec.category ~= "sighting" then
     local inCombat = UnitAffectingCombat("player")
     if not ns.issecret(inCombat) and inCombat then return true end
@@ -334,6 +331,10 @@ function Toast.Mode(spec)
   if spec.force or not spec.kind then return "toast" end
   local mode = ns.S().show[spec.kind] or "toast"
   if mode == "off" then return "off" end
+  -- inside an instance, its rule wins (Options -> Where it works)
+  local rule = ns.S().where[ns.InstanceType()]
+  if rule == "off" then return "off" end
+  if rule == "chat" then return "chat" end
   if spec.milestone then return "toast" end
   if spec.far and mode == "toast" then return "chat" end
   return mode
