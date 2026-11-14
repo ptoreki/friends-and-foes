@@ -11,6 +11,8 @@ Compatible with 0.3.x to 0.5.3.
 - **A friend's kill is now a toast by default**, like attacks and deaths. It used to be a chat line,
   so it was easy to miss. If you had it on Chat, it switches to Toast once; you can change it back
   in Options.
+- **Long messages are no longer cut off.** Toasts are a bit wider and wrap onto up to 3 lines. In
+  the window, hovering a row shows any cut-off text (e.g. a long Feed entry) in full.
 
 ## 0.5.2
 Compatible with 0.3.x to 0.5.1.

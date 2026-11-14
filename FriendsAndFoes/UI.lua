@@ -450,6 +450,26 @@ local function build()
       fs:SetWordWrap(false)
       row.cells[c] = fs
     end
+    -- cells are cut to their column; hovering a row shows any cut-off text in full
+    row:SetScript("OnEnter", function(self)
+      local cut = {}
+      for c, cell in ipairs(self.cells) do
+        if cell:IsShown() and cell.IsTruncated and cell:IsTruncated() then
+          cut[#cut + 1] = { header.cells[c]:GetText(), cell:GetText() }
+        end
+      end
+      if #cut == 0 then return end
+      GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+      for _, pair in ipairs(cut) do
+        if #cut == 1 then
+          GameTooltip:AddLine(pair[2], 1, 1, 1, true)
+        else
+          GameTooltip:AddDoubleLine(pair[1] or "", pair[2], 1, 0.82, 0, 1, 1, 1)
+        end
+      end
+      GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     row:SetScript("OnClick", function(self)
       if currentTab == "hitlist" and self.entry then
         selected = self.entry.name

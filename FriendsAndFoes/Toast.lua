@@ -8,7 +8,8 @@ ns.Toast = Toast
 local MAX_VISIBLE = 2
 local DURATION, DURATION_PVP = 3, 5
 local FADE_IN, FADE = 0.2, 0.5
-local HEIGHT, WIDTH, GAP = 26, 380, 4
+local HEIGHT, WIDTH, GAP = 26, 420, 4 -- HEIGHT is the one-line minimum; long text wraps
+local MAX_LINES = 3
 local QUEUE_MAX = 30
 local STALE_PVP = 60
 
@@ -96,6 +97,9 @@ local function render(f)
   f.icon:SetTexture(spec.icon or ns.ICON.fallback)
   local text = (spec.text and spec.text ~= "") and ("  |cffbbbbbb" .. spec.text .. "|r") or ""
   f.label:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or "") .. text)
+  -- grow to fit wrapped text (up to MAX_LINES) instead of cutting it off
+  local textH = tonumber(f.label:GetStringHeight()) or 0
+  f:SetHeight(math.max(HEIGHT, math.ceil(textH) + 12))
   local c = EDGE[spec.category] or EDGE.progress
   f.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
   f.duration = spec.category == "pvp" and DURATION_PVP or DURATION
@@ -127,7 +131,9 @@ local function createToast()
   f.label:SetPoint("LEFT", f.icon, "RIGHT", 7, 0)
   f.label:SetPoint("RIGHT", -8, 0)
   f.label:SetJustifyH("LEFT")
-  f.label:SetWordWrap(false)
+  f.label:SetWordWrap(true)
+  f.label:SetJustifyV("MIDDLE")
+  if f.label.SetMaxLines then f.label:SetMaxLines(MAX_LINES) end
 
   f:SetScript("OnEnter", function(self)
     self.hover = true
@@ -169,9 +175,11 @@ local function createToast()
 end
 
 function Toast.Layout()
-  for i, f in ipairs(active) do
+  local y = 0
+  for _, f in ipairs(active) do
     f:ClearAllPoints()
-    f:SetPoint("TOP", anchor, "BOTTOM", 0, -((i - 1) * (HEIGHT + GAP)))
+    f:SetPoint("TOP", anchor, "BOTTOM", 0, -y)
+    y = y + (tonumber(f:GetHeight()) or HEIGHT) + GAP
   end
 end
 
@@ -281,6 +289,7 @@ function Toast.Push(spec)
       if f.spec.collapseKey == spec.collapseKey then
         f.spec.merge(f.spec, spec)
         render(f)
+        Toast.Layout() -- merged text may need more lines
         return
       end
     end
