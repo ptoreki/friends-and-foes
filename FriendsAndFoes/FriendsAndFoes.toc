@@ -7,6 +7,7 @@
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## IconTexture: Interface\Icons\Ability_DualWield
 ## AddonCompartmentFunc: FriendsAndFoes_OnAddonCompartmentClick
+## X-Curse-Project-ID: 1804389
 
 Locale.lua
 Core.lua
