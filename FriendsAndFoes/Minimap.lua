@@ -42,14 +42,14 @@ local function create()
   border:SetPoint("TOPLEFT")
 
   button:SetScript("OnClick", function(_, btn)
-    if btn == "RightButton" then ns.UI.Show("settings") else ns.UI.Toggle() end
+    if btn == "RightButton" then ns.UI.OpenSettings() else ns.UI.Toggle() end
   end)
   button:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", onDragUpdate) end)
   button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
   button:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:AddLine(L.ADDON)
-    GameTooltip:AddLine("Left-click: open  |  Right-click: settings  |  Drag: move", 1, 1, 1)
+    GameTooltip:AddLine(L.MINIMAP_TIP, 1, 1, 1)
     GameTooltip:Show()
   end)
   button:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -61,8 +61,19 @@ function Minimap_.Update()
   button:SetShown(not ns.S().minimap.hide)
 end
 
+-- the minimap's addon menu (modern clients): left-click opens the window, right-click options
+function FriendsAndFoes_OnAddonCompartmentClick(_, button)
+  if button == "RightButton" then ns.UI.OpenSettings() else ns.UI.Toggle() end
+end
+
 ns.OnReady(function()
   if not Minimap then return end
+  -- where the addon menu exists, the separate button starts hidden (once; your choice sticks)
+  local mm = ns.S().minimap
+  if AddonCompartmentFrame and not mm.compartmentDefaulted then
+    mm.hide = true
+    mm.compartmentDefaulted = true
+  end
   create()
   Minimap_.Update()
 end)

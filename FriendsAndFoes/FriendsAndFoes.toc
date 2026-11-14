@@ -2,10 +2,11 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.4.2
+## Version: 0.5.0
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## IconTexture: Interface\Icons\Ability_DualWield
+## AddonCompartmentFunc: FriendsAndFoes_OnAddonCompartmentClick
 
 Locale.lua
 Core.lua
@@ -18,4 +19,5 @@ PvP.lua
 Marks.lua
 Sim.lua
 UI.lua
+Options.lua
 Minimap.lua

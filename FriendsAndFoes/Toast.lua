@@ -4,30 +4,26 @@ local L = ns.L
 local Toast = {}
 ns.Toast = Toast
 
-local MAX_VISIBLE = 3
-local DURATION = 5
-local FADE = 0.5
-local HEIGHT, WIDTH, GAP = 58, 320, 6
+-- Compact, quiet toasts: one line, a thin coloured edge, gone in a few seconds.
+local MAX_VISIBLE = 2
+local DURATION, DURATION_PVP = 3, 5
+local FADE_IN, FADE = 0.2, 0.5
+local HEIGHT, WIDTH, GAP = 26, 380, 4
 local QUEUE_MAX = 30
 local STALE_PVP = 60
 
-local BORDER = {
-  pvp = { 0.9, 0.2, 0.15 },
-  progress = { 1.0, 0.8, 0.1 },
-  sighting = { 0.7, 0.3, 1.0 },
+local EDGE = {
+  pvp = { 0.9, 0.2, 0.15 },       -- red
+  progress = { 1.0, 0.8, 0.1 },   -- gold
+  sighting = { 0.7, 0.3, 1.0 },   -- purple
 }
 
+-- soft, familiar game sounds
+local SK = SOUNDKIT or {}
 local SOUNDS = {
-  pvp = (SOUNDKIT and SOUNDKIT.RAID_WARNING) or 8959,
-  progress = 888, -- level up fanfare
-  sighting = (SOUNDKIT and SOUNDKIT.TELL_MESSAGE) or 3081, -- the whisper ping: noticeable, not alarming
-}
-
-local BACKDROP = {
-  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-  tile = true, tileSize = 16, edgeSize = 16,
-  insets = { left = 4, right = 4, top = 4, bottom = 4 },
+  pvp = SK.UI_RAID_BOSS_WHISPER_WARNING or 37666, -- short alert, quieter than the raid-warning horn
+  progress = SK.UI_BNET_TOAST or 18019,          -- the Battle.net friend toast chime
+  sighting = SK.TELL_MESSAGE or 3081,            -- the whisper ping
 }
 
 local queue, active, pool = {}, {}, {}
@@ -43,7 +39,7 @@ local function savePosition()
 end
 
 local function createAnchor()
-  anchor = CreateFrame("Frame", "FriendsAndFoesToastAnchor", UIParent, "BackdropTemplate")
+  anchor = CreateFrame("Frame", "FriendsAndFoesToastAnchor", UIParent)
   anchor:SetSize(WIDTH, 24)
   local a = ns.S().anchor
   anchor:SetPoint(a.point or "TOP", UIParent, a.point or "TOP", a.x or 0, a.y or -140)
@@ -55,8 +51,9 @@ local function createAnchor()
     self:StopMovingOrSizing()
     savePosition()
   end)
-  anchor:SetBackdrop(BACKDROP)
-  anchor:SetBackdropColor(0.1, 0.4, 0.1, 0.8)
+  local bg = anchor:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0.1, 0.4, 0.1, 0.8)
   anchor.label = anchor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   anchor.label:SetPoint("CENTER")
   anchor.label:SetText(L.ANCHOR_LABEL)
@@ -97,38 +94,40 @@ end
 local function render(f)
   local spec = f.spec
   f.icon:SetTexture(spec.icon or ns.ICON.fallback)
-  f.title:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or ""))
-  f.text:SetText(spec.text or "")
-  local c = BORDER[spec.category] or BORDER.progress
-  f:SetBackdropBorderColor(c[1], c[2], c[3], 1)
-  f.remaining = DURATION
-  f:SetAlpha(1)
+  local text = (spec.text and spec.text ~= "") and ("  |cffbbbbbb" .. spec.text .. "|r") or ""
+  f.label:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or "") .. text)
+  local c = EDGE[spec.category] or EDGE.progress
+  f.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
+  f.duration = spec.category == "pvp" and DURATION_PVP or DURATION
+  f.remaining = f.duration
+  f:SetAlpha(0)
 end
 
 local function createToast()
-  local f = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
+  local f = CreateFrame("Button", nil, UIParent)
   f:SetSize(WIDTH, HEIGHT)
   f:SetFrameStrata("HIGH")
-  f:SetBackdrop(BACKDROP)
-  f:SetBackdropColor(0, 0, 0, 0.85)
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
+  local bg = f:CreateTexture(nil, "BACKGROUND")
+  bg:SetAllPoints()
+  bg:SetColorTexture(0, 0, 0, 0.6)
+
+  f.edge = f:CreateTexture(nil, "BORDER")
+  f.edge:SetPoint("TOPLEFT")
+  f.edge:SetPoint("BOTTOMLEFT")
+  f.edge:SetWidth(3)
+
   f.icon = f:CreateTexture(nil, "ARTWORK")
-  f.icon:SetSize(40, 40)
+  f.icon:SetSize(18, 18)
   f.icon:SetPoint("LEFT", 9, 0)
+  f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 8, -1)
-  f.title:SetPoint("RIGHT", -10, 0)
-  f.title:SetJustifyH("LEFT")
-  f.title:SetWordWrap(false)
-
-  f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  f.text:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -3)
-  f.text:SetPoint("RIGHT", -10, 0)
-  f.text:SetJustifyH("LEFT")
-  f.text:SetJustifyV("TOP")
-  f.text:SetHeight(26)
+  f.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  f.label:SetPoint("LEFT", f.icon, "RIGHT", 7, 0)
+  f.label:SetPoint("RIGHT", -8, 0)
+  f.label:SetJustifyH("LEFT")
+  f.label:SetWordWrap(false)
 
   f:SetScript("OnEnter", function(self)
     self.hover = true
@@ -155,10 +154,15 @@ local function createToast()
   f:SetScript("OnUpdate", function(self, elapsed)
     if self.hover or not self.spec then return end
     self.remaining = self.remaining - elapsed
+    local age = self.duration - self.remaining
     if self.remaining <= 0 then
       release(self)
     elseif self.remaining < FADE then
       self:SetAlpha(self.remaining / FADE)
+    elseif age < FADE_IN then
+      self:SetAlpha(age / FADE_IN)
+    else
+      self:SetAlpha(1)
     end
   end)
   return f
@@ -171,10 +175,17 @@ function Toast.Layout()
   end
 end
 
-local function playSound(category)
+-- Sound per kind (settings.sound[kind]); a milestone chimes even when its kind is silent.
+local function playSound(spec)
   local s = ns.S().sound
-  if not s.enabled or not s[category] then return end
-  ns.Try("sound", PlaySound, SOUNDS[category], "Master")
+  if not s.enabled then return end
+  local id
+  if spec.kind and s[spec.kind] then
+    id = SOUNDS[spec.category] or SOUNDS.progress
+  elseif spec.milestone then
+    id = SOUNDS.progress
+  end
+  if id then ns.Try("sound", PlaySound, id, "Master") end
 end
 
 -- Do-not-disturb: in combat only PvP/sighting toasts get through; in instances everything waits.
@@ -198,7 +209,8 @@ local function show(spec)
   active[#active + 1] = f
   Toast.Layout()
   f:Show()
-  playSound(spec.category)
+  playSound(spec)
+  Toast.shown = (Toast.shown or 0) + 1
 end
 
 function Toast.Pump()
@@ -255,7 +267,7 @@ function Toast.Push(spec)
   spec.sim = spec.sim or ns.simulating or nil
   if mode == "chat" then
     if not spec.quiet then Toast.Chat(spec.chat or spec.title, spec.sim) end
-    if spec.category == "sighting" then playSound("sighting") end -- the one chat line worth a sound
+    if not spec.quiet then playSound(spec) end
     return
   end
   if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast

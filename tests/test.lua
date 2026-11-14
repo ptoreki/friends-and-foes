@@ -287,7 +287,7 @@ check(heldSounds == beforeSounds and (SOUNDS_PLAYED or 0) > heldSounds, "progres
 
 -- routing: progress goes to chat, milestones toast, PvP toasts, "off" silences
 drainToasts()
-local function toasted(fn) local s = SOUNDS_PLAYED or 0; CHAT = {}; fn(); drainToasts(); return (SOUNDS_PLAYED or 0) > s end
+local function toasted(fn) local s = ns.Toast.shown or 0; CHAT = {}; fn(); drainToasts(); return (ns.Toast.shown or 0) > s end
 local t1 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 45 }, "r1"), "WHISPER", 77) end)
 check(not t1 and #CHAT == 1 and CHAT[1]:find("reached level 45", 1, true) ~= nil, "ordinary level-up goes to chat: " .. tostring(CHAT[1]))
 local t2 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r2"), "WHISPER", 77) end)
@@ -338,7 +338,14 @@ check(real.players.Oldie == nil and real.hitlist["Enemy1 Foe"] ~= nil, "prune re
 
 -- UI + slash commands exercise
 SlashCmdList.FRIENDSANDFOES("")
-for _, tab in ipairs({ "hitlist", "enemies", "friends", "feed", "settings" }) do ns.UI.SelectTab(tab) end
+for _, tab in ipairs({ "hitlist", "players", "feed" }) do ns.UI.SelectTab(tab) end
+ns.UI.SetPlayerFilter("friends")
+ns.UI.SetPlayerFilter("enemies")
+SlashCmdList.FRIENDSANDFOES("options")
+ns.SetDebug(false); ns.Options.Refresh(); ns.SetDebug(true); ns.Options.Refresh()
+FriendsAndFoes_OnAddonCompartmentClick(nil, "LeftButton")
+FriendsAndFoes_OnAddonCompartmentClick(nil, "RightButton")
+check(ns.errors == 0, "window tabs, options panel, addon menu: no errors (" .. tostring(ns.lastError) .. ")")
 ns.UI.ShowPlayer("Rogz Fang")
 SlashCmdList.FRIENDSANDFOES("sim all")
 RUN_TIMERS()
@@ -351,6 +358,27 @@ check(ns.errors == 0, "no errors after UI/slash exercise (" .. tostring(ns.lastE
 check(#FriendsAndFoesDB.errorLog == 0, "error log empty")
 
 -- error log always on: force an error in a handler
+-- per-event sound, whatever the display; milestones chime even when their kind is silent
+local snd = ns.S().sound
+snd.level = true
+local s0 = SOUNDS_PLAYED or 0
+ns.Toast.Push({ kind = "level", category = "progress", title = "x", chat = "x" })
+check((SOUNDS_PLAYED or 0) == s0 + 1, "chat line plays its event's sound when on")
+snd.level = false
+s0 = SOUNDS_PLAYED or 0
+ns.Toast.Push({ kind = "level", category = "progress", title = "x", chat = "x" })
+check((SOUNDS_PLAYED or 0) == s0, "silent when that event's sound is off")
+drainToasts()
+s0 = SOUNDS_PLAYED or 0
+ns.Toast.Push({ kind = "level", category = "progress", title = "x", milestone = true })
+check((SOUNDS_PLAYED or 0) == s0 + 1, "milestone chimes even with its sound off")
+-- 0.4.2 sound settings (per category) migrate to per event
+snd.pvp, snd.progress = false, true
+FIRE("ADDON_LOADED", "FriendsAndFoes")
+check(snd.pvp == nil and snd.progress == nil and snd.attacked == false and snd.died == false and snd.kill == false and snd.loot == true,
+  "old per-category sound settings migrated")
+snd.attacked, snd.died = true, true
+
 -- performance: send pump idles when nothing is queued
 RUN_TICKERS(50)
 check(ns.Comm.QueuedCount() == 0 and not ns.Comm.PumpRunning(), "send pump stops when the queue is empty")

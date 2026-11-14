@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0
+Compatible with 0.3.x and 0.4.x.
+- **Choose per event:** Show (Toast / Chat / Off) and Sound (on / off) for each event. The
+  defaults are quiet: toasts and sound for fights, chat lines for everything else, and a soft
+  chime for milestones.
+- **Smaller toasts:** one compact line with a thin coloured edge. They fade in and out, 3 seconds
+  (5 for PvP), and at most 2 on screen.
+- **Softer sounds:** a short alert for PvP, the Battle.net chime for milestones, and the whisper
+  ping for sightings. The raid-warning horn and the level-up fanfare are gone.
+- **Settings moved** to the game's Options → AddOns panel. Open them with the Options button,
+  right-click on the minimap icon, or `/fnf options`.
+- **Simpler window:** Blizzard's window frame with tabs below it. Three tabs: Hitlist, Players
+  (Enemies / Friends filter) and Feed. Rows have class icons.
+- **Minimap:** Friends & Foes is now in the minimap's addon menu, so the separate minimap button
+  starts hidden. Turn it back on in Options.
+- Beta tools (test toasts, simulate, feature status) show only while debug logging is on.
+
 ## 0.4.2
 Compatible with 0.3.x and 0.4.x.
 - **"Friend attacked" only pops up when you could help.** If they're in your zone, it's a

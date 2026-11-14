@@ -1,32 +1,28 @@
 local _, ns = ...
 local L = ns.L
 
+-- The main window: a plain, native-looking reference you open now and then.
+-- Three tabs (Hitlist, Players, Feed); settings live in the game's Options panel.
 local UI = {}
 ns.UI = UI
 
-local WIDTH, HEIGHT = 700, 480
+local WIDTH, HEIGHT = 700, 470
 local ROWS, ROW_H = 15, 20
 local MAX_COLS = 7
 
-local win, rowsFrame, header, rows, detail, settings, pageText, emptyText, simBanner, friendsHint
+local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, filterBar
 local tabButtons = {}
 local currentTab = "hitlist"
+local playerFilter = "enemies" -- Players tab: "enemies" | "friends"
 local offset = 0
 local data = {}
 local selected
-
-local BACKDROP = {
-  bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-  edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-  tile = true, tileSize = 32, edgeSize = 32,
-  insets = { left = 11, right = 12, top = 12, bottom = 11 },
-}
 
 local function R() return ns.Data.ViewRealm() end
 local onlineNow = {} -- friend record name -> true while they are in the roster (not saved)
 
 ---------------------------------------------------------------------------
--- data per tab
+-- cell helpers
 ---------------------------------------------------------------------------
 local function sortedValues(tbl, filter)
   local out = {}
@@ -53,7 +49,16 @@ end
 
 local function lvl(e) return e.level and tostring(e.level) or "?" end
 local function guild(e) return e.guild and ("<" .. e.guild .. ">") or "" end
-local function nameCol(e) return ns.ClassColored(e.name, e.class) end
+
+-- small class icon, inline (|T path:h:w:x:y:texW:texH:l:r:t:b|t)
+local CLASS_ICONS = "Interface\\TargetingFrame\\UI-Classes-Circles"
+local function classIcon(class)
+  local c = class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[class]
+  if not c then return "" end
+  local f = math.floor
+  return ("|T%s:14:14:0:0:256:256:%d:%d:%d:%d|t "):format(CLASS_ICONS, f(c[1] * 256), f(c[2] * 256), f(c[3] * 256), f(c[4] * 256))
+end
+local function nameCol(e) return classIcon(e.class) .. ns.ClassColored(e.name, e.class) end
 
 local function hitKills(e)
   local s = tostring(e.kills or 0)
@@ -62,70 +67,80 @@ local function hitKills(e)
   return s
 end
 
+---------------------------------------------------------------------------
+-- tabs
+---------------------------------------------------------------------------
+local HITLIST_COLS = {
+  { L.COL_NAME, 165, nameCol },
+  { L.COL_LEVEL, 30, lvl },
+  { L.COL_GUILD, 95, guild },
+  { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end },
+  { L.COL_KILLS, 70, hitKills },
+  { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end },
+  { L.COL_LAST, 145, lastText },
+}
+
+local ENEMY_COLS = {
+  { L.COL_NAME, 170, nameCol },
+  { L.COL_LEVEL, 30, lvl },
+  { L.COL_GUILD, 110, guild },
+  { L.COL_KILLS_ON_US, 75, function(e) return e.k end },
+  { L.COL_DEATHS_TO_US, 70, function(e) return e.d end },
+  { L.COL_ASSISTS, 55, function(e) return e.a end },
+  { L.COL_LAST, 150, lastText },
+}
+
+local FRIEND_COLS = {
+  { L.COL_NAME, 165, nameCol },
+  { L.COL_LEVEL, 30, lvl },
+  { L.COL_VERSION, 50, function(e)
+    if not e.version then return "" end
+    if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
+    return e.version
+  end },
+  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end },
+  { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end },
+  { L.COL_ALERTS, 50, function(e)
+    local tag = ns.Comm.TagFor(e.name)
+    if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
+    if ns.Comm.GroupActive() then return "|cff888888" .. L.ALERTS_OFF .. "|r" end
+    return "|cff888888" .. L.ALERTS_ALL .. "|r"
+  end },
+  { L.COL_LAST_EVENT, 240, function(e)
+    if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
+    local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
+    return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
+  end },
+}
+
+-- friends we've heard from, plus online Battle.net friends in Forever the addon can see
+-- but hasn't received anything from yet (so you can tell "not detected" from "silent")
+local function fetchFriends()
+  local list = sortedValues(R().players, function(p) return p.friend end)
+  if ns.viewSim then return list end
+  wipe(onlineNow)
+  local onlineRows = {}
+  for _, name in ipairs(ns.Comm.EveryoneNames()) do
+    local p = ns.Data.Resolve(R().players, name)
+    local rec = R().players[p]
+    if rec and rec.friend then
+      onlineNow[rec.name] = true
+    else
+      onlineRows[#onlineRows + 1] = { name = name, pending = true }
+    end
+  end
+  for _, row in ipairs(onlineRows) do table.insert(list, 1, row) end
+  return list
+end
+
 local TABS = {
-  { key = "hitlist", label = L.TAB_HITLIST,
-    columns = {
-      { L.COL_NAME, 150, nameCol },
-      { L.COL_LEVEL, 30, lvl },
-      { L.COL_GUILD, 95, guild },
-      { L.COL_ATTACKS, 50, function(e) return e.attacks or 0 end },
-      { L.COL_KILLS, 75, hitKills },
-      { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end },
-      { L.COL_LAST, 150, lastText },
-    },
+  { key = "hitlist", label = L.TAB_HITLIST, columns = HITLIST_COLS,
     fetch = function() return sortedValues(R().hitlist) end },
-  { key = "enemies", label = L.TAB_ENEMIES,
-    columns = {
-      { L.COL_NAME, 155, nameCol },
-      { L.COL_LEVEL, 30, lvl },
-      { L.COL_GUILD, 110, guild },
-      { L.COL_KILLS_ON_US, 75, function(e) return e.k end },
-      { L.COL_DEATHS_TO_US, 70, function(e) return e.d end },
-      { L.COL_ASSISTS, 55, function(e) return e.a end },
-      { L.COL_LAST, 165, lastText },
-    },
-    fetch = function() return sortedValues(R().players, function(p) return p.enemy end) end },
-  { key = "friends", label = L.TAB_FRIENDS,
-    columns = {
-      { L.COL_NAME, 150, nameCol },
-      { L.COL_LEVEL, 30, lvl },
-      { L.COL_VERSION, 50, function(e)
-        if not e.version then return "" end
-        if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
-        return e.version
-      end },
-      { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or e.k end },
-      { L.COL_DEATHS, 55, function(e) return e.pending and "" or e.d end },
-      { L.COL_ALERTS, 50, function(e)
-        local tag = ns.Comm.TagFor(e.name)
-        if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
-        if ns.Comm.GroupActive() then return "|cff888888" .. L.ALERTS_OFF .. "|r" end
-        return "|cff888888" .. L.ALERTS_ALL .. "|r"
-      end },
-      { L.COL_LAST_EVENT, 255, function(e)
-        if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
-        local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
-        return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
-      end },
-    },
-    -- friends we've heard from, plus online Battle.net friends in Forever the addon can see
-    -- but hasn't received anything from yet (so you can tell "not detected" from "silent")
+  { key = "players", label = L.TAB_PLAYERS,
+    columns = function() return playerFilter == "friends" and FRIEND_COLS or ENEMY_COLS end,
     fetch = function()
-      local rows = sortedValues(R().players, function(p) return p.friend end)
-      if ns.viewSim then return rows end
-      wipe(onlineNow)
-      local onlineRows = {}
-      for _, name in ipairs(ns.Comm.EveryoneNames()) do
-        local p = ns.Data.Resolve(R().players, name)
-        local rec = R().players[p]
-        if rec and rec.friend then
-          onlineNow[rec.name] = true
-        else
-          onlineRows[#onlineRows + 1] = { name = name, pending = true }
-        end
-      end
-      for _, row in ipairs(onlineRows) do table.insert(rows, 1, row) end
-      return rows
+      if playerFilter == "friends" then return fetchFriends() end
+      return sortedValues(R().players, function(p) return p.enemy end)
     end },
   { key = "feed", label = L.TAB_FEED,
     columns = {
@@ -137,20 +152,27 @@ local TABS = {
       for i = #feed, 1, -1 do out[#out + 1] = feed[i] end
       return out
     end },
-  { key = "settings", label = L.TAB_SETTINGS },
 }
 
 local function tabDef(key)
   for _, t in ipairs(TABS) do if t.key == key then return t end end
+  return TABS[1]
 end
+
+local function colsOf(def)
+  if type(def.columns) == "function" then return def.columns() end
+  return def.columns
+end
+
+local function friendsView() return currentTab == "players" and playerFilter == "friends" end
 
 ---------------------------------------------------------------------------
 -- list rendering
 ---------------------------------------------------------------------------
-local function layoutColumns(def)
+local function layoutColumns(cols)
   local x = 0
   for c = 1, MAX_COLS do
-    local col = def.columns[c]
+    local col = cols[c]
     local h = header.cells[c]
     if col then
       h:ClearAllPoints()
@@ -203,36 +225,37 @@ local function refreshDetail()
   end
 end
 
+local function selectTabButton(b, on)
+  if PanelTemplates_SelectTab and b.isPanelTab then
+    pcall(on and PanelTemplates_SelectTab or PanelTemplates_DeselectTab, b)
+  elseif on then
+    b:LockHighlight()
+  else
+    b:UnlockHighlight()
+  end
+end
+
 function UI.Refresh()
   if not win or not win:IsShown() then return end
   local def = tabDef(currentTab)
-  for _, b in ipairs(tabButtons) do
-    if b.key == currentTab then b:LockHighlight() else b:UnlockHighlight() end
-  end
+  currentTab = def.key
+  for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == currentTab) end
   simBanner:SetShown(ns.viewSim and true or false)
+  filterBar:SetShown(currentTab == "players")
+  filterBar.enemies:SetEnabled(playerFilter ~= "enemies")
+  filterBar.friends:SetEnabled(playerFilter ~= "friends")
 
-  if currentTab == "settings" then
-    rowsFrame:Hide()
-    detail:Hide()
-    pageText:SetText("")
-    settings:Show()
-    friendsHint:Hide()
-    UI.RefreshSettings()
-    return
-  end
-  settings:Hide()
-  rowsFrame:Show()
-
+  local cols = colsOf(def)
   data = def.fetch()
   local maxOffset = math.max(0, #data - ROWS)
   if offset > maxOffset then offset = maxOffset end
-  layoutColumns(def)
+  layoutColumns(cols)
 
   for i, row in ipairs(rows) do
     local e = data[offset + i]
     row.entry = e
     if e then
-      for c, col in ipairs(def.columns) do
+      for c, col in ipairs(cols) do
         local ok, val = pcall(col[3], e)
         row.cells[c]:SetText(ok and tostring(val) or "?")
       end
@@ -249,7 +272,7 @@ function UI.Refresh()
     pageText:SetText(#data > 0 and tostring(#data) or "")
   end
   refreshDetail()
-  friendsHint:SetShown(currentTab == "friends" and not ns.viewSim)
+  friendsHint:SetShown(friendsView() and not ns.viewSim)
   friendsHint:SetText(ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL)
 end
 
@@ -264,191 +287,19 @@ function UI.OnDataChanged()
 end
 
 function UI.SelectTab(key)
-  currentTab = key
+  currentTab = tabDef(key).key
   offset = 0
   UI.Refresh()
 end
 
----------------------------------------------------------------------------
--- settings tab
----------------------------------------------------------------------------
-local checks = {}
-local capsText, modeText
-
-local function check(parent, x, y, label, get, set)
-  local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-  cb:SetSize(22, 22)
-  cb:SetPoint("TOPLEFT", x, y)
-  local fs = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  fs:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-  fs:SetText(label)
-  cb:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
-  cb.get = get
-  checks[#checks + 1] = cb
-  return cb
+function UI.SetPlayerFilter(which)
+  playerFilter = which == "friends" and "friends" or "enemies"
+  offset = 0
+  UI.Refresh()
 end
 
--- a small button that cycles a kind through toast -> chat -> off
-local SHOW_NEXT = { toast = "chat", chat = "off", off = "toast" }
-local SHOW_LABEL = { toast = "|cffffd100" .. L.SHOW_TOAST .. "|r", chat = "|cff33ff99" .. L.SHOW_CHAT .. "|r", off = "|cff888888" .. L.SHOW_OFF .. "|r" }
-local cyclers = {}
-local function cycler(parent, x, y, label, kind)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(52, 20)
-  b:SetPoint("TOPLEFT", x, y)
-  local fs = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  fs:SetPoint("LEFT", b, "RIGHT", 6, 0)
-  fs:SetText(label)
-  b.refresh = function() b:SetText(SHOW_LABEL[ns.S().show[kind]] or SHOW_LABEL.toast) end
-  b:SetScript("OnClick", function()
-    local show = ns.S().show
-    show[kind] = SHOW_NEXT[show[kind]] or "toast"
-    b.refresh()
-  end)
-  cyclers[#cyclers + 1] = b
-  return b
-end
-
-local function heading(parent, x, y, text)
-  local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  fs:SetPoint("TOPLEFT", x, y)
-  fs:SetText(text)
-end
-
-local function buildSettings(parent)
-  local S = ns.S
-  local function toggle(tbl, key)
-    return function() return S()[tbl][key] end, function(v) S()[tbl][key] = v end
-  end
-  local STEP = 21
-
-  local x1, x2, x3 = 10, 230, 450
-  heading(parent, x1, -5, L.SHARE_HEADER)
-  local y = -24
-  for _, o in ipairs({ { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR }, { "pvp", L.OPT_PVP } }) do
-    check(parent, x1, y, o[2], toggle("share", o[1]))
-    y = y - STEP
-  end
-
-  y = y - 8
-  heading(parent, x1, y, L.DND_HEADER)
-  y = y - 19
-  check(parent, x1, y, L.OPT_DND_COMBAT, toggle("dnd", "combat"))
-  y = y - STEP
-  check(parent, x1, y, L.OPT_DND_INSTANCE, toggle("dnd", "instance"))
-  y = y - STEP
-  check(parent, x1, y, L.OPT_NEARBY_ONLY,
-    function() return S().nearbyOnly end,
-    function(v) S().nearbyOnly = v end)
-
-  heading(parent, x2, -5, L.TOAST_HEADER)
-  y = -24
-  for _, o in ipairs({
-    { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR },
-    { "attacked", L.OPT_ATTACKED }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL },
-    { "sighting", L.OPT_SIGHTING }, { "share", L.OPT_SHARE },
-  }) do
-    cycler(parent, x2, y, o[2], o[1])
-    y = y - STEP
-  end
-
-  heading(parent, x3, -5, L.SOUND_HEADER)
-  y = -24
-  for _, o in ipairs({
-    { "enabled", L.OPT_SOUND }, { "pvp", L.OPT_SOUND_PVP }, { "progress", L.OPT_SOUND_PROGRESS }, { "sighting", L.OPT_SOUND_SIGHTING },
-  }) do
-    check(parent, x3, y, o[2], toggle("sound", o[1]))
-    y = y - STEP
-  end
-
-  y = y - 8
-  heading(parent, x3, y, L.MISC_HEADER)
-  y = y - 19
-  check(parent, x3, y, L.OPT_MINIMAP,
-    function() return not S().minimap.hide end,
-    function(v)
-      S().minimap.hide = not v
-      if ns.Minimap then ns.Minimap.Update() end
-    end)
-  y = y - STEP
-  check(parent, x3, y, L.OPT_DEBUG,
-    function() return S().debug end,
-    function(v) ns.SetDebug(v) end)
-  y = y - STEP
-  check(parent, x3, y, L.OPT_MARK,
-    function() return S().mark end,
-    function(v)
-      S().mark = v
-      if ns.Marks then ns.Marks.Refresh() end
-    end)
-
-  local unlock = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  unlock:SetSize(110, 22)
-  unlock:SetPoint("TOPLEFT", x1, -205)
-  unlock:SetText(L.BTN_UNLOCK)
-  unlock:SetScript("OnClick", function() ns.Toast.ToggleUnlock() end)
-
-  local test = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  test:SetSize(110, 22)
-  test:SetPoint("LEFT", unlock, "RIGHT", 8, 0)
-  test:SetText(L.BTN_TEST)
-  test:SetScript("OnClick", function() ns.Toast.Test() end)
-
-  local sim = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  sim:SetSize(110, 22)
-  sim:SetPoint("LEFT", test, "RIGHT", 8, 0)
-  sim:SetText(L.BTN_SIM)
-  sim:SetScript("OnClick", function() ns.Sim.RunAll(false) end)
-
-  heading(parent, x1, -238, L.CAPS_HEADER)
-  capsText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  capsText:SetPoint("TOPLEFT", x1, -256)
-  capsText:SetJustifyH("LEFT")
-  capsText:SetWidth(210)
-
-  heading(parent, x2, -238, L.MODE_HEADER)
-  modeText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  modeText:SetPoint("TOPLEFT", x2, -256)
-  modeText:SetJustifyH("LEFT")
-  modeText:SetJustifyV("TOP")
-  modeText:SetWidth(420)
-end
-
-local CAP_LABELS = {
-  { "bnet", L.CAP_BNET }, { "whisper", L.CAP_WHISPER },
-  { "enemyDetect", L.CAP_ENEMY_DETECT }, { "targeting", L.CAP_TARGETING }, { "unitNames", L.CAP_NAMES },
-  { "deathRecap", L.CAP_RECAP }, { "honor", L.CAP_HONOR },
-}
-local CAP_COLORS = { ok = "|cff33ff33", secret = "|cffff5555", missing = "|cffff5555", untested = "|cffaaaaaa" }
-
-local function modeNotes()
-  local c, notes = ns.caps, {}
-  local function bad(k) return c[k] == "secret" or c[k] == "missing" end
-  if bad("enemyDetect") or bad("targeting") then
-    notes[#notes + 1] = L.MODE_NO_DETECT
-  elseif bad("unitNames") then
-    notes[#notes + 1] = L.MODE_NO_NAMES
-  end
-  if bad("deathRecap") then notes[#notes + 1] = L.MODE_NO_RECAP end
-  if bad("honor") then notes[#notes + 1] = L.MODE_NO_HONOR end
-  if c.bnet ~= "ok" and c.whisper ~= "ok" then notes[#notes + 1] = L.MODE_SYNC_UNTESTED end
-  if #notes == 0 then notes[1] = L.MODE_FULL end
-  table.insert(notes, 1, L.MILESTONE_NOTE)
-  return table.concat(notes, "\n\n")
-end
-
-function UI.RefreshSettings()
-  for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
-  for _, b in ipairs(cyclers) do b.refresh() end
-  local lines = {}
-  for _, c in ipairs(CAP_LABELS) do
-    local v = ns.caps[c[1]] or "untested"
-    lines[#lines + 1] = c[2] .. ": " .. (CAP_COLORS[v] or "") .. v .. "|r"
-  end
-  lines[#lines + 1] = L.ERRORS_LINE:format(ns.errors)
-  capsText:SetText(table.concat(lines, "\n"))
-  modeText:SetText(modeNotes())
-end
+function UI.OpenSettings() ns.Options.Open() end
+UI.RefreshSettings = function() if ns.Options then ns.Options.Refresh() end end
 
 ---------------------------------------------------------------------------
 -- window
@@ -461,11 +312,54 @@ local function button(parent, w, text, onClick)
   return b
 end
 
+local FALLBACK_BACKDROP = {
+  bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+  edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+  tile = true, tileSize = 32, edgeSize = 32,
+  insets = { left = 11, right = 12, top = 12, bottom = 11 },
+}
+
+-- Blizzard's plain window frame if available, else a dialog box
+local function createWindow()
+  local ok, f = pcall(CreateFrame, "Frame", "FriendsAndFoesFrame", UIParent, "BasicFrameTemplateWithInset")
+  local templated = ok and f and type(f.TitleBg) == "table"
+  if not templated then
+    if not (ok and f) then f = CreateFrame("Frame", "FriendsAndFoesFrame", UIParent, "BackdropTemplate") end
+    if f.SetBackdrop then f:SetBackdrop(FALLBACK_BACKDROP) end
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -4, -4)
+  end
+  local title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  if templated then title:SetPoint("CENTER", f.TitleBg, "CENTER", 0, 0) else title:SetPoint("TOP", 0, -14) end
+  title:SetText(L.ADDON)
+  return f
+end
+
+-- tabs hang below the window, like the Character or Social window
+local function createTab(parent, key, label, prev, index)
+  local ok, b = pcall(CreateFrame, "Button", "FriendsAndFoesFrameTab" .. index, parent, "PanelTabButtonTemplate")
+  local isPanelTab = ok and b and PanelTemplates_TabResize ~= nil
+  if not isPanelTab then
+    b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    b:SetSize(90, 22)
+  end
+  b:SetText(label)
+  b.isPanelTab = isPanelTab
+  if isPanelTab then pcall(PanelTemplates_TabResize, b, 0) end
+  b:SetScript("OnClick", function() UI.SelectTab(key) end)
+  if prev then
+    b:SetPoint("LEFT", prev, "RIGHT", isPanelTab and -14 or 4, 0)
+  else
+    b:SetPoint("TOPLEFT", parent, "BOTTOMLEFT", 12, isPanelTab and 2 or -2)
+  end
+  b.key = key
+  return b
+end
+
 local function build()
-  win = CreateFrame("Frame", "FriendsAndFoesFrame", UIParent, "BackdropTemplate")
+  win = createWindow()
   win:SetSize(WIDTH, HEIGHT)
   win:SetPoint("CENTER")
-  win:SetBackdrop(BACKDROP)
   win:SetFrameStrata("DIALOG")
   win:SetMovable(true)
   win:SetClampedToScreen(true)
@@ -477,17 +371,22 @@ local function build()
   win:Hide()
   tinsert(UISpecialFrames, "FriendsAndFoesFrame")
 
-  local title = win:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  title:SetPoint("TOP", 0, -18)
-  title:SetText(L.ADDON)
+  -- top row: Players filter (left), Options (right)
+  local options = button(win, 80, L.BTN_OPTIONS, function() UI.OpenSettings() end)
+  options:SetPoint("TOPRIGHT", -14, -30)
 
-  local close = CreateFrame("Button", nil, win, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -6, -6)
+  filterBar = CreateFrame("Frame", nil, win)
+  filterBar:SetSize(200, 22)
+  filterBar:SetPoint("TOPLEFT", 14, -30)
+  filterBar.enemies = button(filterBar, 80, L.FILTER_ENEMIES, function() UI.SetPlayerFilter("enemies") end)
+  filterBar.enemies:SetPoint("LEFT")
+  filterBar.friends = button(filterBar, 80, L.FILTER_FRIENDS, function() UI.SetPlayerFilter("friends") end)
+  filterBar.friends:SetPoint("LEFT", filterBar.enemies, "RIGHT", 4, 0)
 
   -- simulation banner
   simBanner = CreateFrame("Frame", nil, win)
   simBanner:SetSize(260, 22)
-  simBanner:SetPoint("TOPLEFT", 18, -14)
+  simBanner:SetPoint("TOP", 0, -30)
   local simText = simBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   simText:SetPoint("LEFT")
   simText:SetText("|cffff9933" .. L.SIM_BANNER .. "|r")
@@ -498,20 +397,16 @@ local function build()
   simExit:SetPoint("LEFT", simText, "RIGHT", 6, 0)
   simBanner:Hide()
 
-  -- tabs
   local prev
-  for _, t in ipairs(TABS) do
-    local b = button(win, 100, t.label, function() UI.SelectTab(t.key) end)
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", 20, -44) end
-    b.key = t.key
-    tabButtons[#tabButtons + 1] = b
-    prev = b
+  for i, t in ipairs(TABS) do
+    prev = createTab(win, t.key, t.label, prev, i)
+    tabButtons[#tabButtons + 1] = prev
   end
 
   -- list area
   rowsFrame = CreateFrame("Frame", nil, win)
-  rowsFrame:SetPoint("TOPLEFT", 20, -74)
-  rowsFrame:SetPoint("BOTTOMRIGHT", -20, 80)
+  rowsFrame:SetPoint("TOPLEFT", 14, -58)
+  rowsFrame:SetPoint("BOTTOMRIGHT", -14, 76)
   rowsFrame:EnableMouseWheel(true)
   rowsFrame:SetScript("OnMouseWheel", function(_, delta)
     offset = math.max(0, math.min(offset - delta * 3, math.max(0, #data - ROWS)))
@@ -559,7 +454,7 @@ local function build()
       if currentTab == "hitlist" and self.entry then
         selected = self.entry.name
         UI.Refresh()
-      elseif currentTab == "friends" and self.entry and not ns.viewSim then
+      elseif friendsView() and self.entry and not ns.viewSim then
         UI.TogglePick(self.entry.name)
       end
     end)
@@ -571,17 +466,17 @@ local function build()
   emptyText:SetText(L.EMPTY)
 
   pageText = win:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  pageText:SetPoint("BOTTOMRIGHT", -24, 18)
+  pageText:SetPoint("BOTTOMRIGHT", -18, 10)
 
   friendsHint = win:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  friendsHint:SetPoint("BOTTOMLEFT", 24, 40)
-  friendsHint:SetPoint("BOTTOMRIGHT", -24, 40)
+  friendsHint:SetPoint("BOTTOMLEFT", 18, 40)
+  friendsHint:SetPoint("BOTTOMRIGHT", -18, 40)
   friendsHint:SetJustifyH("LEFT")
 
   -- hitlist detail (note / remove / share)
   detail = CreateFrame("Frame", nil, win)
-  detail:SetPoint("BOTTOMLEFT", 20, 30)
-  detail:SetPoint("BOTTOMRIGHT", -20, 30)
+  detail:SetPoint("BOTTOMLEFT", 16, 24)
+  detail:SetPoint("BOTTOMRIGHT", -16, 24)
   detail:SetHeight(46)
   detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   detail.label:SetPoint("TOPLEFT")
@@ -616,13 +511,6 @@ local function build()
   detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
   detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
-
-  -- settings
-  settings = CreateFrame("Frame", nil, win)
-  settings:SetPoint("TOPLEFT", 20, -76)
-  settings:SetPoint("BOTTOMRIGHT", -20, 20)
-  buildSettings(settings)
-  settings:Hide()
 
   -- keep the share queue counter live while the window is open
   C_Timer.NewTicker(1, function()
@@ -684,10 +572,18 @@ local function groupCommand(arg)
   print("  " .. L.PICK_USAGE)
 end
 
+-- tab: "hitlist" | "players" | "feed"; the old names "enemies"/"friends" pick the Players filter
 function UI.Show(tab)
   if not win then build() end
+  if tab == "enemies" or tab == "friends" then
+    playerFilter = tab
+    tab = "players"
+  elseif tab == "settings" then
+    UI.OpenSettings()
+    return
+  end
   if tab then
-    currentTab = tab
+    currentTab = tabDef(tab).key
     offset = 0
   end
   win:Show()
@@ -726,8 +622,8 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   local prefix = "|cff33ff99" .. L.ADDON .. "|r "
   if msg == "" then
     UI.Toggle()
-  elseif msg == "settings" or msg == "config" then
-    UI.Show("settings")
+  elseif msg == "settings" or msg == "config" or msg == "options" then
+    UI.OpenSettings()
   elseif msg == "unlock" then
     ns.Toast.SetUnlocked(true)
   elseif msg == "lock" then
@@ -741,6 +637,7 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   elseif msg == "debug" then
     ns.SetDebug(not ns.S().debug)
     print(prefix .. "debug: " .. (ns.S().debug and "on" or "off"))
+    UI.RefreshSettings()
   elseif msg == "debug clear" then
     wipe(FriendsAndFoesDB.debugLog)
     wipe(FriendsAndFoesDB.errorLog)

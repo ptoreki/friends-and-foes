@@ -114,15 +114,23 @@ Rules:
   a **looted** epic BoE (crafted ones follow the setting), and a revenge kill.
 - Your own events go to the Feed only. Records are kept whatever the display setting.
 - **Chat lines:** "F&F: <feed text>" in the guild-achievement colour, with clickable item links.
-  They go to chat tab 1, or the tab picked with `/fnf chat <n>`. They play no sound, except
-  sightings (a whisper ping).
+  They go to chat tab 1, or the tab picked with `/fnf chat <n>`.
+- **Sound per event** (`settings.sound[kind]`): plays whenever that event is shown, as a toast or a
+  chat line. Defaults: on for friend attacked, friend killed, sighting and loot; off for the rest.
+  Milestones play a soft chime even when their event's sound is off. There's also a global
+  "Sounds on". Sounds:
+  - PvP: a short boss-whisper alert
+  - progress and milestones: the Battle.net toast chime
+  - sightings: the whisper ping
 - **Hitlist marks** (`settings.mark`, default on):
   - a skull next to a hitlist player's nameplate
   - a tooltip line: kills, attacks, who they hit, and your note
   - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
     still produce a chat line or toast.
-- **Toast layout:** movable anchor (`/fnf unlock`), 5 seconds each, at most 3 on screen, the rest
-  queued (at most 30).
+- **Toast layout:** one compact line (icon, title, details) on a dark strip with a thin coloured
+  edge: red for PvP, gold for progress, purple for sightings. It fades in and out. PvP toasts stay
+  5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is
+  movable (`/fnf unlock`).
 - **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
   Queued PvP toasts older than 60 seconds are dropped.
 - **Revenge:** a kill on a hitlist entry adds "revenge!" and "R<n>" to the Kills column.
@@ -132,22 +140,31 @@ Rules:
   in combat.
 - **Clicks:** a PvP toast opens that enemy in the main window. Hovering an item toast shows its
   tooltip.
-- **Sounds:** built-in. Separate sounds for PvP, progress and sightings, with a global on/off and
-  one per category. Settings from 0.3 that turned a toast off become Off.
+- **Older settings:** a 0.3 toast that was turned off becomes Off. A 0.4 sound category that was
+  off turns that category's events silent.
 
 ## UI
-- `/fnf` and a minimap button that can be hidden, both opening a tabbed window:
-  - **Hitlist**: the hitlist, plus a note editor and a Remove button
-  - **Enemies**: enemy K/D/A
-  - **Friends**: friends' K/D/A and level
+- **Window** (`/fnf`, the minimap addon menu, or the optional minimap button): Blizzard's plain
+  window frame, with tabs below it like the Character window.
+  - **Hitlist**: the hitlist, plus a note editor, Remove and Share
+  - **Players**: an Enemies / Friends filter
+    - Enemies shows K/D/A.
+    - Friends shows level, version, takedowns, deaths and alerts. Click a friend to pick them.
   - **Feed**: recent events
-  - **Settings**:
-    - share toggles per type (level, loot, gear, PvP)
-    - Toast / Chat / Off per type, and hitlist marks on or off
-    - sound toggles
-    - minimap, debug, unlock toasts, test toasts
-    - which features this client supports
-- Slash commands: `/fnf`, `/fnf settings`, `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
+  - Rows show class icons. An **Options** button opens the settings.
+- **Options** live in the game's Options → AddOns panel. If that panel can't be opened, the addon
+  opens its own window instead.
+  - Alerts: for each event, Show (Toast / Chat / Off, click to cycle) and Sound (on / off),
+    plus "nearby only" and "Sounds on"
+  - Share with friends, per type
+  - Do not disturb
+  - Other: hitlist marks, minimap button, debug logging, move toasts
+  - **Beta tools** (only while debug is on): test toasts, simulate, and which features this client
+    supports
+- **Minimap:** Friends & Foes is in the minimap's addon menu where the client has one
+  (`AddonCompartmentFunc`). The separate minimap button then starts hidden, once; your later
+  choice sticks.
+- Slash commands: `/fnf`, `/fnf options` (also `settings`), `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
   `/fnf share`, `/fnf group [name|BattleTag|all]`, `/fnf chat <tab>`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
   `/fnf debug clear`, `/fnf minimap`.
 

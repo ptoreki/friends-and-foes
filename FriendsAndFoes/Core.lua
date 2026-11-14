@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.4.2"
+ns.VERSION = "0.5.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -19,9 +19,10 @@ local DEFAULTS = {
   chatFrame = 1,
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
-  sound = { enabled = true, pvp = true, progress = true, sighting = true },
+  -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
+  sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
   dnd = { combat = true, instance = true },
-  minimap = { hide = false, angle = 210 },
+  minimap = { hide = false, angle = 210 }, -- hidden by default where the minimap addon menu exists
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
 }
@@ -160,6 +161,13 @@ ns.On("ADDON_LOADED", function(name)
       if v == false and db.settings.show[k] then db.settings.show[k] = "off" end
     end
     db.settings.toast = nil
+  end
+  -- 0.4.2 and earlier: sound per category (pvp, progress; "sighting" means the same now).
+  -- Keep "off" choices for the kinds in that category.
+  local snd = db.settings.sound
+  for old, kinds in pairs({ pvp = { "attacked", "died", "kill" }, progress = { "level", "loot", "gear", "share" } }) do
+    if snd[old] == false then for _, k in ipairs(kinds) do snd[k] = false end end
+    snd[old] = nil
   end
   db.realms = db.realms or {}
   db.debugLog = db.debugLog or {}
