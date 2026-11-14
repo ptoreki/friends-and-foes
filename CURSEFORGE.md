@@ -1,7 +1,7 @@
 # Friends & Foes
 
 **Summary (short description field):**
-Know when your friends level up, loot epics or get ganked - and never forget who ganked them.
+See your Battle.net friends' level-ups, epic loot and world PvP fights, and keep a hitlist of everyone who ganks your group.
 
 ---
 
