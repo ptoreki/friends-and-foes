@@ -497,7 +497,7 @@ function Toast.Sighting(name, class, zone, hit, by)
   -- flavor off: who and where only; on: their record too
   local text = place
   if ns.S().flavor ~= false and hit then
-    text = L.SIGHTING_RECORD:format(ns.Count(hit.kills), ns.Count(hit.attacks)) .. ns.Flavor.SEP .. place
+    text = L.SIGHTING_RECORD:format(ns.Count(hit.kills)) .. ns.Flavor.SEP .. place
   end
   local line = title .. ns.Flavor.SEP .. text
   Toast.Push({

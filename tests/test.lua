@@ -649,9 +649,9 @@ local function sortedBy(key, desc)
   return true
 end
 check(sortedBy(function(e) return e.lastSeen or 0 end, true), "default: newest first")
-ns.UI.SortBy(5) -- Kills
+ns.UI.SortBy(4) -- Kills
 check(sortedBy(function(e) return e.kills or 0 end, true), "click Kills: most kills first")
-ns.UI.SortBy(5)
+ns.UI.SortBy(4)
 check(sortedBy(function(e) return e.kills or 0 end, false), "click Kills again: fewest first")
 ns.UI.SortBy(1)
 check(sortedBy(function(e) return (e.name or ""):lower() end, false), "click Name: A-Z")
@@ -850,7 +850,7 @@ do
   drainToasts()
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale (Astranaar)" }, "sg1"), "WHISPER", 77)
   local sightLine = ns.Plain(lastFeed())
-  check(sightLine:find("Seen Guy spotted by Buddy Pal", 1, true) and sightLine:find("1 kills, 2 attacks", 1, true)
+  check(sightLine:find("Seen Guy spotted by Buddy Pal", 1, true) and sightLine:find("1 kills on us", 1, true) and not sightLine:find("attacks", 1, true)
     and sightLine:find("Astranaar", 1, true), "friend's sighting: who, by whom, record, where: " .. sightLine)
   local feedN = #real.feed
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale" }, "sg2"), "WHISPER", 77)

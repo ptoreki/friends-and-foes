@@ -87,9 +87,8 @@ local HITLIST_COLS = {
   { L.COL_NAME, 165, nameCol, byName },
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_GUILD, 95, guild, byGuild },
-  { L.COL_ATTACKS, 50, function(e) return C(e.attacks) end, function(e) return C(e.attacks) end },
   { L.COL_KILLS, 70, hitKills, function(e) return e.kills or 0 end },
-  { L.COL_VICTIMS, 105, function(e) return victimsText(e.victims) end, function(e) return count(e.victims) end },
+  { L.COL_VICTIMS, 155, function(e) return victimsText(e.victims) end, function(e) return count(e.victims) end },
   { L.COL_LAST, 145, lastText, byLast },
 }
 

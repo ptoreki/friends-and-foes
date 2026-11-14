@@ -8,6 +8,9 @@ Compatible with 0.3.x to 0.6.1.
   - Kills from before 0.5.1, when per-friend counting started, are listed as "before counting
     began".
 - The tooltip on a hitlist player's nameplate shows the counts too: "killed Bob 3x, Alice 1x".
+- **Attacks are no longer shown** on the hitlist: not in the hover, the Attacks column (removed),
+  the nameplate tooltip, or sighting messages. Kills are what count. Attacks are still counted
+  in the background.
 
 ## 0.6.1
 Compatible with 0.3.x to 0.6.0. Friends need 0.6.1 to send these alerts.

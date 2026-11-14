@@ -26,11 +26,11 @@ L.HEADER_MILESTONE = { level = "Max level!", loot = "Epic BoE!" }
 L.HEADER_REVENGE = "Revenge!"
 L.HEADER_STREAK = "Kill streak!"
 L.CHAT_SHARE = "%s is sharing their hitlist with you"
-L.TOOLTIP_HIT = "Hitlist: %d kills, %d attacks on us"
+L.TOOLTIP_HIT = "Hitlist: %d kills on us"
 L.TOOLTIP_VICTIMS = "killed %s"
 -- sightings: "Hitlist: Rogz nearby · 2 kills, 3 attacks · Refuge Pointe"
 L.SIGHTING = "Hitlist: %s nearby"
-L.SIGHTING_RECORD = "%d kills, %d attacks"
+L.SIGHTING_RECORD = "%d kills on us"
 
 -- PvP wording (Flavor.lua): who did what; extras and the place follow after " · ".
 -- Lists: one is picked at random for variety.
@@ -91,7 +91,6 @@ L.PICK_USAGE = "/fnf group <name or BattleTag> toggles a friend, /fnf group all 
 L.TAB_FEED = "Feed"
 L.COL_NAME = "Name"
 L.COL_LEVEL = "Lvl"
-L.COL_ATTACKS = "Attacks"
 L.COL_KILLS = "Kills"
 L.COL_VICTIMS = "Victims"
 L.COL_LAST = "Last seen"
