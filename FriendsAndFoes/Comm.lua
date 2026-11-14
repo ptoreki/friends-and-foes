@@ -87,10 +87,11 @@ local SCHEMA = {
   DIE  = { "zone", "killer", "conf", "assists", "ended" },        -- ended: kill streak this death ended
   KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak" }, -- streak: kills in a row incl. this
   HIT  = { "share", "entries" },
+  SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
 }
 Comm.SCHEMA = SCHEMA
 
-local PRIORITY_OF = { ATK = "high", DIE = "high", KILL = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { ATK = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -207,7 +208,9 @@ function Comm.RebuildRoster()
           end
         end
         if not why then
-          local entry = { gid = g.gameAccountID, faction = g.factionName, tag = tag }
+          local zone = g.areaName
+          if issecret(zone) or zone == "" then zone = nil end
+          local entry = { gid = g.gameAccountID, faction = g.factionName, tag = tag, zone = zone }
           everyone[name] = entry
           if g.gameAccountID then tagByGid[g.gameAccountID] = tag or false end
           rememberTag(name, tag)
@@ -280,6 +283,12 @@ local function learnFull(key, full, gid)
     end
   end
   rememberTag(full, gid and tagByGid[gid] or (everyone[full] and everyone[full].tag))
+end
+
+-- the zone Battle.net says an online friend is in (nil if unknown)
+function Comm.ZoneOf(name)
+  local e = name and everyone[name]
+  return e and e.zone
 end
 
 function Comm.EveryoneNames()

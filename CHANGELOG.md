@@ -1,7 +1,21 @@
 # Changelog
 
-## 0.5.6
-Compatible with 0.3.x to 0.5.5.
+## 0.6.0
+Compatible with 0.3.x to 0.5.5. Friends need 0.6.0 to send or receive sightings.
+- **Shared hitlist sightings:** when a friend spots someone from their hitlist, you get
+  "Rogz Fang spotted by Bob · 2 kills, 3 attacks · Astranaar". You're alerted once per player
+  every 5 minutes, whoever spots them. This uses the Hitlist sighting alert setting and the
+  World PvP share setting.
+- **Toast size and duration:** sliders in Options → Appearance (70-150%, 2-10 seconds; PvP toasts
+  stay 2 seconds longer). Also `/fnf size 120` and `/fnf duration 5`.
+- **Search box** in the window. It filters the Hitlist and Players lists by name or guild, and
+  the Feed by text.
+- **Friend's zone** in the Friends list ("online · Ashenvale"), from Battle.net.
+- **Weekly summary:** once a week at login, a chat line with your takedowns, deaths and nemesis.
+  It can be turned off in Options → Appearance.
+- **Minimap and addon-menu tooltip** shows friends online, hitlist size and your last fight.
+- **Welcome message** the first time the addon runs.
+- The simulation banner moved to the bottom of the window.
 - **New Options page: Where it works.**
   - **Alerts while you're in:** a dropdown each for Dungeons, Raids and Battlegrounds.
     Choices: *Show*, *Wait until I'm out* (the default, same as before), *Chat line only*, or *Off*.

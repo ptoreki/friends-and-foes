@@ -187,7 +187,7 @@ L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|died|kill|sighting|all> [self] 
 L.SIM_CLEARED = "simulation data cleared"
 
 -- slash
-L.HELP = "/fnf [settings | unlock | lock | test | status | group | chat | share | sim | debug | debug clear | minimap]"
+L.HELP = "/fnf [options | unlock | lock | test | status | group | chat | size | duration | share | sim | debug | debug clear | minimap]"
 
 -- native options panel (Options.lua): pages, choices and hover tooltips
 L.PAGE_APPEARANCE = "Appearance"
@@ -280,3 +280,25 @@ L.CONFIRM_REMOVE_PLAYER = "Remove %s and their kill/death record?"
 L.CONFIRM_CLEAR_HITLIST = "Clear your whole hitlist (%d players)? This can't be undone."
 L.BTN_CLEAR_HITLIST = "Clear hitlist"
 L.REMOVE_HINT = "Right-click a player to remove them."
+
+-- 0.6: shared sightings, toast size/duration, search, polish
+L.SIGHTING_BY = "%s spotted by %s"
+L.HEADER_SIGHT_FRIEND = "Spotted by a friend"
+L.OPT_TOAST_SIZE = "Toast size"
+L.TIP_TOAST_SIZE = "Make toasts bigger or smaller."
+L.OPT_TOAST_DURATION = "Show toasts for"
+L.TIP_TOAST_DURATION = "How long a toast stays. PvP toasts stay 2 seconds longer. Hover a toast to keep it."
+L.OPT_WEEKLY = "Weekly summary"
+L.TIP_WEEKLY = "Once a week at login, a chat line with your PvP week: takedowns, deaths and your nemesis."
+L.WEEKLY = "Your PvP week: %d takedowns, %d deaths."
+L.WEEKLY_NEMESIS = "Nemesis: %s (%d kills on you)."
+L.SEARCH = "Search"
+L.SEARCH_NONE = "No matches."
+L.WELCOME_1 = "is on. You'll hear about your friends' level-ups, loot and world PvP fights."
+L.WELCOME_2 = "Type /fnf for the window, or open Options -> AddOns -> Friends & Foes to choose what pops up."
+L.TIP_FRIENDS_ONLINE = "Friends online: %d"
+L.TIP_HITLIST_SIZE = "On your hitlist: %d"
+L.TIP_LAST_FIGHT = "Last fight: %s"
+L.SIZE_USAGE = "/fnf size <70-150> - toast size in percent (now %d%%)"
+L.DURATION_USAGE = "/fnf duration <2-10> - seconds a toast stays (now %d)"
+L.DURATION_SET = "Toasts now stay %d seconds."

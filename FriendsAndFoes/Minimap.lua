@@ -46,12 +46,7 @@ local function create()
   end)
   button:SetScript("OnDragStart", function(self) self:SetScript("OnUpdate", onDragUpdate) end)
   button:SetScript("OnDragStop", function(self) self:SetScript("OnUpdate", nil) end)
-  button:SetScript("OnEnter", function(self)
-    GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-    GameTooltip:AddLine(L.ADDON)
-    GameTooltip:AddLine(L.MINIMAP_TIP, 1, 1, 1)
-    GameTooltip:Show()
-  end)
+  button:SetScript("OnEnter", function(self) Minimap_.ShowTooltip(self) end)
   button:SetScript("OnLeave", function() GameTooltip:Hide() end)
   place()
 end
@@ -61,7 +56,45 @@ function Minimap_.Update()
   button:SetShown(not ns.S().minimap.hide)
 end
 
+-- hover summary: friends online, hitlist size, last fight
+function Minimap_.Summary()
+  local friends = 0
+  for _ in pairs(ns.Comm.roster) do friends = friends + 1 end
+  local hits = 0
+  for _ in pairs(ns.Data.RealRealm().hitlist) do hits = hits + 1 end
+  local lastFight
+  local feed = ns.Data.RealRealm().feed
+  for i = #feed, 1, -1 do
+    local k = feed[i].kind
+    if k == "attacked" or k == "died" or k == "kill" then
+      lastFight = feed[i]
+      break
+    end
+  end
+  return friends, hits, lastFight
+end
+
+function Minimap_.ShowTooltip(owner)
+  local friends, hits, lastFight = Minimap_.Summary()
+  GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
+  GameTooltip:AddLine(L.ADDON)
+  GameTooltip:AddLine(L.TIP_FRIENDS_ONLINE:format(friends), 1, 1, 1)
+  GameTooltip:AddLine(L.TIP_HITLIST_SIZE:format(hits), 1, 1, 1)
+  if lastFight then
+    GameTooltip:AddLine(L.TIP_LAST_FIGHT:format(ns.Ago(lastFight.t)), 1, 1, 1)
+    GameTooltip:AddLine(lastFight.text, 0.8, 0.8, 0.8, true)
+  end
+  GameTooltip:AddLine(" ")
+  GameTooltip:AddLine(L.MINIMAP_TIP, 0.6, 0.6, 0.6)
+  GameTooltip:Show()
+end
+
 -- the minimap's addon menu (modern clients): left-click opens the window, right-click options
+function FriendsAndFoes_OnAddonCompartmentEnter(_, frame)
+  ns.Try("compartment-tip", Minimap_.ShowTooltip, frame)
+end
+function FriendsAndFoes_OnAddonCompartmentLeave() GameTooltip:Hide() end
+
 function FriendsAndFoes_OnAddonCompartmentClick(_, button)
   if button == "RightButton" then ns.UI.OpenSettings() else ns.UI.Toggle() end
 end

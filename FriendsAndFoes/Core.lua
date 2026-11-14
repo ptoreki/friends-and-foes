@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.5.6"
+ns.VERSION = "0.6.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -20,6 +20,9 @@ local DEFAULTS = {
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
   theme = "minimal", -- toast look: "minimal" | "achievement"
+  toastScale = 1,    -- toast size (0.7 - 1.5)
+  toastDuration = 3, -- seconds a toast stays (PvP toasts 2 longer)
+  weekly = true,     -- weekly PvP summary in chat
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
@@ -46,6 +49,12 @@ local function fillDefaults(dst, src)
 end
 
 function ns.S() return FriendsAndFoesDB.settings end
+
+-- text without colour codes, links or inline textures (for logs and searching)
+function ns.Plain(s)
+  if type(s) ~= "string" then return tostring(s) end
+  return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"):gsub("|T.-|t", ""))
+end
 
 -- where you are: "world", "party" (dungeon or scenario), "raid", "pvp" (battleground),
 -- or "unknown" if the game won't say. Forever has no arenas; one would count as a battleground.
@@ -180,7 +189,7 @@ ns.On("ADDON_LOADED", function(name)
     end
     db.settings.toast = nil
   end
-  -- 0.5.6 and earlier: one "hold toasts in instances" switch; off meant show everywhere
+  -- 0.6.0 and earlier: one "hold toasts in instances" switch; off meant show everywhere
   if db.settings.dnd.instance ~= nil then
     if db.settings.dnd.instance == false then
       for k in pairs(db.settings.where) do db.settings.where[k] = "show" end

@@ -29,7 +29,7 @@ local SOUNDS = {
 
 local queue, active = {}, {}
 local pools = {} -- theme -> spare frames
-local anchor
+local anchor, holder
 
 ---------------------------------------------------------------------------
 -- anchor (movable)
@@ -61,6 +61,19 @@ local function createAnchor()
   anchor.label:SetText(L.ANCHOR_LABEL)
   anchor:EnableMouse(false)
   anchor:SetAlpha(0)
+  -- toasts hang from a holder under the anchor, so their size can be scaled as a group
+  holder = CreateFrame("Frame", nil, UIParent)
+  holder:SetSize(WIDTH, 1)
+  holder:SetPoint("TOP", anchor, "BOTTOM", 0, 0)
+  holder:SetFrameStrata("HIGH")
+  Toast.ApplyScale()
+end
+
+-- Options -> Appearance: toast size
+function Toast.ApplyScale()
+  if not holder then return end
+  local s = tonumber(ns.S().toastScale) or 1
+  holder:SetScale(math.max(0.7, math.min(1.5, s)))
 end
 
 function Toast.SetUnlocked(unlocked)
@@ -208,13 +221,15 @@ end
 
 local function render(f)
   THEMES[f.theme].render(f, f.spec)
-  f.duration = f.spec.category == "pvp" and DURATION_PVP or DURATION
+  -- Options -> Appearance: how long toasts stay; PvP ones 2 seconds longer
+  local d = math.max(2, math.min(10, tonumber(ns.S().toastDuration) or DURATION))
+  f.duration = f.spec.category == "pvp" and d + (DURATION_PVP - DURATION) or d
   f.remaining = f.duration
   f:SetAlpha(0)
 end
 
 local function createToast(theme)
-  local f = CreateFrame("Button", nil, UIParent)
+  local f = CreateFrame("Button", nil, holder or UIParent)
   f.theme = theme
   f:SetFrameStrata("HIGH")
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -263,7 +278,7 @@ function Toast.Layout()
   local y = 0
   for _, f in ipairs(active) do
     f:ClearAllPoints()
-    f:SetPoint("TOP", anchor, "BOTTOM", 0, -y)
+    f:SetPoint("TOP", holder or anchor, holder and "TOP" or "BOTTOM", 0, -y)
     y = y + (tonumber(f:GetHeight()) or HEIGHT) + GAP
   end
 end
@@ -442,17 +457,24 @@ end
 ---------------------------------------------------------------------------
 -- sightings + test
 ---------------------------------------------------------------------------
-function Toast.Sighting(name, class, zone, hit)
-  local title = L.SIGHTING:format(ns.ClassColored(name, class))
+-- by = the friend who spotted them (coloured), or nil if you did. hit may be nil when they're on
+-- your friend's hitlist but not yours. Returns the line (for the Feed).
+function Toast.Sighting(name, class, zone, hit, by)
+  local who = ns.ClassColored(name, class)
+  local title = by and L.SIGHTING_BY:format(who, by) or L.SIGHTING:format(who)
   local place = ns.Flavor.Place(zone)
   -- flavor off: who and where only; on: their record too
-  local text = ns.S().flavor == false and place
-    or (L.SIGHTING_RECORD:format(hit.kills or 0, hit.attacks or 0) .. ns.Flavor.SEP .. place)
+  local text = place
+  if ns.S().flavor ~= false and hit then
+    text = L.SIGHTING_RECORD:format(hit.kills or 0, hit.attacks or 0) .. ns.Flavor.SEP .. place
+  end
+  local line = title .. ns.Flavor.SEP .. text
   Toast.Push({
     kind = "sighting", category = "sighting", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
-    title = title, text = text, chat = title .. ns.Flavor.SEP .. text,
-    player = name,
+    title = title, text = text, chat = line, player = name,
+    header = by and L.HEADER_SIGHT_FRIEND or nil,
   })
+  return line
 end
 
 -- one of each toast style, worded like the real thing

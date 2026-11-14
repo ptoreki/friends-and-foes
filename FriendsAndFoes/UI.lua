@@ -14,6 +14,8 @@ local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, frie
 local tabButtons = {}
 local currentTab = "hitlist"
 local playerFilter = "enemies" -- Players tab: "enemies" | "friends"
+local search = "" -- search box text (lowercase); filters the current list
+local searchBox
 local offset = 0
 local data = {}
 local selected
@@ -114,8 +116,12 @@ local FRIEND_COLS = {
     return "|cff888888" .. L.ALERTS_ALL .. "|r"
   end, function(e) return ns.Comm.IsPicked(ns.Comm.TagFor(e.name)) and 1 or 0 end },
   { L.COL_LAST_EVENT, 240, function(e)
-    if e.pending then return "|cff33ff33" .. L.FRIEND_ONLINE .. "|r  |cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
-    local online = onlineNow[e.name] and ("|cff33ff33" .. L.FRIEND_ONLINE .. "|r  ") or ""
+    -- "online · Ashenvale": the zone comes from Battle.net
+    local function onlineText(zone)
+      return "|cff33ff33" .. L.FRIEND_ONLINE .. (zone and (" \194\183 " .. zone) or "") .. "|r  "
+    end
+    if e.pending then return onlineText(e.zone) .. "|cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
+    local online = onlineNow[e.name] and onlineText(type(onlineNow[e.name]) == "string" and onlineNow[e.name] or nil) or ""
     return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
   end, function(e) return e.pending and math.huge or (e.lastSeen or 0) end },
 }
@@ -135,9 +141,9 @@ local function fetchFriends()
     local p = ns.Data.Resolve(R().players, name)
     local rec = R().players[p]
     if rec and rec.friend then
-      onlineNow[rec.name] = true
+      onlineNow[rec.name] = ns.Comm.ZoneOf(name) or true
     else
-      onlineRows[#onlineRows + 1] = { name = name, pending = true }
+      onlineRows[#onlineRows + 1] = { name = name, pending = true, zone = ns.Comm.ZoneOf(name) }
     end
   end
   for _, row in ipairs(onlineRows) do table.insert(list, 1, row) end
@@ -203,6 +209,12 @@ local function applySort(list, cols)
 end
 
 -- click a column header: sort by it; click again to flip the order
+function UI.SetSearch(text)
+  search = strtrim(text or ""):lower()
+  offset = 0
+  UI.Refresh()
+end
+
 -- the rows currently listed (sorted), for tests
 function UI.Rows() return data end
 
@@ -307,6 +319,15 @@ function UI.Refresh()
 
   local cols = colsOf(def)
   data = def.fetch()
+  -- search box: keep rows whose name or guild (or Feed text) contains the search
+  if search ~= "" then
+    local kept = {}
+    for _, e in ipairs(data) do
+      local hay = ((e.name or "") .. " " .. (e.guild or "") .. " " .. ns.Plain(e.text or "")):lower()
+      if hay:find(search, 1, true) then kept[#kept + 1] = e end
+    end
+    data = kept
+  end
   applySort(data, cols)
   local maxOffset = math.max(0, #data - ROWS)
   if offset > maxOffset then offset = maxOffset end
@@ -327,6 +348,7 @@ function UI.Refresh()
     end
   end
   emptyText:SetShown(#data == 0)
+  emptyText:SetText(search ~= "" and L.SEARCH_NONE or L.EMPTY)
   local paged = #data > ROWS
   if paged then
     pageText:SetText(string.format("%d-%d of %d", offset + 1, math.min(offset + ROWS, #data), #data))
@@ -531,6 +553,27 @@ local function build()
   local options = button(win, 80, L.BTN_OPTIONS, function() UI.OpenSettings() end)
   options:SetPoint("TOPRIGHT", -14, -30)
 
+  -- search: filters the current list by name / guild (Feed: by text)
+  local okBox, box = pcall(CreateFrame, "EditBox", "FriendsAndFoesSearchBox", win, "SearchBoxTemplate")
+  if not (okBox and box) then box = CreateFrame("EditBox", "FriendsAndFoesSearchBox", win, "InputBoxTemplate") end
+  box:SetSize(150, 20)
+  box:SetPoint("RIGHT", options, "LEFT", -12, 0)
+  box:SetAutoFocus(false)
+  local placeholder = box:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  placeholder:SetPoint("LEFT", 18, 0)
+  placeholder:SetText(L.SEARCH)
+  box:HookScript("OnTextChanged", function(self)
+    local text = self:GetText() or ""
+    placeholder:SetShown(text == "" and not (self.Instructions and self.Instructions:IsShown()))
+    UI.SetSearch(text)
+  end)
+  box:SetScript("OnEscapePressed", function(self)
+    self:SetText("")
+    self:ClearFocus()
+  end)
+  box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  searchBox = box
+
   filterBar = CreateFrame("Frame", nil, win)
   filterBar:SetSize(220, 24)
   filterBar:SetPoint("TOPLEFT", 16, -30)
@@ -545,7 +588,7 @@ local function build()
   -- simulation banner
   simBanner = CreateFrame("Frame", nil, win)
   simBanner:SetSize(260, 22)
-  simBanner:SetPoint("TOP", 0, -30)
+  simBanner:SetPoint("BOTTOMLEFT", 16, 2)
   local simText = simBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   simText:SetPoint("LEFT")
   simText:SetText("|cffff9933" .. L.SIM_BANNER .. "|r")
@@ -833,6 +876,38 @@ end
 ---------------------------------------------------------------------------
 -- slash
 ---------------------------------------------------------------------------
+-- first time on this account: a short hello in chat
+ns.OnReady(function()
+  if FriendsAndFoesDB.welcomed then return end
+  FriendsAndFoesDB.welcomed = true
+  C_Timer.After(6, function()
+    local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+    print(prefix .. L.WELCOME_1)
+    print(prefix .. L.WELCOME_2)
+  end)
+end)
+
+-- once a week at login: your PvP week in one line
+ns.OnReady(function()
+  local db = FriendsAndFoesDB
+  local now = time()
+  local w = db.weekly
+  if not w then
+    db.weekly = { start = now, k = 0, d = 0, killers = {} }
+    return
+  end
+  if now - (w.start or now) < 7 * 86400 then return end
+  db.weekly = { start = now, k = 0, d = 0, killers = {} }
+  if ns.S().weekly == false or ((w.k or 0) + (w.d or 0)) == 0 then return end
+  local line = L.WEEKLY:format(w.k or 0, w.d or 0)
+  local nemesis, most = nil, 0
+  for name, n in pairs(w.killers or {}) do
+    if n > most then nemesis, most = name, n end
+  end
+  if nemesis and most >= 2 then line = line .. " " .. L.WEEKLY_NEMESIS:format(nemesis, most) end
+  C_Timer.After(8, function() ns.Toast.Chat(line) end)
+end)
+
 SLASH_FRIENDSANDFOES1 = "/fnf"
 SlashCmdList.FRIENDSANDFOES = function(msg)
   msg = strtrim((msg or ""):lower())
@@ -859,6 +934,23 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     wipe(FriendsAndFoesDB.debugLog)
     wipe(FriendsAndFoesDB.errorLog)
     print(prefix .. "debug + error logs cleared")
+  elseif msg:find("^size") then
+    local n = tonumber(msg:match("%d+"))
+    if n and n >= 70 and n <= 150 then
+      ns.S().toastScale = n / 100
+      ns.Toast.ApplyScale()
+      ns.Toast.Test()
+    else
+      print(prefix .. L.SIZE_USAGE:format(math.floor((tonumber(ns.S().toastScale) or 1) * 100 + 0.5)))
+    end
+  elseif msg:find("^duration") then
+    local n = tonumber(msg:match("%d+"))
+    if n and n >= 2 and n <= 10 then
+      ns.S().toastDuration = n
+      print(prefix .. L.DURATION_SET:format(n))
+    else
+      print(prefix .. L.DURATION_USAGE:format(tonumber(ns.S().toastDuration) or 3))
+    end
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end

@@ -470,6 +470,14 @@ end)
 ---------------------------------------------------------------------------
 -- hitlist sightings
 ---------------------------------------------------------------------------
+-- one sighting alert per player every 5 minutes, whoever spotted them (you or a friend)
+function PvP.SightingDue(name)
+  local now = GetTime()
+  if sightCooldown[name] and now - sightCooldown[name] < SIGHTING_COOLDOWN then return false end
+  sightCooldown[name] = now
+  return true
+end
+
 local function checkSighting(unit)
   if not PvP.InWorldPvPContext() then return end
   local info = PvP.ReadEnemy(unit)
@@ -479,10 +487,10 @@ local function checkSighting(unit)
   if not hit then return end
   local zone = PvP.ZoneText()
   ns.Data.Touch(hit, { class = info.class, level = info.level, guild = info.guild, zone = zone })
-  local now = GetTime()
-  if sightCooldown[info.name] and now - sightCooldown[info.name] < SIGHTING_COOLDOWN then return end
-  sightCooldown[info.name] = now
+  if not PvP.SightingDue(info.name) then return end
   ns.Toast.Sighting(info.name, info.class, zone, hit)
+  -- tell friends too: they get "spotted by <you>"
+  ns.Events.Emit("SIGHT", { name = info.name, class = info.class or "", level = info.level or "", guild = info.guild or "", zone = zone })
 end
 
 ns.On("NAME_PLATE_UNIT_ADDED", function(unit)

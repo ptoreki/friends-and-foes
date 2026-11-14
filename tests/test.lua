@@ -838,6 +838,90 @@ do
   check(ns.errors == 0, "no errors removing/clearing (" .. tostring(ns.lastError) .. ")")
 end
 
+-- 0.6: shared sightings, toast size/duration, search, friend zones, weekly summary, welcome
+do
+  check(FriendsAndFoesDB.welcomed == true, "welcome shown once (flag set)")
+  -- shared sighting: a friend spots a hitlist player
+  real.hitlist["Seen Guy"] = { name = "Seen Guy", attacks = 2, kills = 1, victims = {} }
+  drainToasts()
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale (Astranaar)" }, "sg1"), "WHISPER", 77)
+  local sightLine = ns.Plain(lastFeed())
+  check(sightLine:find("Seen Guy spotted by Buddy Pal", 1, true) and sightLine:find("1 kills, 2 attacks", 1, true)
+    and sightLine:find("Astranaar", 1, true), "friend's sighting: who, by whom, record, where: " .. sightLine)
+  local feedN = #real.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale" }, "sg2"), "WHISPER", 77)
+  check(#real.feed == feedN, "same player again within 5 min: no second alert")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Not Mine", class = "MAGE", level = "30", guild = "", zone = "Duskwood" }, "sg3"), "WHISPER", 77)
+  check(ns.Plain(lastFeed()):find("Not Mine spotted by", 1, true) and not lastFeed():find("kills", 1, true), "someone not on your hitlist: shown without a record")
+  SENT = {}
+  ns.Events.Emit("SIGHT", { name = "Seen Guy", class = "ROGUE", level = 30, guild = "", zone = "Ashenvale" })
+  RUN_TICKERS(3)
+  local sentSight = false
+  for _, s in ipairs(SENT) do if s.payload:find("	SIGHT	", 1, true) then sentSight = true end end
+  check(sentSight, "your own sightings are sent to friends")
+  real.hitlist["Seen Guy"] = nil
+  -- toast duration
+  ns.S().toastDuration = 6
+  drainToasts()
+  ns.Toast.Push({ kind = "level", category = "progress", title = "dur", force = true })
+  local df
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "dur" then df = f end end
+  check(df and df.duration == 6, "toast duration setting")
+  drainToasts()
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "durpvp", force = true })
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "durpvp" then df = f end end
+  check(df and df.duration == 8, "PvP toasts stay 2 seconds longer")
+  drainToasts()
+  ns.S().toastDuration = 3
+  ns.S().toastScale = 1.2
+  ns.Toast.ApplyScale()
+  ns.S().toastScale = 1
+  ns.Toast.ApplyScale()
+  -- search
+  ns.UI.Show("hitlist")
+  ns.UI.SetSearch("ROGZ")
+  local rows = ns.UI.Rows()
+  check(#rows >= 1 and rows[1].name:find("Rogz", 1, true), "search filters by name (case-insensitive)")
+  ns.UI.SetSearch("zzzz-nobody")
+  check(#ns.UI.Rows() == 0, "search with no matches: empty")
+  ns.UI.SetSearch("")
+  ns.UI.Show("feed")
+  ns.UI.SetSearch("spotted")
+  check(#ns.UI.Rows() >= 1, "search works on the Feed text")
+  ns.UI.SetSearch("")
+  -- friend's zone from Battle.net
+  local origInfo = C_BattleNet.GetFriendGameAccountInfo
+  C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "X", factionName = "Horde", gameAccountID = 77, areaName = "Ashenvale" } end
+  ns.Comm.RebuildRoster()
+  check(ns.Comm.ZoneOf("Buddy Pal") == "Ashenvale", "friend's zone known")
+  C_BattleNet.GetFriendGameAccountInfo = origInfo
+  ns.Comm.RebuildRoster()
+  -- weekly summary
+  local w = FriendsAndFoesDB.weekly
+  check(w and w.start, "weekly tracking started")
+  local k0 = w.k or 0
+  FriendsAndFoesCharDB.streak = 0
+  ns.Events.Emit("KILL", { victim = "Week Victim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" })
+  check(FriendsAndFoesDB.weekly.k == k0 + 1, "your takedowns count toward the week")
+  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 3, d = 2, killers = { ["Rogz Fang"] = 2 } }
+  CHAT = {}
+  FIRE("PLAYER_LOGIN")
+  RUN_TIMERS()
+  local weekly
+  for _, line in ipairs(CHAT) do if line:find("Your PvP week", 1, true) then weekly = line end end
+  check(weekly and weekly:find("3 takedowns, 2 deaths", 1, true) and weekly:find("Nemesis: Rogz Fang (2", 1, true), "weekly summary after a week: " .. tostring(weekly))
+  check(FriendsAndFoesDB.weekly.k == 0 and time() - FriendsAndFoesDB.weekly.start < 60, "new week started")
+  FriendsAndFoesCharDB.streak = 0
+  -- minimap / addon-menu tooltip
+  local fr, hl = ns.Minimap.Summary()
+  check(type(fr) == "number" and type(hl) == "number", "tooltip summary numbers")
+  FriendsAndFoes_OnAddonCompartmentEnter("FriendsAndFoes", CreateFrame())
+  FriendsAndFoes_OnAddonCompartmentLeave()
+  ADVANCE(15) -- let the send queue's allowance refill for later tests
+  RUN_TICKERS(2)
+  check(ns.errors == 0, "no errors in 0.6 features (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

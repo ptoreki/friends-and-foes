@@ -344,6 +344,22 @@ function Options.BuildNative()
   for _, name in ipairs(ns.Toast.THEMES) do themes[#themes + 1] = { name, L.THEME_NAMES[name] or name, L.THEME_TIPS[name] } end
   proxyDropdown(look, "theme", "String", L.OPT_THEME, D.theme,
     function() return ns.Toast.Theme() end, function(v) S().theme = v end, themes, L.TIP_THEME)
+  if Settings.CreateSlider and Settings.CreateSliderOptions then
+    local function slider(key, name, default, get, set, min, max, step, fmt, tip)
+      local s = Settings.RegisterProxySetting(look, "FNF_" .. key, varType("Number"), name, default, get, set)
+      local o = Settings.CreateSliderOptions(min, max, step)
+      if o.SetLabelFormatter and MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
+        o:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(v) return fmt:format(v) end)
+      end
+      Settings.CreateSlider(look, s, o, tip)
+    end
+    slider("toastScale", L.OPT_TOAST_SIZE, 100,
+      function() return math.floor((tonumber(S().toastScale) or 1) * 100 + 0.5) end,
+      function(v) S().toastScale = v / 100; ns.Toast.ApplyScale() end, 70, 150, 5, "%d%%", L.TIP_TOAST_SIZE)
+    slider("toastDuration", L.OPT_TOAST_DURATION, D.toastDuration,
+      function() return tonumber(S().toastDuration) or 3 end,
+      function(v) S().toastDuration = v end, 2, 10, 1, "%d s", L.TIP_TOAST_DURATION)
+  end
   button(lookLayout, L.OPT_PREVIEW, L.BTN_PREVIEW, function() ns.Toast.Test() end, L.TIP_PREVIEW)
   button(lookLayout, L.OPT_POSITION, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end, L.TIP_POSITION)
   header(lookLayout, L.MESSAGES_HEADER)
@@ -353,6 +369,7 @@ function Options.BuildNative()
     { { "flavor", L.STYLE_FLAVOR, L.TIP_STYLE_FLAVOR }, { "short", L.STYLE_SHORT, L.TIP_STYLE_SHORT } }, L.TIP_STYLE)
   proxyDropdown(look, "chatTab", "Number", L.OPT_CHAT_TAB, D.chatFrame,
     function() return tonumber(S().chatFrame) or 1 end, function(v) S().chatFrame = v end, chatTabs, L.TIP_CHAT_TAB)
+  checkbox(look, "weekly", S(), "weekly", L.OPT_WEEKLY, D.weekly, L.TIP_WEEKLY)
 
   -- Friends & sharing
   local friends, friendsLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_FRIENDS)

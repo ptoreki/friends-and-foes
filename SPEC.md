@@ -68,6 +68,7 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3), ended (the kill streak this death ended) |
 | KILL | Honorable-kill / honor-award message | victim (may be empty), vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
 | HIT | Manual hitlist share | share id, packed entries |
+| SIGHT | You spot a hitlist player (once per player every 5 min) | name, class, level, guild, zone |
 
 Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
 
@@ -157,6 +158,11 @@ Rules:
     the details.
   - It's tinted red for PvP and purple for sightings.
   - Frames are pooled per style.
+- **Sightings:** your own sightings are sent as SIGHT. A received one shows "X spotted by Y" with
+  your record of X (if X is on your hitlist) and the place. One alert per player every 5 minutes,
+  shared between your own and friends' sightings (`PvP.SightingDue`).
+- **Toast size and duration:** `settings.toastScale` (0.7–1.5) scales a holder frame under the
+  anchor; `settings.toastDuration` (2–10 s, PvP +2).
 - **Toast layout:** one compact line (icon, title, details; long text wraps to at most 3 lines) on a dark strip with a thin coloured
   edge: red for PvP, gold for progress, purple for sightings. It fades in and out. PvP toasts stay
   5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is

@@ -6,7 +6,7 @@ local L = ns.L
 local Events = {}
 ns.Events = Events
 
-local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", DIE = "pvp", KILL = "pvp" }
+local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", DIE = "pvp", KILL = "pvp", SIGHT = "pvp" }
 
 local ICON = {
   level = "Interface\\Icons\\Spell_Holy_SurgeOfLight",
@@ -267,6 +267,7 @@ end
 H.DIE = function(msg, isSelf, p, f)
   p.d = p.d + 1
   local killer = ns.DecodeUnit(f.killer)
+  if isSelf and not msg.id:find("^S") then Events.WeeklyAdd("d", killer and killer.name) end
   local suspect = f.conf == "s"
   local by, h
   if killer and killer.name then
@@ -295,7 +296,8 @@ H.DIE = function(msg, isSelf, p, f)
   })
 end
 
-H.KILL = function(_, isSelf, p, f)
+H.KILL = function(msg, isSelf, p, f)
+  if isSelf and not msg.id:find("^S") then Events.WeeklyAdd("k") end
   local name = ns.CleanName(f.victim)
   p.k = p.k + 1
   local streak = tonumber(f.streak)
@@ -336,6 +338,36 @@ end
 
 -- shared hitlist chunk: merge by taking the max of each counter, never overwrite notes
 local shareSeen = {}
+
+-- a friend spotted someone from their hitlist
+H.SIGHT = function(msg, isSelf, p, f)
+  if isSelf then return end
+  local name = ns.CleanName(f.name)
+  if not name then return end
+  local u = { name = name, class = f.class ~= "" and f.class or nil, level = f.level, guild = f.guild ~= "" and f.guild or nil }
+  enemyTouch(u, f.zone)
+  local h = hitUpdate(u, f.zone)
+  if not ns.PvP.SightingDue(name) then
+    ns.Debug("TOAST", "sighting", name, "skipped: already alerted about them in the last 5 minutes")
+    return
+  end
+  local line = ns.Toast.Sighting(name, u.class, f.zone, h, who(p))
+  feed(p, "sighting", line)
+end
+
+-- weekly summary: your own takedowns and deaths, and who killed you most
+function Events.WeeklyAdd(kind, killer)
+  local w = FriendsAndFoesDB.weekly
+  if not w then return end
+  if kind == "k" then w.k = (w.k or 0) + 1 end
+  if kind == "d" then
+    w.d = (w.d or 0) + 1
+    if killer then
+      w.killers = w.killers or {}
+      w.killers[killer] = (w.killers[killer] or 0) + 1
+    end
+  end
+end
 
 H.HIT = function(msg, isSelf, p, f)
   if isSelf then return end

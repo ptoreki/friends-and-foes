@@ -2,11 +2,13 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.5.6
+## Version: 0.6.0
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## IconTexture: Interface\Icons\Ability_DualWield
 ## AddonCompartmentFunc: FriendsAndFoes_OnAddonCompartmentClick
+## AddonCompartmentFuncOnEnter: FriendsAndFoes_OnAddonCompartmentEnter
+## AddonCompartmentFuncOnLeave: FriendsAndFoes_OnAddonCompartmentLeave
 ## X-Curse-Project-ID: 1804389
 ## X-Wago-ID: EGPapeN1
 

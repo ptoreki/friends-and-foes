@@ -30,7 +30,7 @@ It stays out of your way until something worth knowing happens.
 **The hitlist**
 - Anyone who **kills** you or a friend goes on a shared list. It records their kills and attacks on your group, who they killed, their guild, where they were last seen, and your own notes. An attack alone only triggers an alert.
 - Hitlist players get a **skull next to their nameplate** and a line in their **tooltip**, e.g. *"Hitlist: 3 kills, 5 attacks on us"*.
-- You get a quiet alert when one of them shows up near you.
+- You get a quiet alert when one of them shows up near you, or near a friend: *"Rogz Fang spotted by Bob · Astranaar"*.
 - You can share your hitlist with friends in one click.
 
 **K/D/A tracking**
@@ -48,7 +48,7 @@ In **Options → AddOns → Friends & Foes**, every event gets its own choice:
 - **Show:** Toast, Chat or Off
 - **Sound:** on or off
 
-Toasts come in two styles: **Modern**, a slim one-line strip, or **Classic**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
+Toasts come in two styles, and their size and duration can be adjusted: **Modern**, a slim one-line strip, or **Classic**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
 
 The defaults are quiet: toasts for your friends' fights (attacked nearby, killed, or scoring a kill) and for milestones, a chat line for everything else, and soft built-in game sounds.
 
