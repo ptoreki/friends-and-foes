@@ -23,7 +23,7 @@ Install it, and have your friends install it too. Battle.net friends playing WoW
 In **Options → AddOns → Friends & Foes**:
 - Per event: toast, chat line or off, with or without sound, and which sound.
 - Dungeons, raids and battlegrounds: show alerts, wait until you're out, or turn them off.
-- Toast style (**Modern** or **Classic**), size, duration and position.
+- Toast style (**Modern**, **Classic**, **Alliance** or **Horde**), size, duration and position.
 - What you share, and which friends you share with.
 ### Good to know
 - Everything runs inside the game. No accounts or outside programs.

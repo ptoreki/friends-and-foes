@@ -15,7 +15,7 @@ L.CHAT_PREFIX = "F&F:"
 -- toast themes
 L.OPT_THEME = "Toast style"
 L.BTN_PREVIEW = "Preview"
-L.THEME_NAMES = { minimal = "Modern", achievement = "Classic" }
+L.THEME_NAMES = { minimal = "Modern", achievement = "Classic", alliance = "Alliance", horde = "Horde" }
 -- Achievement-style toasts: the small header above the message
 L.HEADER = {
   attacked = "Friend under attack", engage = "Friend on the attack", died = "Friend killed", kill = "Friend's kill",
@@ -216,6 +216,8 @@ L.TOASTS_HEADER = "Toasts"
 L.THEME_TIPS = {
   minimal = "Modern: a slim one-line strip with a coloured edge.",
   achievement = "Classic: styled like WoW's achievement pop-up, with a header saying what happened.",
+  alliance = "Alliance: deep blue with gold trim and the Alliance crest.",
+  horde = "Horde: deep red with bronze trim and the Horde crest.",
 }
 L.TIP_THEME = "How pop-up toasts look. Use Preview to compare."
 L.OPT_PREVIEW = "Preview"

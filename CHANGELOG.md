@@ -8,6 +8,11 @@ Compatible with 0.3.x to 0.6.1.
   - Kills from before 0.5.1, when per-friend counting started, are listed as "before counting
     began".
 - The tooltip on a hitlist player's nameplate shows the counts too: "killed Bob 3x, Alice 1x".
+- **Two new toast styles: Alliance and Horde.**
+  - Alliance: deep blue with gold trim. Horde: deep red with bronze trim.
+  - Each has its faction crest faded behind the text, a header saying what happened, and a thin
+    stripe in the event's colour.
+  - Choose in Options → Appearance → Toast style.
 - **Attacks are no longer shown** on the hitlist: not in the hover, the Attacks column (removed),
   the nameplate tooltip, or sighting messages. Kills are what count. Attacks are still counted
   in the background.

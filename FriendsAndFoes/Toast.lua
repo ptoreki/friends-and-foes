@@ -140,7 +140,7 @@ end
 -- themes: how a toast looks. Each builds its parts once and fills them per toast.
 ---------------------------------------------------------------------------
 local THEMES = {}
-Toast.THEMES = { "minimal", "achievement" } -- order in Options
+Toast.THEMES = { "minimal", "achievement", "alliance", "horde" } -- order in Options
 
 -- Minimal (default): one compact line on a dark strip with a thin coloured edge.
 THEMES.minimal = {
@@ -231,10 +231,7 @@ THEMES.achievement = {
   end,
   render = function(f, spec)
     f.icon:SetTexture(spec.icon or ns.ICON.fallback)
-    local header = spec.header
-      or (spec.milestone and L.HEADER_MILESTONE[spec.kind])
-      or (spec.kind and L.HEADER[spec.kind]) or L.ADDON
-    f.header:SetText((spec.sim and "[SIM] " or "") .. header)
+    f.header:SetText(Toast.HeaderFor(spec))
     f.title:SetText(spec.title or "")
     f.sub:SetText(spec.text or "")
     local c = ACH_TINT[spec.category] or ACH_TINT.progress
@@ -242,6 +239,96 @@ THEMES.achievement = {
     f:SetHeight(ACH_H)
   end,
 }
+
+-- the small header above the message (Classic and faction styles)
+function Toast.HeaderFor(spec)
+  local header = spec.header
+    or (spec.milestone and L.HEADER_MILESTONE[spec.kind])
+    or (spec.kind and L.HEADER[spec.kind]) or L.ADDON
+  return (spec.sim and "[SIM] " or "") .. header
+end
+
+-- Alliance / Horde: a dark faction-coloured panel with metal trim, a faded faction crest behind
+-- the text, and a thin stripe on the left in the event's colour.
+local FACTION_W, FACTION_H = 320, 64
+local FACTION_STYLE = {
+  alliance = { bg = { 0.04, 0.09, 0.24, 0.93 }, trim = { 0.85, 0.7, 0.3 }, header = { 1, 0.82, 0.25 },
+    crest = "Interface\\TargetingFrame\\UI-PVP-Alliance" },
+  horde = { bg = { 0.22, 0.03, 0.02, 0.93 }, trim = { 0.72, 0.5, 0.25 }, header = { 1, 0.62, 0.2 },
+    crest = "Interface\\TargetingFrame\\UI-PVP-Horde" },
+}
+
+local function factionTheme(style)
+  local c = FACTION_STYLE[style]
+  return {
+    build = function(f)
+      f:SetSize(FACTION_W, FACTION_H)
+      local bg = f:CreateTexture(nil, "BACKGROUND")
+      bg:SetAllPoints()
+      bg:SetColorTexture(c.bg[1], c.bg[2], c.bg[3], c.bg[4])
+      -- trim: thin lines top and bottom
+      for _, edge in ipairs({ "TOP", "BOTTOM" }) do
+        local line = f:CreateTexture(nil, "BORDER")
+        line:SetPoint(edge .. "LEFT")
+        line:SetPoint(edge .. "RIGHT")
+        line:SetHeight(1)
+        line:SetColorTexture(c.trim[1], c.trim[2], c.trim[3], 0.9)
+      end
+      -- faded crest on the right, behind the text
+      local crest = f:CreateTexture(nil, "BORDER")
+      crest:SetSize(70, 70)
+      crest:SetPoint("RIGHT", 8, -6)
+      crest:SetTexture(c.crest)
+      crest:SetTexCoord(0, 0.62, 0, 0.62)
+      crest:SetAlpha(0.22)
+      -- event colour stripe on the left
+      f.edge = f:CreateTexture(nil, "ARTWORK")
+      f.edge:SetPoint("TOPLEFT", 0, -1)
+      f.edge:SetPoint("BOTTOMLEFT", 0, 1)
+      f.edge:SetWidth(3)
+
+      f.icon = f:CreateTexture(nil, "ARTWORK")
+      f.icon:SetSize(38, 38)
+      f.icon:SetPoint("LEFT", 12, 0)
+      f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+      local iconBorder = f:CreateTexture(nil, "BORDER")
+      iconBorder:SetPoint("TOPLEFT", f.icon, "TOPLEFT", -1, 1)
+      iconBorder:SetPoint("BOTTOMRIGHT", f.icon, "BOTTOMRIGHT", 1, -1)
+      iconBorder:SetColorTexture(c.trim[1], c.trim[2], c.trim[3], 0.9)
+
+      f.header = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+      f.header:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 10, 1)
+      f.header:SetPoint("RIGHT", -12, 0)
+      f.header:SetJustifyH("LEFT")
+      f.header:SetTextColor(c.header[1], c.header[2], c.header[3])
+      f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+      f.title:SetPoint("TOPLEFT", f.header, "BOTTOMLEFT", 0, -2)
+      f.title:SetPoint("RIGHT", -12, 0)
+      f.title:SetJustifyH("LEFT")
+      f.title:SetWordWrap(true)
+      if f.title.SetMaxLines then f.title:SetMaxLines(2) end
+      f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+      f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
+      f.sub:SetPoint("RIGHT", -12, 0)
+      f.sub:SetJustifyH("LEFT")
+      f.sub:SetWordWrap(false)
+      f.sub:SetTextColor(0.75, 0.75, 0.75)
+    end,
+    render = function(f, spec)
+      f.icon:SetTexture(spec.icon or ns.ICON.fallback)
+      f.header:SetText(Toast.HeaderFor(spec))
+      f.title:SetText(spec.title or "")
+      f.sub:SetText(spec.text or "")
+      local e = EDGE[spec.category] or EDGE.progress
+      f.edge:SetColorTexture(e[1], e[2], e[3], 1)
+      -- grow if the title wraps to two lines
+      local h = (tonumber(f.title:GetStringHeight()) or 0) + (tonumber(f.sub:GetStringHeight()) or 0) + 30
+      f:SetHeight(math.max(FACTION_H, math.ceil(h)))
+    end,
+  }
+end
+THEMES.alliance = factionTheme("alliance")
+THEMES.horde = factionTheme("horde")
 
 function Toast.Theme()
   local th = ns.S().theme

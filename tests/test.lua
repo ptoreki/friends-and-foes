@@ -1033,6 +1033,21 @@ do
   GameTooltip.AddLine, GameTooltip.AddDoubleLine = oAdd, oDouble
 end
 
+-- faction toast styles
+for _, style in ipairs({ "alliance", "horde" }) do
+  drainToasts()
+  ns.S().theme = style
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "faction " .. style, text = "Tarren Mill", force = true })
+  local ff
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "faction " .. style then ff = f end end
+  check(ff and ff.theme == style and ff.header:GetText() == "Friend killed" and ff.title:GetText() == "faction " .. style
+    and ff.sub:GetText() == "Tarren Mill", style .. " style: header, title, place")
+end
+drainToasts()
+ns.S().theme = "minimal"
+check(#ns.Toast.THEMES == 4, "four toast styles to choose from")
+check(ns.errors == 0, "no errors in faction styles (" .. tostring(ns.lastError) .. ")")
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

@@ -151,8 +151,11 @@ Rules:
   - a tooltip line: kills, attacks, who they killed, and your note
   - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
     still produce a chat line or toast.
-- **Toast style** (`settings.theme`): `minimal`, shown as "Modern" (the default), or `achievement`,
-  shown as "Classic".
+- **Toast style** (`settings.theme`):
+  - `minimal`, shown as "Modern" (the default)
+  - `achievement`, shown as "Classic"
+  - `alliance` and `horde`: a dark faction-coloured panel, metal trim, a faded faction crest
+    (`TargetingFrameUI-PVP-*`), the header and an event-colour stripe
   - Achievement uses `Interface\AchievementFrame` alert art. If the art is missing, it falls back
     to a dark panel.
   - It shows a header (by event kind, or "Revenge!", "Kill streak!", "Max level!"), the title, and
