@@ -1,0 +1,24 @@
+# BigWigs packager config (used by .github/workflows/release.yml).
+# The addon lives in the FriendsAndFoes/ subfolder; move it to the package root and leave the
+# dev files (tests, tooling, docs) out. Dot-files are never packaged.
+package-as: FriendsAndFoes
+
+move-folders:
+  FriendsAndFoes/FriendsAndFoes: FriendsAndFoes
+
+ignore:
+  - tests
+  - scripts
+  - reports
+  - dist
+  - node_modules
+  - package.json
+  - package-lock.json
+  - SPEC.md
+  - PUBLISHING.md
+  - CURSEFORGE.md
+  - README.md
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
