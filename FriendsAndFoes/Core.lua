@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.4.0"
+ns.VERSION = "0.4.1"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -43,6 +43,25 @@ function ns.S() return FriendsAndFoesDB.settings end
 ---------------------------------------------------------------------------
 ns.errors = 0
 local ERROR_LOG_MAX = 50
+-- The debug log is saved to disk, so its size costs load/logout time. Keep the newest
+-- DEBUG_LOG_MAX lines, trimming in batches (shifting a full array per line is O(n)).
+local DEBUG_LOG_MAX, DEBUG_LOG_SLACK = 2000, 250
+local DEBUG_AUTO_OFF = 7 * 86400
+
+local function trimLog(log, max)
+  local n = #log
+  if n <= max then return end
+  local drop = n - max
+  for i = 1, max do log[i] = log[i + drop] end
+  for i = max + 1, n do log[i] = nil end
+end
+
+-- turn debug logging on/off; remembers when it was turned on so it can switch itself off
+function ns.SetDebug(on)
+  local s = FriendsAndFoesDB.settings
+  s.debug = on and true or false
+  s.debugSince = on and time() or nil
+end
 
 local function str(v)
   if issecret(v) then return "<SECRET>" end
@@ -56,7 +75,7 @@ function ns.Debug(tag, ...)
   for i = 1, select("#", ...) do parts[i] = str((select(i, ...))) end
   local log = db.debugLog
   log[#log + 1] = date("%Y-%m-%d %H:%M:%S") .. " [" .. tag .. "] " .. table.concat(parts, " | ")
-  if #log > 5000 then table.remove(log, 1) end
+  if #log > DEBUG_LOG_MAX + DEBUG_LOG_SLACK then trimLog(log, DEBUG_LOG_MAX) end
 end
 
 -- Errors are always kept (last 50), even with debug logging off.
@@ -153,6 +172,15 @@ ns.On("PLAYER_LOGIN", function()
   ns.myFaction = UnitFactionGroup("player")
   ns.realm = GetRealmName()
   FriendsAndFoesDB.caps = ns.caps
+  local s = FriendsAndFoesDB.settings
+  if s.debug then
+    s.debugSince = s.debugSince or time()
+    if time() - s.debugSince > DEBUG_AUTO_OFF then
+      ns.SetDebug(false)
+      print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.L.DEBUG_AUTO_OFF)
+    end
+  end
+  trimLog(FriendsAndFoesDB.debugLog, DEBUG_LOG_MAX)
   ns.Debug("LOGIN", ns.VERSION, select(4, GetBuildInfo()), ns.realm, ns.me, ns.myFaction)
   for i = 1, #readyCallbacks do ns.Try("ready", readyCallbacks[i]) end
 end)

@@ -17,6 +17,7 @@ FIRE("ADDON_LOADED", "FriendsAndFoes")
 FIRE("PLAYER_LOGIN")
 FIRE("PLAYER_ENTERING_WORLD")
 RUN_TIMERS()
+ns.SetDebug(true) -- testers run with debug on
 check(ns.Comm.roster.Buddy ~= nil, "roster contains same-realm friend Buddy (first name from Battle.net)")
 check(ns.me == "Testme Tester", "own name is First Last: " .. tostring(ns.me))
 
@@ -342,6 +343,26 @@ check(ns.errors == 0, "no errors after UI/slash exercise (" .. tostring(ns.lastE
 check(#FriendsAndFoesDB.errorLog == 0, "error log empty")
 
 -- error log always on: force an error in a handler
+-- performance: send pump idles when nothing is queued
+RUN_TICKERS(50)
+check(ns.Comm.QueuedCount() == 0 and not ns.Comm.PumpRunning(), "send pump stops when the queue is empty")
+SENT = {}
+ns.Comm.SendPayload("ping", "high")
+check(ns.Comm.PumpRunning(), "send pump starts when something is queued")
+RUN_TICKERS(2)
+check(#SENT == 2 and not ns.Comm.PumpRunning(), "queued message sent, pump idle again: " .. #SENT)
+-- performance: debug log trimmed in batches, capped at 2000
+local dlog = FriendsAndFoesDB.debugLog
+for i = 1, 2300 do ns.Debug("FILL", i) end
+check(#dlog <= 2250 and #dlog >= 2000 and dlog[#dlog]:find("[FILL] 2300", 1, true) ~= nil, "debug log capped, newest kept: " .. #dlog)
+-- performance: debug switches itself off after 7 days
+ns.S().debugSince = time() - 8 * 86400
+FIRE("PLAYER_LOGIN")
+check(not ns.S().debug and #dlog <= 2000, "debug auto-off after 7 days, log trimmed at login")
+-- roster report only built while debugging
+ns.Comm.lastRosterReport = nil
+ns.Comm.RebuildRoster()
+check(ns.Comm.lastRosterReport == nil and ns.Comm.roster["Buddy Pal"] ~= nil, "no roster report with debug off, roster still built")
 ns.S().debug = false
 ns.Try("forced", function() error("boom") end)
 check(#FriendsAndFoesDB.errorLog == 1, "errors recorded even with debug off")

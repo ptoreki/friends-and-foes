@@ -156,7 +156,7 @@ Rules:
 - `npm run package` builds `dist/FriendsAndFoes-<version>.zip`.
 
 ## Debugging
-`/fnf debug` logs to `FriendsAndFoesDB.debugLog` (at most 5000 lines). The log is saved on `/reload`
+`/fnf debug` logs to `FriendsAndFoesDB.debugLog` (newest 2000 lines; switches itself off after 7 days). The log is saved on `/reload`
 or logout, to `WTF\Account\<ACCOUNT>\SavedVariables\FriendsAndFoes.lua`. It records:
 - secret or readable results for each capability (bnet, whisper, unitNames, deathRecap, honor)
 - caught errors

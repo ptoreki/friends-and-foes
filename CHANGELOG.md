@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1
+Compatible with 0.3.x and 0.4.0.
+- **Faster login, logout and /reload with debug on.** The debug log keeps the newest 2,000
+  lines (it was 5,000), trims in batches instead of on every line, and switches itself off
+  after 7 days.
+- **Less work on Battle.net friend updates.** The friend list is rebuilt at most every
+  5 seconds. BattleTags are looked up only for friends who are in WoW Forever, and the
+  diagnostic report is built only while debug is on.
+- **The send queue sleeps when there's nothing to send.** It used to check 4 times a second
+  forever.
+
 ## 0.4.0
 Compatible with 0.3.x. Friends don't need to update at the same time.
 - **Fewer pop-ups.** Only alerts you can act on are toasts: a friend being attacked or killed.

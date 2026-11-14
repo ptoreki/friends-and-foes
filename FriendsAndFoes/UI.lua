@@ -369,7 +369,7 @@ local function buildSettings(parent)
   y = y - STEP
   check(parent, x3, y, L.OPT_DEBUG,
     function() return S().debug end,
-    function(v) S().debug = v end)
+    function(v) ns.SetDebug(v) end)
   y = y - STEP
   check(parent, x3, y, L.OPT_MARK,
     function() return S().mark end,
@@ -735,7 +735,7 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   elseif msg == "share" then
     UI.ShareHitlist()
   elseif msg == "debug" then
-    ns.S().debug = not ns.S().debug
+    ns.SetDebug(not ns.S().debug)
     print(prefix .. "debug: " .. (ns.S().debug and "on" or "off"))
   elseif msg == "debug clear" then
     wipe(FriendsAndFoesDB.debugLog)

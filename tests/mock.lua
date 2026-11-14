@@ -40,7 +40,7 @@ end
 TIMERS = {}
 C_Timer = {
   After = function(_, fn) TIMERS[#TIMERS + 1] = fn end,
-  NewTicker = function(_, fn) TICKERS = TICKERS or {}; TICKERS[#TICKERS + 1] = fn; return {} end,
+  NewTicker = function(_, fn) TICKERS = TICKERS or {}; local h = { fn = fn }; h.Cancel = function() h.cancelled = true end; TICKERS[#TICKERS + 1] = h; return h end,
 }
 function RUN_TIMERS()
   for _ = 1, 10 do
@@ -49,7 +49,14 @@ function RUN_TIMERS()
     for _, fn in ipairs(t) do fn() end
   end
 end
-function RUN_TICKERS(n) for _ = 1, n or 1 do ADVANCE(0.25); for _, fn in ipairs(TICKERS or {}) do fn() end end end
+function RUN_TICKERS(n)
+  for _ = 1, n or 1 do
+    ADVANCE(0.25)
+    local list = {}
+    for i, h in ipairs(TICKERS or {}) do list[i] = h end
+    for _, h in ipairs(list) do if not h.cancelled then h.fn() end end
+  end
+end
 
 -- WoW Forever: UnitName returns (first, surname); only the pair is unique
 ME, MY_SURNAME, MY_FACTION, MY_REALM = "Testme", "Tester", "Horde", "Nightslayer"

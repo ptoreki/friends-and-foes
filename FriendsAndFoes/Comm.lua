@@ -175,12 +175,9 @@ function Comm.RebuildRoster()
   local wowClient = BNET_CLIENT_WOW or "WoW"
   local n = BNGetNumFriends() or 0
   local report = {} -- one line per WoW game account, so a report shows why someone is missing
+  local debugging = ns.S().debug
   for i = 1, n do
-    local tag
-    if C_BattleNet.GetFriendAccountInfo then
-      local ok, acct = pcall(C_BattleNet.GetFriendAccountInfo, i)
-      if ok and acct and type(acct.battleTag) == "string" and not issecret(acct.battleTag) then tag = acct.battleTag end
-    end
+    local tag, tagRead
     for j = 1, (C_BattleNet.GetFriendNumGameAccounts(i) or 0) do
       local g = C_BattleNet.GetFriendGameAccountInfo(i, j)
       if g and g.clientProgram == wowClient then
@@ -192,6 +189,14 @@ function Comm.RebuildRoster()
         end
         local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
         if not why and (not name or name == ns.me) then why = "self" end
+        if not why and not tagRead then
+          -- BattleTag only for friends who are actually eligible (saves a table per friend)
+          tagRead = true
+          if C_BattleNet.GetFriendAccountInfo then
+            local ok, acct = pcall(C_BattleNet.GetFriendAccountInfo, i)
+            if ok and acct and type(acct.battleTag) == "string" and not issecret(acct.battleTag) then tag = acct.battleTag end
+          end
+        end
         if not why then
           local entry = { gid = g.gameAccountID, faction = g.factionName, tag = tag }
           everyone[name] = entry
@@ -199,11 +204,12 @@ function Comm.RebuildRoster()
           rememberTag(name, tag)
           if Comm.Allowed(tag) then roster[name] = entry else why = "not picked" end
         end
-        report[#report + 1] = table.concat({ tostring(g.characterName), tostring(g.realmName),
-          tostring(g.realmID), tostring(g.wowProjectID), tostring(g.factionName), tag and "tag" or "no tag", why or "OK" }, "/")
+        if debugging then report[#report + 1] = table.concat({ tostring(g.characterName), tostring(g.realmName),
+          tostring(g.realmID), tostring(g.wowProjectID), tostring(g.factionName), tag and "tag" or "no tag", why or "OK" }, "/") end
       end
     end
   end
+  if not debugging then return end
   table.sort(report)
   local sig = table.concat(report, "; ")
   if sig ~= Comm.lastRosterReport then
@@ -220,11 +226,14 @@ function Comm.RosterNames()
   return names
 end
 
+-- BN_FRIEND_INFO_CHANGED fires for every status/zone change of every Battle.net friend (any
+-- game), so rebuilds are batched. Explicit callers (status, group, unknown sender) rebuild directly.
+local ROSTER_DEBOUNCE = 5
 local pending = false
 function Comm.QueueRoster()
   if pending then return end
   pending = true
-  C_Timer.After(2, function()
+  C_Timer.After(ROSTER_DEBOUNCE, function()
     pending = false
     ns.Try("roster", Comm.RebuildRoster)
   end)
@@ -292,10 +301,13 @@ function Comm.QueuedCount(prio)
   return n
 end
 
+local startPump -- defined with the pump below
+
 local function enqueue(routeName, prio, item)
   local route = routes[routeName]
   local q = route.q[prio]
   q[#q + 1] = item
+  startPump()
   -- overflow: drop oldest bulk, then oldest normal; never drop high
   local total = #route.q.high + #route.q.normal + #route.q.bulk
   while total > QUEUE_MAX do
@@ -351,9 +363,19 @@ local function pump()
   end
 end
 
-ns.OnReady(function()
-  C_Timer.NewTicker(0.25, function() ns.Try("pump", pump) end)
-end)
+-- the pump only ticks while something is queued
+local ticker
+function startPump()
+  if ticker then return end
+  ticker = C_Timer.NewTicker(0.25, function()
+    ns.Try("pump", pump)
+    if ticker and Comm.QueuedCount() == 0 then
+      ticker:Cancel()
+      ticker = nil
+    end
+  end)
+end
+Comm.PumpRunning = function() return ticker ~= nil end
 
 ---------------------------------------------------------------------------
 -- broadcast
