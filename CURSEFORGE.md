@@ -29,4 +29,4 @@ In **Options → AddOns → Friends & Foes**:
 - Everything runs inside the game. No accounts or outside programs.
 - Kills count as *takedowns*: addons can't see who landed the killing blow.
 - Alerts are live only. Options can't be opened in combat.
-**Something not working?** Turn on **Debug logging** (Options → Advanced), play, type **/reload**, and send `WTFAccount<account>SavedVariablesFriendsAndFoes.lua`.
+**Something not working?** Turn on **Debug logging** (Options → Advanced), play, type **/reload**, and send `WTF\Account\<account>\SavedVariables\FriendsAndFoes.lua`.
