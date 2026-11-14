@@ -309,31 +309,34 @@ end
 -- sightings + test
 ---------------------------------------------------------------------------
 function Toast.Sighting(name, class, zone, hit)
-  local who = ns.ClassColored(name, class)
+  local title = L.SIGHTING:format(ns.ClassColored(name, class))
+  local place = ns.Flavor.Place(zone)
+  -- flavor off: who and where only; on: their record too
+  local text = ns.S().flavor == false and place
+    or (L.SIGHTING_RECORD:format(hit.kills or 0, hit.attacks or 0) .. ns.Flavor.SEP .. place)
   Toast.Push({
     kind = "sighting", category = "sighting", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
-    title = L.TOAST_SIGHTING:format(who),
-    text = L.TOAST_SIGHTING_TEXT:format(zone or "?", hit.attacks or 0, hit.kills or 0),
-    chat = ns.S().flavor == false and L.SHORT_SIGHTING:format(who, zone or "?")
-      or L.CHAT_SIGHTING:format(who, zone or "?", hit.attacks or 0, hit.kills or 0),
+    title = title, text = text, chat = title .. ns.Flavor.SEP .. text,
     player = name,
   })
 end
 
+-- one of each toast style, worded like the real thing
 function Toast.Test()
   local friend = ns.ClassColored("Testfriend", "PALADIN")
   local enemy = ns.ClassColored("Testenemy", "ROGUE")
   local link = "|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r"
-  Toast.Push({ force = true, kind = "level", category = "progress", icon = ns.ICON.level, subjects = { friend },
-    title = L.TOAST_LEVEL:format(friend), text = L.TOAST_LEVEL_TEXT:format(42) })
+  local SEP = ns.Flavor.SEP
+  Toast.Push({ force = true, kind = "level", category = "progress", icon = ns.ICON.level,
+    title = L.TOAST_LEVEL_MAX:format(friend, 60) })
   Toast.Push({ force = true, kind = "loot", category = "progress", icon = ns.ICON.fallback, link = link,
-    title = L.TOAST_LOOT:format(friend), text = L.TOAST_LOOTED:format(link) })
+    title = L.FEED_LOOT:format(friend, link) })
   Toast.Push({ force = true, kind = "attacked", category = "pvp", icon = ns.ICON.attacked,
-    title = L.TOAST_ATTACKED:format(friend), text = L.TOAST_ATTACKED_TEXT:format("Hillsbrad Foothills (Tarren Mill)", enemy) })
+    title = L.SHORT_ATTACKED:format(friend, enemy), text = "Tarren Mill" })
   Toast.Push({ force = true, kind = "died", category = "pvp", icon = ns.ICON.died,
-    title = L.TOAST_DIED:format(friend), text = L.TOAST_DIED_TEXT:format(enemy, "Hillsbrad Foothills") })
+    title = L.SHORT_DIED:format(friend, enemy), text = "Southshore" })
   Toast.Push({ force = true, kind = "kill", category = "pvp", icon = ns.ICON.kill,
-    title = L.TOAST_KILL:format(friend), text = L.TOAST_KILL_TEXT:format(enemy, "Stranglethorn Vale") })
+    title = L.SHORT_KILL:format(friend, enemy), text = L.STREAK:format(3, 8) .. SEP .. "Stranglethorn Vale" })
 end
 
 ns.OnReady(createAnchor)

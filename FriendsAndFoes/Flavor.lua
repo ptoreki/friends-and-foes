@@ -1,7 +1,8 @@
 local _, ns = ...
 local L = ns.L
 
--- Varied wording for PvP alerts, using history the addon already keeps:
+-- Short PvP lines: who did what, then extras, then where - separated by " · ".
+-- With flavor on, wording varies and calls out history the addon already keeps:
 -- repeat killers, death sprees, bad days, kill streaks, revenge on behalf of a friend.
 -- Each builder returns title, text, line (the line goes to chat and the Feed).
 local Flavor = {}
@@ -11,6 +12,8 @@ local KEEP = 2 * 86400     -- event times kept per player (for "today" and spree
 local KEEP_MAX = 50
 local SPREE = 15 * 60      -- 3+ deaths within this = a spree
 local STREAK = 10 * 60     -- 3+ kills within this = a streak (5+ = rampage)
+local SEP = " \194\183 "   -- " · "
+Flavor.SEP = SEP
 
 Flavor.random = math.random -- tests replace this
 
@@ -60,9 +63,16 @@ end
 
 local function minutesSince(t) return math.max(1, math.floor((time() - t) / 60 + 0.5)) end
 
-local function join(parts) return table.concat(parts, " - ") end
+local function join(parts) return table.concat(parts, SEP) end
 
--- "a spree in the last 15 min" or "the Nth today", for deaths or kills
+-- Where, as short as it stays clear: the subzone if the sender had one ("Tarren Mill"),
+-- else the zone. Senders send "Zone (Subzone)"; the hitlist keeps the full text.
+function Flavor.Place(zone)
+  if type(zone) ~= "string" or zone == "" then return "?" end
+  return zone:match("%((.+)%)$") or zone
+end
+
+-- "4 deaths/12m" (recent burst) or "5th today", for deaths or kills
 local function burst(list, window, minBurst, burstFmt, bigFmt, todayFmt, minToday)
   local n, first = since(list, time() - window)
   if n >= minBurst then
@@ -72,15 +82,25 @@ local function burst(list, window, minBurst, burstFmt, bigFmt, todayFmt, minToda
   if today >= minToday then return todayFmt:format(Flavor.Ordinal(today)) end
 end
 
+-- title = who did what; text = extras and place; line (chat/Feed) = both
+local function result(title, extra, zone)
+  local parts = {}
+  if extra then parts[#parts + 1] = extra end
+  parts[#parts + 1] = Flavor.Place(zone)
+  local text = join(parts)
+  return title, text, title .. SEP .. text
+end
+
+-- flavor off: who did what, then where - one line, no extras
+local function compact(title, zone)
+  local line = title .. SEP .. Flavor.Place(zone)
+  return line, nil, line
+end
+
 ---------------------------------------------------------------------------
 -- died: victim p (friend or you), who = coloured victim, by = coloured killer or nil,
 -- h = killer's hitlist entry or nil
 ---------------------------------------------------------------------------
--- flavor off: one short line, who did what, then where
-local function compact(line)
-  return line, nil, line
-end
-
 function Flavor.Died(p, who, by, h, zone)
   p.deathTimes = stamp(p.deathTimes)
   local n
@@ -90,29 +110,22 @@ function Flavor.Died(p, who, by, h, zone)
     n = h.kv[p.name]
   end
   if not on() then
-    return compact(by and L.SHORT_DIED:format(who, by, zone) or L.SHORT_DIED_UNKNOWN:format(who, zone))
+    return compact(by and L.SHORT_DIED:format(who, by) or L.SHORT_DIED_UNKNOWN:format(who), zone)
   end
 
-  local title, detail
+  local title
   if not by then
     title = pick(L.DIED_UNKNOWN):format(who)
-  elseif on() and n and n >= 10 then
-    title, detail = L.DIED_NEMESIS:format(who, by), L.NTH_TIME:format(Flavor.Ordinal(n))
-  elseif on() and n and n >= 5 then
-    title, detail = L.DIED_NUMBER:format(by, who), L.NTH_TIME:format(Flavor.Ordinal(n))
-  elseif on() and n and n >= 2 then
-    title, detail = L.DIED_AGAIN:format(by, who), L.NTH_TIME:format(Flavor.Ordinal(n))
+  elseif n and n >= 10 then
+    title = L.DIED_NEMESIS:format(who, by, Flavor.Ordinal(n))
+  elseif n and n >= 5 then
+    title = L.DIED_NUMBER:format(by, who, Flavor.Ordinal(n))
+  elseif n and n >= 2 then
+    title = L.DIED_AGAIN:format(by, who, Flavor.Ordinal(n))
   else
     title = pick(L.DIED):format(who, by)
   end
-
-  local parts = {}
-  if detail then parts[#parts + 1] = detail end
-  local extra = on() and burst(p.deathTimes, SPREE, 3, L.SPREE_DEATHS, nil, L.DEATHS_TODAY, 3)
-  if extra then parts[#parts + 1] = extra end
-  parts[#parts + 1] = L.IN_ZONE:format(zone)
-  local text = join(parts)
-  return title, text, title .. " (" .. text .. ")"
+  return result(title, burst(p.deathTimes, SPREE, 3, L.SPREE_DEATHS, nil, L.TODAY, 3), zone)
 end
 
 ---------------------------------------------------------------------------
@@ -125,10 +138,10 @@ function Flavor.Kill(p, who, v, e, hit, revenge, zone)
   e.kb[p.name] = (e.kb[p.name] or 0) + 1
   local n = e.kb[p.name]
   if not on() then
-    return compact((revenge and L.SHORT_REVENGE or L.SHORT_KILL):format(who, v, zone))
+    return compact((revenge and L.SHORT_REVENGE or L.SHORT_KILL):format(who, v), zone)
   end
 
-  local title, detail
+  local title
   if revenge then
     local avenged = {}
     for victim in pairs(hit and hit.victims or {}) do
@@ -138,24 +151,17 @@ function Flavor.Kill(p, who, v, e, hit, revenge, zone)
       end
     end
     table.sort(avenged)
-    if on() and #avenged > 0 then
+    if #avenged > 0 then
       title = L.KILL_AVENGED:format(who, ns.JoinNames(avenged), v)
     else
       title = L.KILL_REVENGE:format(who, v)
     end
-  elseif on() and n >= 3 then
-    title, detail = L.KILL_OWNS:format(who, v), L.NTH_KILL_ON:format(Flavor.Ordinal(n))
+  elseif n >= 3 then
+    title = L.KILL_OWNS:format(who, v, Flavor.Ordinal(n))
   else
     title = pick(L.KILL):format(who, v)
   end
-
-  local parts = {}
-  if detail then parts[#parts + 1] = detail end
-  local extra = on() and burst(p.killTimes, STREAK, 3, L.STREAK, L.RAMPAGE, L.KILLS_TODAY, 5)
-  if extra then parts[#parts + 1] = extra end
-  parts[#parts + 1] = L.IN_ZONE:format(zone)
-  local text = join(parts)
-  return title, text, title .. " (" .. text .. ")"
+  return result(title, burst(p.killTimes, STREAK, 3, L.STREAK, L.RAMPAGE, L.TODAY, 5), zone)
 end
 
 ---------------------------------------------------------------------------
@@ -163,20 +169,15 @@ end
 -- attackers = decoded units (to look up past kills on this friend)
 ---------------------------------------------------------------------------
 function Flavor.Attacked(p, who, by, attackers, zone)
-  if not on() then return compact(L.SHORT_ATTACKED:format(who, by, zone)) end
-  local title = pick(L.ATTACKED):format(who)
-  local parts = { L.ATTACKED_BY:format(by) }
-  if on() then
-    for _, u in ipairs(attackers) do
-      local h = u.name and ns.Data.FindHit(u.name)
-      local n = h and h.kv and h.kv[p.name]
-      if n and n >= 1 then
-        parts[#parts + 1] = L.ATTACKER_HISTORY:format(ns.ClassColored(u.name, u.class), n)
-        break
-      end
+  if not on() then return compact(L.SHORT_ATTACKED:format(who, by), zone) end
+  local title = pick(L.ATTACKED):format(who, by)
+  for _, u in ipairs(attackers) do
+    local h = u.name and ns.Data.FindHit(u.name)
+    local n = h and h.kv and h.kv[p.name]
+    if n and n >= 1 then
+      title = title .. " " .. L.ATTACKER_HISTORY:format(n)
+      break
     end
   end
-  parts[#parts + 1] = L.IN_ZONE:format(zone)
-  local text = join(parts)
-  return title, text, title .. " (" .. text .. ")"
+  return result(title, nil, zone)
 end

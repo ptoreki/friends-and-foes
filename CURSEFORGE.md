@@ -37,10 +37,10 @@ It stays out of your way until something worth knowing happens.
 - Kills, deaths and assists for every enemy player you meet, and takedowns and deaths for you and your friends.
 
 **Messages with some personality**, or short and plain if you prefer:
-- *"Rogz Fang killed Bob again (3rd time - 4 deaths in 12 min - in Duskwood)"*
-- *"Alice avenged Bob - Rogz Fang is down"*
-- *"Bob owns Rogz Fang (3rd kill on them - rampage! 5 kills in 9 min)"*
-- With flavor text off: *"Bob killed by Rogz Fang - Duskwood"*
+- *"Rogz Fang killed Bob again (3rd) · 4 deaths/12m · Tarren Mill"*
+- *"Alice avenged Bob on Rogz Fang · Duskwood"*
+- *"Bob owns Rogz Fang (3rd) · rampage 5/9m · Duskwood"*
+- With flavor text off: *"Bob killed by Rogz Fang · Duskwood"*
 
 ### Your choice, per event
 In **Options → AddOns → Friends & Foes**, every event gets its own choice:

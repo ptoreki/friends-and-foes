@@ -137,21 +137,24 @@ Rules:
   movable (`/fnf unlock`).
 - **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
   Queued PvP toasts older than 60 seconds are dropped.
+- **Message shape:** short. Who did what, then extras, then the place, separated by " · ", e.g.
+  "Rogz killed Bob again (3rd) · 4 deaths/12m · Tarren Mill". The place is the subzone if the
+  sender had one, else the zone (`Flavor.Place`); the hitlist still stores the full zone.
 - **Varied wording** (`Flavor.lua`, `settings.flavor`, default on): built from history kept locally.
   - Hitlist `kv[victim]` counts that enemy's kills on each friend:
-    - 2 or more: "killed X again (Nth time)"
-    - 5 or more: "has X's number"
-    - 10 or more: "X's nemesis strikes again"
+    - 2 or more: "Y killed X again (Nth)"
+    - 5 or more: "Y has X's number (Nth)"
+    - 10 or more: "X's nemesis Y strikes (Nth)"
   - Each player's `deathTimes` and `killTimes` keep the last 2 days, at most 50 each:
-    - 3 or more deaths in 15 min: a spree ("N deaths in M min"); otherwise 3 or more today: "Nth death today"
-    - 3 or more kills in 10 min: a streak (5 or more: "rampage!"); otherwise 5 or more today: "Nth kill today"
-  - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "owns".
-  - Revenge names the friends that enemy had hit ("avenged").
-  - An attack mentions the attacker's past kills on that friend.
+    - 3 or more deaths in 15 min: "N deaths/Mm"; otherwise 3 or more today: "Nth today"
+    - 3 or more kills in 10 min: "N kills/Mm" (5 or more: "rampage N/Mm"); otherwise 5 or more today: "Nth today"
+  - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "X owns Y (Nth)".
+  - Revenge names the friends that enemy had killed ("X avenged A on Y").
+  - An attack mentions the attacker's past kills on that friend ("(killed them N×)").
   - Otherwise one plain wording is picked at random.
 - **Flavor off:** every message is one short line, who did what, then where. PvP:
-  "X killed by Y - Zone", "X killed Y [(revenge)] - Zone", "X attacked by Y - Zone", and
-  "Hitlist: Y spotted - Zone". Progress uses the Feed line. The toast shows that line only, with
+  "X killed by Y · Place", "X killed Y [(revenge)] · Place", "X attacked by Y · Place", and
+  "Hitlist: Y nearby · Place". Progress uses the Feed line. The toast shows that line only, with
   no second part and no merging.
   The same line goes to the toast, the chat line and the Feed. Counts are per client, since each
   client builds them from the events it received.

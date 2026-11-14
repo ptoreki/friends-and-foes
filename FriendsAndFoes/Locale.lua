@@ -9,56 +9,40 @@ L.UNKNOWN_ENEMY = "an unknown enemy"
 
 -- toasts
 L.TOAST_LEVEL = "%s leveled up"
-L.TOAST_LEVEL_TEXT = "Reached level %d"
-L.TOAST_LOOT = "%s got an epic!"
-L.TOAST_LOOTED = "Looted %s"
-L.TOAST_CRAFTED = "Crafted %s"
-L.TOAST_GEAR = "%s equipped new gear"
-L.TOAST_GEAR_MORE = "%s and %d more"
-L.TOAST_ATTACKED = "%s is under attack!"
-L.TOAST_ATTACKED_TEXT = "%s - by %s"
-L.TOAST_DIED = "%s was killed"
-L.TOAST_DIED_TEXT = "by %s in %s"
-L.TOAST_KILL = "%s got a kill"
-L.TOAST_KILL_TEXT = "%s in %s"
-L.TOAST_LEVEL_MAX = "%s reached max level!"
+L.TOAST_GEAR_MORE = "%s +%d more"
+L.TOAST_LEVEL_MAX = "%s hit level %d!"
 L.CHAT_PREFIX = "F&F:"
-L.CHAT_SIGHTING = "Hitlist: %s spotted nearby in %s (%d attacks, %d kills on us)"
 L.CHAT_SHARE = "%s is sharing their hitlist with you"
 L.TOOLTIP_HIT = "Hitlist: %d kills, %d attacks on us"
 L.TOOLTIP_VICTIMS = "killed %s"
-L.TOAST_SIGHTING = "Hitlist: %s spotted"
-L.TOAST_SIGHTING_TEXT = "%s - %d attacks, %d kills on us"
+-- sightings: "Hitlist: Rogz nearby · 2 kills, 3 attacks · Refuge Pointe"
+L.SIGHTING = "Hitlist: %s nearby"
+L.SIGHTING_RECORD = "%d kills, %d attacks"
 
--- PvP wording (Flavor.lua). Lists: one is picked at random for variety.
-L.IN_ZONE = "in %s"
-L.DIED = { "%s was killed by %s", "%s fell to %s", "%s got ganked by %s", "%s was taken down by %s" }
-L.DIED_UNKNOWN = { "%s was killed by an enemy player", "%s fell to an unseen enemy", "%s got ganked" }
-L.DIED_AGAIN = "%s killed %s again"
-L.DIED_NUMBER = "%s has %s's number"
-L.DIED_NEMESIS = "%s's nemesis strikes again: %s"
-L.NTH_TIME = "%s time"
-L.SPREE_DEATHS = "%d deaths in %d min"
-L.DEATHS_TODAY = "%s death today"
+-- PvP wording (Flavor.lua): who did what; extras and the place follow after " · ".
+-- Lists: one is picked at random for variety.
+L.DIED = { "%s killed by %s", "%s fell to %s", "%s ganked by %s", "%s taken down by %s" }
+L.DIED_UNKNOWN = { "%s killed by an enemy player", "%s fell to an unseen enemy", "%s got ganked" }
+L.DIED_AGAIN = "%s killed %s again (%s)"
+L.DIED_NUMBER = "%s has %s's number (%s)"
+L.DIED_NEMESIS = "%s's nemesis %s strikes (%s)"
+L.SPREE_DEATHS = "%d deaths/%dm"
+L.TODAY = "%s today"
 L.KILL = { "%s killed %s", "%s took down %s", "%s dropped %s", "%s sent %s to the spirit healer" }
 L.KILL_REVENGE = "%s got revenge on %s"
-L.KILL_AVENGED = "%s avenged %s - %s is down"
-L.KILL_OWNS = "%s owns %s"
-L.NTH_KILL_ON = "%s kill on them"
-L.STREAK = "%d kills in %d min"
-L.RAMPAGE = "rampage! %d kills in %d min"
-L.KILLS_TODAY = "%s kill today"
-L.ATTACKED = { "%s is under attack!", "%s is in a fight!", "%s got jumped!" }
-L.ATTACKED_BY = "by %s"
-L.ATTACKER_HISTORY = "%s has killed them %d times before"
+L.KILL_AVENGED = "%s avenged %s on %s"
+L.KILL_OWNS = "%s owns %s (%s)"
+L.STREAK = "%d kills/%dm"
+L.RAMPAGE = "rampage %d/%dm"
+L.ATTACKED = { "%s attacked by %s", "%s jumped by %s", "%s in a fight with %s" }
+L.ATTACKER_HISTORY = "(killed them %d×)"
 L.OPT_FLAVOR = "Flavor text (off: short - who, what, where)"
--- flavor off: compact, one line
-L.SHORT_DIED = "%s killed by %s - %s"
-L.SHORT_DIED_UNKNOWN = "%s killed by an enemy player - %s"
-L.SHORT_KILL = "%s killed %s - %s"
-L.SHORT_REVENGE = "%s killed %s (revenge) - %s"
-L.SHORT_ATTACKED = "%s attacked by %s - %s"
-L.SHORT_SIGHTING = "Hitlist: %s spotted - %s"
+-- flavor off: who did what (the place is added after " · ")
+L.SHORT_DIED = "%s killed by %s"
+L.SHORT_DIED_UNKNOWN = "%s killed by an enemy player"
+L.SHORT_KILL = "%s killed %s"
+L.SHORT_REVENGE = "%s killed %s (revenge)"
+L.SHORT_ATTACKED = "%s attacked by %s"
 
 -- feed
 L.FEED_LEVEL = "%s reached level %d"

@@ -170,7 +170,7 @@ H.LVL = function(_, isSelf, p, f)
   local milestone = lvl >= ns.MILESTONE_LEVEL
   ns.Toast.Push({
     kind = "level", category = "progress", icon = ICON.level, chat = line, milestone = milestone,
-    subjects = { who(p) }, title = (milestone and L.TOAST_LEVEL_MAX or L.TOAST_LEVEL):format(who(p)), text = L.TOAST_LEVEL_TEXT:format(lvl),
+    subjects = { who(p) }, title = milestone and L.TOAST_LEVEL_MAX:format(who(p), lvl) or line,
     collapseKey = "level", merge = mergeSubjects(L.TOAST_LEVEL),
   })
 end
@@ -184,7 +184,7 @@ H.LOOT = function(_, isSelf, p, f)
   ns.Toast.Push({
     kind = "loot", category = "progress", icon = itemIcon(f.link), link = f.link,
     chat = line, milestone = not crafted, -- a looted epic BoE always toasts
-    title = L.TOAST_LOOT:format(who(p)), text = (crafted and L.TOAST_CRAFTED or L.TOAST_LOOTED):format(f.link),
+    title = line,
   })
 end
 
@@ -197,11 +197,11 @@ H.GEAR = function(_, isSelf, p, f)
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "gear", category = "progress", icon = itemIcon(f.link), link = f.link, firstLink = f.link, count = count,
-    title = L.TOAST_GEAR:format(who(p)), text = text,
+    title = line, who = who(p),
     collapseKey = "gear:" .. p.name,
     merge = function(old, new)
       old.count = old.count + new.count
-      old.text = L.TOAST_GEAR_MORE:format(old.firstLink, old.count - 1)
+      old.title = L.FEED_GEAR:format(old.who, L.TOAST_GEAR_MORE:format(old.firstLink, old.count - 1))
     end,
   })
 end

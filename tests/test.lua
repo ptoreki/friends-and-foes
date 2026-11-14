@@ -392,20 +392,20 @@ local function lastFeed() return real.feed[#real.feed].text end
 for i = 1, 3 do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
 end
-check(lastFeed():find("killed", 1, true) and lastFeed():find("again", 1, true) and lastFeed():find("3rd time", 1, true)
-  and lastFeed():find("deaths in 1 min", 1, true), "repeat killer + death spree: " .. lastFeed())
+check(lastFeed():find("killed", 1, true) and lastFeed():find("again (3rd)", 1, true)
+  and lastFeed():find("deaths/1m", 1, true), "repeat killer + death spree: " .. lastFeed())
 check(real.hitlist["Nem Esis"].kv["Buddy Pal"] == 3, "per-victim kill count kept on the hitlist entry")
 for i = 4, 5 do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
 end
-check(lastFeed():find("has", 1, true) and lastFeed():find("number", 1, true) and lastFeed():find("5th time", 1, true), "5th death to the same killer: " .. lastFeed())
+check(lastFeed():find("has", 1, true) and lastFeed():find("number (5th)", 1, true), "5th death to the same killer: " .. lastFeed())
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "fa1", zone = "Duskwood", attackers = "Nem Esis:ROGUE:60:" }, "fa1"), "WHISPER", 77)
-check(lastFeed():find("has killed them 5 times before", 1, true) ~= nil, "attacker's history on this friend: " .. lastFeed())
+check(lastFeed():find("(killed them 5", 1, true) ~= nil, "attacker's history on this friend: " .. lastFeed())
 for i = 1, 3 do
   ADVANCE(20)
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk" .. i), "WHISPER", 77)
 end
-check(lastFeed():find("owns", 1, true) and lastFeed():find("3rd kill on them", 1, true) and lastFeed():find("kills in", 1, true),
+check(lastFeed():find("owns", 1, true) and lastFeed():find("(3rd)", 1, true) and lastFeed():find("kills/", 1, true),
   "repeat kill + streak: " .. lastFeed())
 -- revenge on behalf of another friend
 local nem = real.hitlist["Nem Esis"]
@@ -418,14 +418,14 @@ ADVANCE(20)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk10"), "WHISPER", 77)
 check(lastFeed():find("killed", 1, true) and not lastFeed():find("owns", 1, true), "flavor off: plain wording: " .. lastFeed())
 local function plain(s) return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-check(plain(lastFeed()) == "Buddy Pal killed Vic Tim - Duskwood", "compact kill: " .. plain(lastFeed()))
+check(plain(lastFeed()) == "Buddy Pal killed Vic Tim · Duskwood", "compact kill: " .. plain(lastFeed()))
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fc1"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal killed by Nem Esis - Duskwood", "compact death: " .. plain(lastFeed()))
+check(plain(lastFeed()) == "Buddy Pal killed by Nem Esis · Duskwood", "compact death: " .. plain(lastFeed()))
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "fc2", zone = "Duskwood", attackers = "Nem Esis:ROGUE:60:" }, "fc2"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal attacked by Nem Esis - Duskwood", "compact attack: " .. plain(lastFeed()))
+check(plain(lastFeed()) == "Buddy Pal attacked by Nem Esis · Duskwood", "compact attack: " .. plain(lastFeed()))
 ADVANCE(20)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Nem Esis", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fc3"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal killed Nem Esis (revenge) - Duskwood", "compact revenge: " .. plain(lastFeed()))
+check(plain(lastFeed()) == "Buddy Pal killed Nem Esis (revenge) · Duskwood", "compact revenge: " .. plain(lastFeed()))
 -- the toast is the same single line
 drainToasts()
 local shownToast
@@ -436,6 +436,7 @@ local top
 for _, f in ipairs(FRAMES) do if f.spec and f.spec.chat == "line" then top = f.spec end end
 check(top and top.title == "line" and top.text == nil, "compact toast uses the chat line as its only text")
 ns.S().flavor = true
+check(ns.Flavor.Place("Hillsbrad Foothills (Tarren Mill)") == "Tarren Mill" and ns.Flavor.Place("Duskwood") == "Duskwood" and ns.Flavor.Place(nil) == "?", "place: subzone if any, else zone")
 check(ns.errors == 0, "no errors in flavor (" .. tostring(ns.lastError) .. ")")
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
