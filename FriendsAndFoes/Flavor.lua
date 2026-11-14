@@ -186,20 +186,6 @@ function Flavor.Engage(p, who, v, h, zone)
   return result(title, nil, zone)
 end
 
----------------------------------------------------------------------------
--- several kills merged into one toast: by one friend, or of one enemy by several friends
----------------------------------------------------------------------------
-function Flavor.MergedKill(killers, victims, unnamed)
-  local list = {}
-  for _, v in ipairs(victims) do list[#list + 1] = v end
-  if unnamed > 0 then list[#list + 1] = unnamed == 1 and L.AN_ENEMY or L.N_ENEMIES:format(unnamed) end
-  if #killers == 1 then
-    if #victims == 0 then return L.MULTI_KILL_UNNAMED:format(killers[1], unnamed) end
-    return L.MULTI_KILL:format(killers[1], ns.JoinNames(list))
-  end
-  return L.GROUP_KILL:format(ns.JoinNames(killers), ns.JoinNames(list))
-end
-
 function Flavor.Attacked(p, who, by, attackers, zone)
   if not on() then return compact(L.SHORT_ATTACKED:format(who, by), zone) end
   local title = pick(L.ATTACKED):format(who, by)

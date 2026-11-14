@@ -159,9 +159,6 @@ Rules:
     the details.
   - It's tinted red for PvP and purple for sightings.
   - Frames are pooled per style.
-- **Kill merging:** a non-milestone kill toast within 15 s of another, by the same friend or of
-  the same enemy (names compared without colour codes), merges into it: "X killed A and B" or
-  "X and Y took down A". Chat lines and the Feed stay one per kill.
 - **Death helpers:** enemy assists from the death recap are added to the death line, "(with Z)".
 - **Sightings:** your own sightings are sent as SIGHT. A received one shows "X spotted by Y" with
   your record of X (if X is on your hitlist) and the place. One alert per player every 5 minutes,

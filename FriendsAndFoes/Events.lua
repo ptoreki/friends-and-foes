@@ -328,7 +328,6 @@ H.KILL = function(msg, isSelf, p, f)
     ns.Toast.Push({
       chat = line, milestone = ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
       title = title, text = text, header = ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK or nil,
-      mergeKill = true, killer = who(p), place = ns.Flavor.Place(f.zone),
     })
     return
   end
@@ -353,7 +352,6 @@ H.KILL = function(msg, isSelf, p, f)
     chat = line, milestone = revenge or ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
     title = title, text = text,
     player = name,
-    mergeKill = true, killer = who(p), victim = v, place = ns.Flavor.Place(f.zone),
   })
 end
 
