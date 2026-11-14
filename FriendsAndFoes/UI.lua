@@ -223,7 +223,7 @@ end
 function UI.HitTooltip(owner, h)
   GameTooltip:SetOwner(owner, "ANCHOR_CURSOR")
   GameTooltip:AddLine(ns.ClassColored(h.name, h.class) .. (h.guild and ("  |cff888888<" .. h.guild .. ">|r") or ""))
-  GameTooltip:AddLine(L.HIT_TIP_RECORD:format(ns.Count(h.kills), ns.Count(h.attacks)), 1, 1, 1)
+  GameTooltip:AddLine(L.HIT_TIP_RECORD:format(ns.Count(h.kills)), 1, 1, 1)
   local kills = ns.Data.KillsOn(h)
   if #kills > 0 then
     GameTooltip:AddLine(" ")

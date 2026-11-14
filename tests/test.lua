@@ -1029,7 +1029,7 @@ do
   ns.UI.HitTooltip(CreateFrame(), h)
   local text = table.concat(lines, " | ")
   check(text:find("Bob One = 3x", 1, true) and text:find("Alice Two = 1x", 1, true) and text:find("Old Victim = before counting began", 1, true)
-    and text:find("4 kills, 6 attacks", 1, true), "hover tooltip: per-friend kill counts: " .. text)
+    and text:find("4 kills on your group", 1, true) and not text:find("attacks", 1, true), "hover tooltip: per-friend kill counts: " .. text)
   GameTooltip.AddLine, GameTooltip.AddDoubleLine = oAdd, oDouble
 end
 
