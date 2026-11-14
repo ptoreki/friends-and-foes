@@ -189,7 +189,7 @@ ns.On("ADDON_LOADED", function(name)
     end
     db.settings.toast = nil
   end
-  -- 0.6.0 and earlier: one "hold toasts in instances" switch; off meant show everywhere
+  -- 0.5.5 and earlier: one "hold toasts in instances" switch; off meant show everywhere
   if db.settings.dnd.instance ~= nil then
     if db.settings.dnd.instance == false then
       for k in pairs(db.settings.where) do db.settings.where[k] = "show" end
