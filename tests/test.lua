@@ -807,6 +807,37 @@ do
   check(ns.errors == 0, "no errors refusing options in combat (" .. tostring(ns.lastError) .. ")")
 end
 
+-- removing players / clearing the hitlist asks for confirmation first
+do
+  local popup
+  StaticPopupDialogs = {}
+  StaticPopup_Show = function(which, text, _, data) popup = { which = which, text = text, data = data } end
+  local function yes() StaticPopupDialogs[popup.which].OnAccept(nil, popup.data); popup = nil end
+  real.hitlist["Gone Soon"] = { name = "Gone Soon", attacks = 1, kills = 1, victims = {} }
+  real.players["Gone Soon"] = { name = "Gone Soon", enemy = true, k = 1, d = 0, a = 0 }
+  ns.UI.Show("hitlist")
+  ns.UI.RemoveFromHitlist("Gone Soon")
+  check(popup and popup.text:find("Gone Soon", 1, true) and real.hitlist["Gone Soon"], "remove asks first; nothing removed yet")
+  popup = nil -- said No / closed it
+  check(real.hitlist["Gone Soon"] ~= nil, "No keeps them")
+  ns.UI.RemoveFromHitlist("Gone Soon")
+  yes()
+  check(real.hitlist["Gone Soon"] == nil and real.players["Gone Soon"] ~= nil, "Yes removes them from the hitlist (their K/D stays)")
+  ns.UI.RemovePlayer("Gone Soon")
+  check(popup and real.players["Gone Soon"] ~= nil, "removing a player asks first")
+  yes()
+  check(real.players["Gone Soon"] == nil, "Yes removes the player record")
+  local saved = {}
+  for k, v in pairs(real.hitlist) do saved[k] = v end
+  ns.UI.ClearHitlist()
+  check(popup and popup.text:find("Clear your whole hitlist", 1, true) and next(real.hitlist) ~= nil, "clear asks first")
+  yes()
+  check(next(real.hitlist) == nil, "Yes clears the hitlist")
+  for k, v in pairs(saved) do real.hitlist[k] = v end
+  StaticPopupDialogs, StaticPopup_Show = nil, nil
+  check(ns.errors == 0, "no errors removing/clearing (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

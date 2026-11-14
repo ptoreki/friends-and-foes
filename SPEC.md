@@ -116,7 +116,9 @@ Rules:
     killed), last seen and zone, a note, and who shared it.
   - A shared entry with no kills (from an older client) isn't added.
   - From 0.5.4, a one-time cleanup removes entries with no kills, unless they have a note.
-  - Entries never expire. They can be removed by hand.
+  - Entries never expire. Remove one (Remove button or right-click), or clear the whole list
+    (Clear hitlist). Both ask Yes/No first. Player records (Players tab) can be removed by
+    right-click too, also with confirmation.
 - **Pruning** at login: enemies not seen for 90 days, with no kills or assists on us and not on
   the hitlist, are removed.
 - **Feed**: the last 500 events.

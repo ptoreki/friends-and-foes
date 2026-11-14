@@ -11,6 +11,12 @@ Compatible with 0.3.x to 0.5.5.
 - **Debug log: every alert's outcome.** One `[TOAST]` line per alert: shown as a toast, a chat line,
   off, waiting (in combat or in a dungeon), merged, or dropped, always with the reason. Now a
   missing toast can be traced.
+- **Remove players and clear the hitlist, with confirmation:**
+  - Right-click anyone in the Hitlist or Players lists to remove them.
+  - The Hitlist tab has a **Clear hitlist** button.
+  - Every removal asks Yes/No first, including the existing Remove button.
+  - Removing someone from the hitlist keeps their kill/death record. Removing them under Players
+    deletes that record.
 - **Fixed:** opening Options in combat caused a Lua error. The game doesn't let addons open its
   settings window in combat, so Options now says so and doesn't open.
 - The old "hold all toasts in dungeons/raids" checkbox is replaced by the dropdowns. If you had it

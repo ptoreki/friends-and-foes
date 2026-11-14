@@ -256,6 +256,7 @@ local function layoutColumns(cols)
 end
 
 local function refreshShareStatus()
+  if detail.clear then detail.clear:SetEnabled(next(R().hitlist) ~= nil) end
   local queued = ns.Comm.QueuedCount("bulk")
   detail.shareStatus:SetText(queued > 0 and L.SHARE_QUEUED:format(queued) or "")
   if ns.viewSim then detail.share:Disable() else detail.share:Enable() end
@@ -337,8 +338,12 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(friendsView() and not ns.viewSim)
-  friendsHint:SetText(ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL)
+  friendsHint:SetShown(currentTab == "players")
+  if friendsView() and not ns.viewSim then
+    friendsHint:SetText((ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL) .. "  " .. L.REMOVE_HINT)
+  else
+    friendsHint:SetText(L.REMOVE_HINT)
+  end
 end
 
 local refreshPending = false
@@ -364,6 +369,54 @@ function UI.SetPlayerFilter(which)
 end
 
 function UI.OpenSettings() ns.Options.Open() end
+
+-- Yes/No confirmation (the game's standard pop-up) before anything is deleted.
+local CONFIRM = "FRIENDSANDFOES_CONFIRM"
+function UI.Confirm(text, onYes)
+  if not (StaticPopupDialogs and StaticPopup_Show) then return end -- no way to ask: do nothing
+  StaticPopupDialogs[CONFIRM] = StaticPopupDialogs[CONFIRM] or {
+    text = "%s", button1 = YES or "Yes", button2 = NO or "No",
+    OnAccept = function(self, data)
+      local fn = (data and data.fn) or (self and self.data and self.data.fn)
+      if fn then ns.Try("confirm", fn) end
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  }
+  StaticPopup_Show(CONFIRM, text, nil, { fn = onYes })
+end
+
+local function afterRemove()
+  if ns.Marks then ns.Marks.Refresh() end
+  UI.Refresh()
+end
+
+function UI.RemoveFromHitlist(name)
+  if not (name and R().hitlist[name]) then return end
+  UI.Confirm(L.CONFIRM_REMOVE_HIT:format(name), function()
+    R().hitlist[name] = nil
+    if selected == name then selected = nil end
+    afterRemove()
+  end)
+end
+
+function UI.RemovePlayer(name)
+  if not (name and R().players[name]) then return end
+  UI.Confirm(L.CONFIRM_REMOVE_PLAYER:format(name), function()
+    R().players[name] = nil
+    afterRemove()
+  end)
+end
+
+function UI.ClearHitlist()
+  local n = 0
+  for _ in pairs(R().hitlist) do n = n + 1 end
+  if n == 0 then return end
+  UI.Confirm(L.CONFIRM_CLEAR_HITLIST:format(n), function()
+    wipe(R().hitlist)
+    selected = nil
+    afterRemove()
+  end)
+end
 
 -- A dropdown: the game's modern dropdown when available, else a  < value >  stepper.
 -- items = { { value, label }, ... }
@@ -587,7 +640,17 @@ local function build()
       GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    row:SetScript("OnClick", function(self)
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row:SetScript("OnClick", function(self, mouse)
+      local e = self.entry
+      if mouse == "RightButton" then
+        if e and not e.pending and currentTab == "hitlist" then
+          UI.RemoveFromHitlist(e.name)
+        elseif e and not e.pending and currentTab == "players" then
+          UI.RemovePlayer(e.name)
+        end
+        return
+      end
       if currentTab == "hitlist" and self.entry then
         selected = self.entry.name
         UI.Refresh()
@@ -657,15 +720,12 @@ local function build()
   detail.save:SetPoint("LEFT", detail.note, "RIGHT", 8, 0)
   detail.note:SetScript("OnEnterPressed", saveNote)
   detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  detail.remove = button(detail, 70, L.REMOVE, function()
-    if selected then R().hitlist[selected] = nil end
-    if ns.Marks then ns.Marks.Refresh() end
-    selected = nil
-    UI.Refresh()
-  end)
+  detail.remove = button(detail, 70, L.REMOVE, function() UI.RemoveFromHitlist(selected) end)
   detail.remove:SetPoint("LEFT", detail.save, "RIGHT", 6, 0)
   detail.share = button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end)
   detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
+  detail.clear = button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end)
+  detail.clear:SetPoint("RIGHT", detail.share, "LEFT", -6, 0)
   detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
 
