@@ -106,16 +106,17 @@ local gearBuffer
 
 local function queueGear(link, quality)
   if not gearBuffer then
-    gearBuffer = { count = 0 }
+    gearBuffer = { count = 0, epics = 0 }
     C_Timer.After(GEAR_BUNDLE, function()
       local b = gearBuffer
       gearBuffer = nil
       if b and b.best then
-        ns.Try("gear-emit", ns.Events.Emit, "GEAR", { link = b.best, count = b.count })
+        ns.Try("gear-emit", ns.Events.Emit, "GEAR", { link = b.best, count = b.count, epics = b.epics })
       end
     end)
   end
   gearBuffer.count = gearBuffer.count + 1
+  if quality and quality >= 4 then gearBuffer.epics = gearBuffer.epics + 1 end
   if not gearBuffer.bestQuality or quality > gearBuffer.bestQuality then
     gearBuffer.best, gearBuffer.bestQuality = link, quality
   end

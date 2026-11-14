@@ -35,14 +35,15 @@ local function sortedValues(tbl, filter)
   return out
 end
 
-local function victimsText(victims)
+-- who a hitlist player killed, most first, with counts: "Bob 3x, Alice 1x"
+local function victimsText(h)
   local list = {}
-  for name in pairs(victims or {}) do
-    local p = R().players[name]
-    list[#list + 1] = ns.ClassColored(name, p and p.class)
+  for _, v in ipairs(ns.Data.KillsOn(h)) do
+    local p = R().players[v[1]]
+    local name = ns.ClassColored(v[1], p and p.class)
+    list[#list + 1] = v[2] and L.KILLS_ON_COUNT:format(name, v[2]) or name
   end
-  table.sort(list)
-  return ns.JoinNames(list)
+  return table.concat(list, ", ")
 end
 
 local function lastText(e)
@@ -91,7 +92,7 @@ local HITLIST_COLS = {
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_GUILD, 95, guild, byGuild },
   { L.COL_KILLS, 70, hitKills, function(e) return e.kills or 0 end },
-  { L.COL_VICTIMS, 155, function(e) return victimsText(e.victims) end, function(e) return count(e.victims) end },
+  { L.COL_VICTIMS, 155, function(e) return victimsText(e) end, function(e) return count(e.victims) end },
   { L.COL_LAST, 145, lastText, byLast },
 }
 
@@ -137,27 +138,24 @@ local FRIEND_COLS = {
 local function fetchFriends()
   -- you are not your own friend; friends on the other faction aren't shown
   -- friends you haven't heard from in 6 months leave the list (unless they're online now)
-  local online = {}
-  for _, name in ipairs(ns.Comm.EveryoneNames()) do
-    online[ns.Data.Resolve(R().players, name) or name] = true
+  -- one pass over who's online: known friends get "online", the rest a placeholder row
+  wipe(onlineNow)
+  local onlineRows = {}
+  if not ns.viewSim then
+    for _, name in ipairs(ns.Comm.EveryoneNames()) do
+      local rec = R().players[ns.Data.Resolve(R().players, name)]
+      if rec and rec.friend then
+        onlineNow[rec.name] = ns.Comm.ZoneOf(name) or true
+      else
+        onlineRows[#onlineRows + 1] = { name = name, pending = true, zone = ns.Comm.ZoneOf(name) }
+      end
+    end
   end
   local list = sortedValues(R().players, function(p)
     return p.friend and not p.self and p.name ~= ns.me
       and not (p.faction and ns.myFaction and p.faction ~= ns.myFaction)
-      and (online[p.name] or ns.viewSim or not ns.Data.FriendIsGone(p))
+      and (onlineNow[p.name] or ns.viewSim or not ns.Data.FriendIsGone(p))
   end)
-  if ns.viewSim then return list end
-  wipe(onlineNow)
-  local onlineRows = {}
-  for _, name in ipairs(ns.Comm.EveryoneNames()) do
-    local p = ns.Data.Resolve(R().players, name)
-    local rec = R().players[p]
-    if rec and rec.friend then
-      onlineNow[rec.name] = ns.Comm.ZoneOf(name) or true
-    else
-      onlineRows[#onlineRows + 1] = { name = name, pending = true, zone = ns.Comm.ZoneOf(name) }
-    end
-  end
   for _, row in ipairs(onlineRows) do table.insert(list, 1, row) end
   return list
 end
@@ -436,17 +434,24 @@ function UI.OpenSettings() ns.Options.Open() end
 
 -- Yes/No confirmation (the game's standard pop-up) before anything is deleted.
 local CONFIRM = "FRIENDSANDFOES_CONFIRM"
-function UI.Confirm(text, onYes)
-  if not (StaticPopupDialogs and StaticPopup_Show) then return end -- no way to ask: do nothing
+function UI.Confirm(text, onYes, onNo)
+  if not (StaticPopupDialogs and StaticPopup_Show) then -- no way to ask: do nothing
+    if onNo then ns.Try("confirm-no", onNo) end
+    return
+  end
   StaticPopupDialogs[CONFIRM] = StaticPopupDialogs[CONFIRM] or {
     text = "%s", button1 = YES or "Yes", button2 = NO or "No",
     OnAccept = function(self, data)
-      local fn = (data and data.fn) or (self and self.data and self.data.fn)
-      if fn then ns.Try("confirm", fn) end
+      local d = data or (self and self.data)
+      if d and d.fn then ns.Try("confirm", d.fn) end
+    end,
+    OnCancel = function(self, data)
+      local d = data or (self and self.data)
+      if d and d.no then ns.Try("confirm-no", d.no) end
     end,
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
   }
-  StaticPopup_Show(CONFIRM, text, nil, { fn = onYes })
+  StaticPopup_Show(CONFIRM, text, nil, { fn = onYes, no = onNo })
 end
 
 local function afterRemove()

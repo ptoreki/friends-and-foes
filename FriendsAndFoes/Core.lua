@@ -60,7 +60,8 @@ end
 function ns.S() return FriendsAndFoesDB.settings end
 
 -- an item link's quality (2 green, 3 blue, 4 epic...), or nil if it can't be told
-local QUALITY_COLOR = { ["1eff00"] = 2, ["0070dd"] = 3, ["a335ee"] = 4, ["ff8000"] = 5 }
+local QUALITY_COLOR = { ["9d9d9d"] = 0, ["ffffff"] = 1, ["1eff00"] = 2, ["0070dd"] = 3, ["a335ee"] = 4,
+  ["ff8000"] = 5, ["e6cc80"] = 6, ["00ccff"] = 7 }
 function ns.ItemQuality(link)
   if type(link) ~= "string" then return nil end
   local q = link:match("|cnIQ(%d):")
@@ -222,6 +223,11 @@ ns.On("ADDON_LOADED", function(name)
     end
     db.settings.dnd.instance = nil
   end
+  -- 0.6.1 and earlier: one switch for skull + tooltip; the new tooltip switch keeps that choice (once)
+  if not db.settings.markSplit then
+    db.settings.markTooltip = db.settings.mark ~= false
+    db.settings.markSplit = true
+  end
   -- 0.5.3 and earlier defaulted a friend's kill to chat; it's a toast now (once).
   if not db.settings.killToast then
     if db.settings.show.kill == "chat" then db.settings.show.kill = "toast" end
@@ -333,8 +339,9 @@ end
 function ns.ClassColored(name, class)
   if not name then return "?" end
   if (not class or class == "") and ns.Data and FriendsAndFoesDB and FriendsAndFoesDB.realms then
-    local ok, rec = pcall(ns.Data.FindPlayer, name)
-    if ok and rec and rec.class then class = rec.class end
+    local ok, view = pcall(ns.Data.ViewRealm) -- the data on screen (real or simulation)
+    local rec = ok and view and view.players[name]
+    if rec and rec.class then class = rec.class end
   end
   local c = class and class ~= "" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
   if not c then return name end

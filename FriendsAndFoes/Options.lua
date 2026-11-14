@@ -384,20 +384,14 @@ function Options.BuildNative()
     slider("toastDuration", L.OPT_TOAST_DURATION, D.toastDuration,
       function() return tonumber(S().toastDuration) or 3 end,
       function(v) S().toastDuration = v end, 2, 10, 1, "%d s", L.TIP_TOAST_DURATION)
+    slider("toastMax", L.OPT_TOAST_MAX, D.toastMax,
+      function() return tonumber(S().toastMax) or 2 end,
+      function(v) S().toastMax = v; ns.Toast.ApplyMax() end, 1, 4, 1, "%d", L.TIP_TOAST_MAX)
   end
   proxyDropdown(look, "toastGrow", "String", L.OPT_TOAST_GROW, D.toastGrow,
     function() return S().toastGrow == "up" and "up" or "down" end,
     function(v) S().toastGrow = v; ns.Toast.ApplyScale() end,
     { { "down", L.GROW_DOWN }, { "up", L.GROW_UP } }, L.TIP_TOAST_GROW)
-  if Settings.CreateSlider and Settings.CreateSliderOptions then
-    local s = Settings.RegisterProxySetting(look, "FNF_toastMax", varType("Number"), L.OPT_TOAST_MAX, D.toastMax,
-      function() return tonumber(S().toastMax) or 2 end, function(v) S().toastMax = v; ns.Toast.Pump() end)
-    local o = Settings.CreateSliderOptions(1, 4, 1)
-    if o.SetLabelFormatter and MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
-      o:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(v) return tostring(v) end)
-    end
-    Settings.CreateSlider(look, s, o, L.TIP_TOAST_MAX)
-  end
   button(lookLayout, L.OPT_PREVIEW, L.BTN_PREVIEW, function() ns.Toast.Test() end, L.TIP_PREVIEW)
   button(lookLayout, L.OPT_POSITION, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end, L.TIP_POSITION)
   header(lookLayout, L.MESSAGES_HEADER)
@@ -425,12 +419,26 @@ function Options.BuildNative()
     if ns.Marks then ns.Marks.Refresh() end
   end)
   checkbox(friends, "markTooltip", S(), "markTooltip", L.OPT_MARK_TOOLTIP, D.markTooltip, L.TIP_MARK_TOOLTIP)
-  proxyDropdown(friends, "forgetAfter", "Number", L.OPT_FORGET, 0,
+  -- forgetting deletes entries: if any would go now, ask first; "No" puts the setting back
+  local forget
+  forget = proxyDropdown(friends, "forgetAfter", "Number", L.OPT_FORGET, 0,
     function() return tonumber(S().forgetAfter) or 0 end,
     function(v)
-      S().forgetAfter = v
-      ns.Data.ForgetOld(FriendsAndFoesDB)
-      if ns.UI then ns.UI.Refresh() end
+      local old = tonumber(S().forgetAfter) or 0
+      if v == old then return end
+      local n = ns.Data.CountForget(FriendsAndFoesDB, v)
+      if n == 0 then
+        S().forgetAfter = v
+        return
+      end
+      S().forgetAfter = old -- until confirmed
+      ns.UI.Confirm(L.CONFIRM_FORGET:format(n), function()
+        S().forgetAfter = v
+        ns.Data.ForgetOld(FriendsAndFoesDB)
+        if ns.UI then ns.UI.Refresh() end
+      end, function()
+        if forget and forget.SetValue then forget:SetValue(old) end
+      end)
     end,
     { { 0, L.FORGET_NEVER }, { 90, L.FORGET_3M }, { 180, L.FORGET_6M }, { 365, L.FORGET_1Y } }, L.TIP_FORGET)
   button(friendsLayout, L.OPT_SHARE_NOW, L.BTN_SHARE, function() ns.UI.ShareHitlist() end, L.TIP_SHARE_NOW)

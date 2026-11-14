@@ -398,6 +398,12 @@ local function createToast(theme)
   return f
 end
 
+-- Options: fewer toasts on screen - close the oldest extra ones now
+function Toast.ApplyMax()
+  while #active > maxVisible() do release(active[1]) end
+  Toast.Pump()
+end
+
 function Toast.Layout()
   local y = 0
   local up = ns.S().toastGrow == "up"

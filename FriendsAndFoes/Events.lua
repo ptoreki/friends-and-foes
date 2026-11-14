@@ -213,6 +213,9 @@ end
 H.GEAR = function(_, isSelf, p, f)
   if f.link == "" then return end
   local count = tonumber(f.count) or 1
+  -- "Epic only": count just the epics of the batch (senders before 0.6.2 don't say; keep the total)
+  local epics = tonumber(f.epics)
+  if not isSelf and epics and (tonumber(ns.S().gearMin) or 3) >= 4 and epics >= 1 then count = epics end
   local text = (count > 1) and L.TOAST_GEAR_MORE:format(f.link, count - 1) or f.link
   local line = L.FEED_GEAR:format(who(p), text)
   feed(p, "gear", line)

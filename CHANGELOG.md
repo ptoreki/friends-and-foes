@@ -30,6 +30,16 @@ Compatible with 0.3.x to 0.6.1.
   - Toasts stay 5 seconds. Fights in other zones and in combat aren't held back.
 
   Your own settings don't change.
+- **Fixes from a code review:**
+  - Choosing a "Forget hitlist players" period now asks first if it would remove anything right
+    away. No keeps the old setting.
+  - If you had turned off "Mark hitlist players", the new tooltip switch starts off too.
+  - The Victims column shows who a player killed, most first, with counts ("Bob 3x, Alice 1x").
+  - "Epic only" counts only the epics in a batch of new gear.
+  - Lowering "Toasts on screen" takes effect right away.
+  - A just-shared hitlist entry no longer shows an old level.
+  - Every item quality colour is recognised, including white and grey.
+  - Class colours are looked up faster, and use simulation data while in simulation view.
 - **Old data fades instead of piling up:**
   - **Hitlist players nobody has seen for 90 days** are greyed out and listed at the bottom. As
     soon as you or a friend sees them again, they're back to normal.

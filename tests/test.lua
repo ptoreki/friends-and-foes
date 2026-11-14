@@ -1171,6 +1171,46 @@ do
   check(ns.errors == 0, "no errors in 0.6.2 options (" .. tostring(ns.lastError) .. ")")
 end
 
+-- code review fixes
+do
+  -- #1 "Epic only" counts only the epics of a gear batch
+  drainToasts()
+  ns.S().show.gear, ns.S().gearMin = "toast", 4
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:7|h[Epic One]|h|r", count = "3", epics = "1" }, "rv1"), "WHISPER", 77)
+  local gearToast
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.kind == "gear" then gearToast = f.spec end end
+  check(gearToast and not ns.Plain(gearToast.title):find("more", 1, true), "epic only: '+N more' counts epics only: " .. tostring(gearToast and ns.Plain(gearToast.title)))
+  drainToasts()
+  ns.S().show.gear, ns.S().gearMin = "chat", 3
+  -- #2 white and grey items are recognised
+  check(ns.ItemQuality("|cffffffff|Hitem:8|h[White]|h|r") == 1 and ns.ItemQuality("|cff9d9d9d|Hitem:9|h[Grey]|h|r") == 0, "white/grey quality")
+  -- #3 forgetting asks first; "No" changes nothing
+  real.hitlist["Ancient One"] = { name = "Ancient One", kills = 1, victims = {}, lastSeen = time() - 400 * 86400 }
+  check(ns.Data.CountForget(FriendsAndFoesDB, 90) >= 1, "count what forgetting would remove")
+  local saidNo = false
+  ns.UI.Confirm("x", function() end, function() saidNo = true end) -- no pop-up available in tests: counts as No
+  check(saidNo and real.hitlist["Ancient One"], "declined: nothing removed")
+  real.hitlist["Ancient One"] = nil
+  -- #4 the old "mark" choice carries over to the new tooltip switch
+  ns.S().mark, ns.S().markTooltip, ns.S().markSplit = false, true, nil
+  FIRE("ADDON_LOADED", "FriendsAndFoes")
+  check(ns.S().markTooltip == false and ns.S().markSplit, "mark off before the split: tooltip stays off")
+  ns.S().mark, ns.S().markTooltip = true, true
+  -- #5 a fresh entry without "last seen" isn't shown as an old level
+  check(not ns.Data.LevelIsOld({ firstSeen = time() }), "no lastSeen: firstSeen decides")
+  -- #10 lowering "toasts on screen" closes the extra ones
+  ns.S().toastMax = 3
+  for i = 1, 3 do ns.Toast.Push({ kind = "died", category = "pvp", title = "trim" .. i, force = true }) end
+  ns.S().toastMax = 1
+  ns.Toast.ApplyMax()
+  local onScreen = 0
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.title and f.spec.title:find("^trim") then onScreen = onScreen + 1 end end
+  check(onScreen == 1, "fewer toasts on screen applies at once (" .. onScreen .. ")")
+  drainToasts()
+  ns.S().toastMax = 2
+  check(ns.errors == 0, "no errors in review fixes (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

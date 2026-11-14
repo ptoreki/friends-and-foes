@@ -296,7 +296,7 @@ function Data.IsStale(rec)
 end
 
 function Data.LevelIsOld(rec)
-  return rec ~= nil and daysSince(rec.lastSeen) > Data.OLD_LEVEL_DAYS
+  return rec ~= nil and daysSince(rec.lastSeen or rec.firstSeen) > Data.OLD_LEVEL_DAYS
 end
 
 function Data.FriendIsGone(rec)
@@ -304,6 +304,18 @@ function Data.FriendIsGone(rec)
 end
 
 -- Options: forget hitlist players not seen for N days. Entries with a note are always kept.
+-- how many entries ForgetOld would remove for this many days (for the confirmation)
+function Data.CountForget(db, days)
+  local n = 0
+  if not days or days <= 0 then return 0 end
+  for _, r in pairs(db.realms or {}) do
+    for _, h in pairs(r.hitlist or {}) do
+      if not h.note and daysSince(h.lastSeen or h.firstSeen) > days then n = n + 1 end
+    end
+  end
+  return n
+end
+
 function Data.ForgetOld(db)
   local days = tonumber(db.settings and db.settings.forgetAfter) or 0
   if days <= 0 then return 0 end
