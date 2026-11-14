@@ -336,7 +336,7 @@ function Toast.Test()
   Toast.Push({ force = true, kind = "died", category = "pvp", icon = ns.ICON.died,
     title = L.SHORT_DIED:format(friend, enemy), text = "Southshore" })
   Toast.Push({ force = true, kind = "kill", category = "pvp", icon = ns.ICON.kill,
-    title = L.SHORT_KILL:format(friend, enemy), text = L.STREAK:format(3, 8) .. SEP .. "Stranglethorn Vale" })
+    title = L.KILL_OWNS:format(friend, enemy, "3rd"), text = L.TODAY:format("5th") .. SEP .. "Stranglethorn Vale" })
 end
 
 ns.OnReady(createAnchor)

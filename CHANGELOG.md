@@ -12,9 +12,10 @@ Compatible with 0.3.x to 0.5.3.
   so it was easy to miss. If you had it on Chat, it switches to Toast once; you can change it back
   in Options.
 - **Shorter messages, same information.** Who did what, then the details, then the place:
-  "Rogz killed Bob again (3rd) · 4 deaths/12m · Tarren Mill" instead of "Rogz killed Bob again (3rd
+  "Rogz killed Bob again (3rd) · 5th today · Tarren Mill" instead of "Rogz killed Bob again (3rd
   time - 4 deaths in 12 min - in Hillsbrad Foothills (Tarren Mill))". The place is the subzone
   when there is one. Level-up, loot and gear toasts are one line ("Bob reached level 30").
+- Dropped the "N deaths/kills in M minutes" and "rampage" notes; "5th today" stays.
 - **Long messages are no longer cut off.** Toasts are a bit wider and wrap onto up to 3 lines. In
   the window, hovering a row shows any cut-off text (e.g. a long Feed entry) in full.
 

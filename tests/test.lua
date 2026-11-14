@@ -393,7 +393,7 @@ for i = 1, 3 do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
 end
 check(lastFeed():find("killed", 1, true) and lastFeed():find("again (3rd)", 1, true)
-  and lastFeed():find("deaths/1m", 1, true), "repeat killer + death spree: " .. lastFeed())
+  and lastFeed():find("th today", 1, true) and not lastFeed():find("/", 1, true), "repeat killer + deaths today: " .. lastFeed())
 check(real.hitlist["Nem Esis"].kv["Buddy Pal"] == 3, "per-victim kill count kept on the hitlist entry")
 for i = 4, 5 do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fd" .. i), "WHISPER", 77)
@@ -405,8 +405,8 @@ for i = 1, 3 do
   ADVANCE(20)
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk" .. i), "WHISPER", 77)
 end
-check(lastFeed():find("owns", 1, true) and lastFeed():find("(3rd)", 1, true) and lastFeed():find("kills/", 1, true),
-  "repeat kill + streak: " .. lastFeed())
+check(lastFeed():find("owns", 1, true) and lastFeed():find("(3rd)", 1, true) and not lastFeed():find("/", 1, true),
+  "repeat kill: " .. lastFeed())
 -- revenge on behalf of another friend
 local nem = real.hitlist["Nem Esis"]
 nem.victims["Alice Ally"] = true

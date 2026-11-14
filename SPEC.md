@@ -138,7 +138,7 @@ Rules:
 - **Do not disturb:** in combat only PvP and sighting toasts show. In instances all toasts wait.
   Queued PvP toasts older than 60 seconds are dropped.
 - **Message shape:** short. Who did what, then extras, then the place, separated by " · ", e.g.
-  "Rogz killed Bob again (3rd) · 4 deaths/12m · Tarren Mill". The place is the subzone if the
+  "Rogz killed Bob again (3rd) · 5th today · Tarren Mill". The place is the subzone if the
   sender had one, else the zone (`Flavor.Place`); the hitlist still stores the full zone.
 - **Varied wording** (`Flavor.lua`, `settings.flavor`, default on): built from history kept locally.
   - Hitlist `kv[victim]` counts that enemy's kills on each friend:
@@ -146,8 +146,7 @@ Rules:
     - 5 or more: "Y has X's number (Nth)"
     - 10 or more: "X's nemesis Y strikes (Nth)"
   - Each player's `deathTimes` and `killTimes` keep the last 2 days, at most 50 each:
-    - 3 or more deaths in 15 min: "N deaths/Mm"; otherwise 3 or more today: "Nth today"
-    - 3 or more kills in 10 min: "N kills/Mm" (5 or more: "rampage N/Mm"); otherwise 5 or more today: "Nth today"
+    - 3 or more deaths today, or 5 or more kills today: "Nth today"
   - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "X owns Y (Nth)".
   - Revenge names the friends that enemy had killed ("X avenged A on Y").
   - An attack mentions the attacker's past kills on that friend ("(killed them N×)").

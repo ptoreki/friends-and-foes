@@ -3,15 +3,13 @@ local L = ns.L
 
 -- Short PvP lines: who did what, then extras, then where - separated by " · ".
 -- With flavor on, wording varies and calls out history the addon already keeps:
--- repeat killers, death sprees, bad days, kill streaks, revenge on behalf of a friend.
+-- repeat killers, busy days, revenge on behalf of a friend.
 -- Each builder returns title, text, line (the line goes to chat and the Feed).
 local Flavor = {}
 ns.Flavor = Flavor
 
-local KEEP = 2 * 86400     -- event times kept per player (for "today" and sprees)
+local KEEP = 2 * 86400     -- event times kept per player (for "today")
 local KEEP_MAX = 50
-local SPREE = 15 * 60      -- 3+ deaths within this = a spree
-local STREAK = 10 * 60     -- 3+ kills within this = a streak (5+ = rampage)
 local SEP = " \194\183 "   -- " · "
 Flavor.SEP = SEP
 
@@ -45,14 +43,11 @@ local function stamp(list)
 end
 
 local function since(list, t)
-  local n, first = 0, nil
+  local n = 0
   for _, x in ipairs(list or {}) do
-    if x >= t then
-      n = n + 1
-      first = first or x
-    end
+    if x >= t then n = n + 1 end
   end
-  return n, first
+  return n
 end
 
 local function midnight()
@@ -60,8 +55,6 @@ local function midnight()
   t.hour, t.min, t.sec = 0, 0, 0
   return time(t)
 end
-
-local function minutesSince(t) return math.max(1, math.floor((time() - t) / 60 + 0.5)) end
 
 local function join(parts) return table.concat(parts, SEP) end
 
@@ -72,14 +65,10 @@ function Flavor.Place(zone)
   return zone:match("%((.+)%)$") or zone
 end
 
--- "4 deaths/12m" (recent burst) or "5th today", for deaths or kills
-local function burst(list, window, minBurst, burstFmt, bigFmt, todayFmt, minToday)
-  local n, first = since(list, time() - window)
-  if n >= minBurst then
-    return ((bigFmt and n >= 5) and bigFmt or burstFmt):format(n, minutesSince(first))
-  end
-  local today = since(list, midnight())
-  if today >= minToday then return todayFmt:format(Flavor.Ordinal(today)) end
+-- "5th today" once there have been at least minToday today
+local function today(list, minToday)
+  local n = since(list, midnight())
+  if n >= minToday then return L.TODAY:format(Flavor.Ordinal(n)) end
 end
 
 -- title = who did what; text = extras and place; line (chat/Feed) = both
@@ -125,7 +114,7 @@ function Flavor.Died(p, who, by, h, zone)
   else
     title = pick(L.DIED):format(who, by)
   end
-  return result(title, burst(p.deathTimes, SPREE, 3, L.SPREE_DEATHS, nil, L.TODAY, 3), zone)
+  return result(title, today(p.deathTimes, 3), zone)
 end
 
 ---------------------------------------------------------------------------
@@ -161,7 +150,7 @@ function Flavor.Kill(p, who, v, e, hit, revenge, zone)
   else
     title = pick(L.KILL):format(who, v)
   end
-  return result(title, burst(p.killTimes, STREAK, 3, L.STREAK, L.RAMPAGE, L.TODAY, 5), zone)
+  return result(title, today(p.killTimes, 5), zone)
 end
 
 ---------------------------------------------------------------------------

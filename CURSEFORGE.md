@@ -37,9 +37,9 @@ It stays out of your way until something worth knowing happens.
 - Kills, deaths and assists for every enemy player you meet, and takedowns and deaths for you and your friends.
 
 **Messages with some personality**, or short and plain if you prefer:
-- *"Rogz Fang killed Bob again (3rd) · 4 deaths/12m · Tarren Mill"*
+- *"Rogz Fang killed Bob again (3rd) · 5th today · Tarren Mill"*
 - *"Alice avenged Bob on Rogz Fang · Duskwood"*
-- *"Bob owns Rogz Fang (3rd) · rampage 5/9m · Duskwood"*
+- *"Bob owns Rogz Fang (3rd) · Duskwood"*
 - With flavor text off: *"Bob killed by Rogz Fang · Duskwood"*
 
 ### Your choice, per event
