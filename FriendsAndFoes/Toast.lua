@@ -434,6 +434,60 @@ function Toast.DropSim()
   end
 end
 
+local KILL_MERGE_WINDOW = 15
+
+-- names are matched without colour codes (two friends may colour the same enemy differently)
+local function addKill(t, killer, victim)
+  if killer and not t.killers[ns.Plain(killer)] then
+    t.killers[ns.Plain(killer)] = true
+    t.killerList[#t.killerList + 1] = killer
+  end
+  if victim then
+    if not t.victims[ns.Plain(victim)] then
+      t.victims[ns.Plain(victim)] = true
+      t.victimList[#t.victimList + 1] = victim
+    end
+  else
+    t.unnamed = t.unnamed + 1
+  end
+end
+
+-- returns true if spec was merged into a kill toast already on screen or waiting
+function Toast.MergeKill(spec)
+  local now = GetTime()
+  local function fits(t)
+    return t and t.mergeKill and t.killers and not t.milestone and now - (t.created or now) <= KILL_MERGE_WINDOW
+      and (t.killers[ns.Plain(spec.killer or "")] or (spec.victim and t.victims[ns.Plain(spec.victim)]))
+  end
+  local function merge(t)
+    addKill(t, spec.killer, spec.victim)
+    t.title = ns.Flavor.MergedKill(t.killerList, t.victimList, t.unnamed)
+    t.text = t.place
+    t.chat = t.title .. ns.Flavor.SEP .. (t.place or "")
+    t.header = nil
+  end
+  for _, f in ipairs(active) do
+    if fits(f.spec) then
+      merge(f.spec)
+      render(f)
+      Toast.Layout()
+      Toast.Log(spec, "merged into a kill toast on screen")
+      return true
+    end
+  end
+  for _, q in ipairs(queue) do
+    if fits(q) then
+      merge(q)
+      Toast.Log(spec, "merged into a waiting kill toast")
+      return true
+    end
+  end
+  spec.killers, spec.killerList, spec.victims, spec.victimList, spec.unnamed = {}, {}, {}, {}, 0
+  addKill(spec, spec.killer, spec.victim)
+  spec.created = now
+  return false
+end
+
 function Toast.Push(spec)
   if not anchor then
     Toast.Log(spec, "not shown: toasts not ready yet (still loading)")
@@ -454,6 +508,8 @@ function Toast.Push(spec)
     return
   end
   if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast
+  -- kills within 15 seconds by the same friend, or of the same enemy, share one toast
+  if spec.mergeKill and not spec.milestone and Toast.MergeKill(spec) then return end
   -- flavor off: the toast is the same one short line as the chat/Feed line
   if ns.S().flavor == false and spec.chat and not spec.force then
     spec.title, spec.text, spec.collapseKey = spec.chat, nil, nil

@@ -295,15 +295,17 @@ H.DIE = function(msg, isSelf, p, f)
     if suspect then h.suspect = h.suspect + 1 end
     by = ns.ClassColored(killer.name, killer.class) .. (suspect and "?" or "")
   end
+  local helpers = {}
   for _, u in ipairs(ns.DecodeUnits(f.assists)) do
     if u.name then
+      helpers[#helpers + 1] = ns.ClassColored(u.name, u.class)
       local e = enemyTouch(u, f.zone)
       e.a = e.a + 1
       hitUpdate(u, f.zone) -- assists don't add anyone; only the killer goes on the hitlist
     end
   end
 
-  local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone, tonumber(f.ended))
+  local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone, tonumber(f.ended), helpers)
   feed(p, "died", line)
   if isSelf then return end
   ns.Toast.Push({
@@ -326,6 +328,7 @@ H.KILL = function(msg, isSelf, p, f)
     ns.Toast.Push({
       chat = line, milestone = ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
       title = title, text = text, header = ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK or nil,
+      mergeKill = true, killer = who(p), place = ns.Flavor.Place(f.zone),
     })
     return
   end
@@ -350,6 +353,7 @@ H.KILL = function(msg, isSelf, p, f)
     chat = line, milestone = revenge or ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
     title = title, text = text,
     player = name,
+    mergeKill = true, killer = who(p), victim = v, place = ns.Flavor.Place(f.zone),
   })
 end
 

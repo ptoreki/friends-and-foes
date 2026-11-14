@@ -101,7 +101,7 @@ end
 -- died: victim p (friend or you), who = coloured victim, by = coloured killer or nil,
 -- h = killer's hitlist entry or nil
 ---------------------------------------------------------------------------
-function Flavor.Died(p, who, by, h, zone, ended)
+function Flavor.Died(p, who, by, h, zone, ended, helpers)
   p.deathTimes = stamp(p.deathTimes)
   local n
   if h then
@@ -109,8 +109,10 @@ function Flavor.Died(p, who, by, h, zone, ended)
     h.kv[p.name] = (h.kv[p.name] or 0) + 1
     n = h.kv[p.name]
   end
+  -- enemies who helped: "(with Kragg Bear)"
+  local with = (by and helpers and #helpers > 0) and (" " .. L.WITH_HELPERS:format(ns.JoinNames(helpers))) or ""
   if not on() then
-    return compact(by and L.SHORT_DIED:format(who, by) or L.SHORT_DIED_UNKNOWN:format(who), zone)
+    return compact((by and L.SHORT_DIED:format(who, by) .. with) or L.SHORT_DIED_UNKNOWN:format(who), zone)
   end
 
   local title
@@ -125,6 +127,7 @@ function Flavor.Died(p, who, by, h, zone, ended)
   else
     title = pick(L.DIED):format(who, by)
   end
+  title = title .. with
   local extra = (ended and ended >= STREAK_SHOW) and L.STREAK_ENDED:format(ended) or today(p.deathTimes, 3)
   return result(title, extra, zone)
 end
@@ -181,6 +184,20 @@ function Flavor.Engage(p, who, v, h, zone)
   if not on() then return compact(L.SHORT_ENGAGE:format(who, v), zone) end
   local title = h and L.ENGAGE_HITLIST:format(who, v) or pick(L.ENGAGE):format(who, v)
   return result(title, nil, zone)
+end
+
+---------------------------------------------------------------------------
+-- several kills merged into one toast: by one friend, or of one enemy by several friends
+---------------------------------------------------------------------------
+function Flavor.MergedKill(killers, victims, unnamed)
+  local list = {}
+  for _, v in ipairs(victims) do list[#list + 1] = v end
+  if unnamed > 0 then list[#list + 1] = unnamed == 1 and L.AN_ENEMY or L.N_ENEMIES:format(unnamed) end
+  if #killers == 1 then
+    if #victims == 0 then return L.MULTI_KILL_UNNAMED:format(killers[1], unnamed) end
+    return L.MULTI_KILL:format(killers[1], ns.JoinNames(list))
+  end
+  return L.GROUP_KILL:format(ns.JoinNames(killers), ns.JoinNames(list))
 end
 
 function Flavor.Attacked(p, who, by, attackers, zone)

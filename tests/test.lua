@@ -994,6 +994,37 @@ do
   check(ns.errors == 0, "no errors in friend-attacks alerts (" .. tostring(ns.lastError) .. ")")
 end
 
+-- several kills close together share one toast; enemy assists show on deaths
+do
+  drainToasts()
+  ns.S().show.kill = "toast"
+  FriendsAndFoesCharDB.streak = 0
+  local before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "First Vic", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood", streak = "1" }, "mk1"), "WHISPER", 77)
+  ADVANCE(5)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Second Vic", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood", streak = "2" }, "mk2"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before + 1, "two kills by one friend within 15s: one toast")
+  local merged
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.mergeKill and f.spec.victimList and #f.spec.victimList == 2 then merged = f.spec end end
+  check(merged and ns.Plain(merged.title) == "Buddy Pal killed First Vic and Second Vic", "merged toast names both: " .. tostring(merged and ns.Plain(merged.title)))
+  ns.Toast.Push({ kind = "kill", category = "pvp", title = "x", chat = "x", mergeKill = true, killer = "Alice Ally", victim = "Second Vic", place = "Duskwood" })
+  check(merged and ns.Plain(merged.title) == "Buddy Pal and Alice Ally took down First Vic and Second Vic", "group kill: " .. tostring(merged and ns.Plain(merged.title)))
+  drainToasts()
+  ADVANCE(30)
+  before = ns.Toast.shown or 0
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Later Vic", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood", streak = "1" }, "mk3"), "WHISPER", 77)
+  check((ns.Toast.shown or 0) == before + 1, "a kill after the window gets its own toast")
+  drainToasts()
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Main Killer:ROGUE:60:", conf = "c", assists = "Side Kick:MAGE:60:" }, "wd1"), "WHISPER", 77)
+  check(ns.Plain(lastFeed()):find("(with Side Kick)", 1, true) ~= nil, "death names enemy helpers: " .. ns.Plain(lastFeed()))
+  ns.S().flavor = false
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Main Killer:ROGUE:60:", conf = "c", assists = "Side Kick:MAGE:60:" }, "wd2"), "WHISPER", 77)
+  check(ns.Plain(lastFeed()) == "Buddy Pal killed by Main Killer (with Side Kick)" .. ns.Flavor.SEP .. "Duskwood", "short style too: " .. ns.Plain(lastFeed()))
+  ns.S().flavor = true
+  drainToasts()
+  check(ns.errors == 0, "no errors in kill merging (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

@@ -9,6 +9,13 @@ Compatible with 0.3.x to 0.6.0. Friends need 0.6.1 to send these alerts.
   - It doesn't fire if the enemy was already attacking them. That's the "Friend attacked" alert.
   - Once per enemy every 2 minutes. Attacking someone doesn't add them to the hitlist.
   - Set it under "Friend attacks someone" in Options, with its own sound on the Sounds page.
+- **Kills close together share one toast.** Kills by the same friend, or of the same enemy,
+  within 15 seconds update a single toast instead of stacking up: "Bob killed Rogz and Kragg",
+  or "Bob and Alice took down Rogz". Revenge and kill-streak milestones keep their own toast.
+- **Deaths name the enemies who helped:** "Bob killed by Rogz Fang (with Kragg Bear) · Tarren Mill".
+- About assists: the game doesn't tell addons who landed the killing blow. A friend who helped
+  gets the same honor message as the one who finished, so assists already show as kills. With
+  merging, a group kill reads "Bob and Alice took down Rogz".
 
 ## 0.6.0
 Compatible with 0.3.x to 0.5.5. Friends need 0.6.0 to send or receive sightings.
