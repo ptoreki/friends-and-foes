@@ -29,6 +29,7 @@ jobs:
       - name: Tag must match the addon version
         run: |
           tag="${GITHUB_REF_NAME#v}"
+          tag="${tag%%-*}" # v0.6.0-beta -> 0.6.0 (the suffix only marks the release type)
           toc=$(grep -oP '^## Version:\s*\K\S+' FriendsAndFoes/FriendsAndFoes.toc)
           core=$(grep -oP '^ns\.VERSION = "\K[^"]+' FriendsAndFoes/Core.lua)
           if [ "$toc" != "$tag" ] || [ "$core" != "$tag" ]; then

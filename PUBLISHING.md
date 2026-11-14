@@ -68,7 +68,7 @@ The packager reads these lines to know where to upload.
 - **Game version:** the packager works out the game version from `## Interface: 16001`. If
   CurseForge files the upload under the wrong game version, add `-g <version>` to the packager
   `args` in the workflow (for Forever, the CurseForge version label, e.g. `1.60.1`).
-- **Beta releases:** a tag containing `beta`, such as `v0.6.0-beta1`, is published as a beta
-  file. Apps only offer beta files to players who opted into betas. The version check needs the
-  `.toc` and `Core.lua` versions to read `0.6.0-beta1` too.
+- **Beta / alpha releases:** tag `v0.6.0-beta` (or `-alpha`) to publish a beta (or alpha) file;
+  apps only offer those to players who opted in. The version check ignores the suffix, so the `.toc`
+  and `Core.lua` stay at `0.6.0`. A plain `v0.6.0` tag is a normal release.
 - **Local test zip:** `npm run package` still builds `dist/FriendsAndFoes-<version>.zip`.
