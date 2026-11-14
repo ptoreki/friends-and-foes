@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.6.0"
+ns.VERSION = "0.6.1"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -15,7 +15,7 @@ local DEFAULTS = {
   share = { level = true, loot = true, gear = true, pvp = true },
   -- how each kind shows: "toast" | "chat" | "off". Urgent PvP toasts; progress goes to chat.
   -- Milestones (level 60, looted epic BoE, revenge kill) toast anyway unless "off".
-  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "toast", sighting = "chat", share = "chat" },
+  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "chat", share = "chat" },
   chatFrame = 1,
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
@@ -24,11 +24,11 @@ local DEFAULTS = {
   toastDuration = 3, -- seconds a toast stays (PvP toasts 2 longer)
   weekly = true,     -- weekly PvP summary in chat
   -- which sound each event plays ("default" = the built-in choice for that kind of event)
-  soundPick = { attacked = "default", died = "default", kill = "default", sighting = "default",
+  soundPick = { attacked = "default", engage = "default", died = "default", kill = "default", sighting = "default",
     level = "default", loot = "default", gear = "default", share = "default" },
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
-  sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
+  sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, engage = false, died = true, kill = false, sighting = true, share = false },
   dnd = { combat = true },
   -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
   where = { party = "hold", raid = "hold", pvp = "hold" },

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.1
+Compatible with 0.3.x to 0.6.0. Friends need 0.6.1 to send these alerts.
+- **New alert: a friend attacks someone.** When a friend starts a fight with an enemy player
+  (auto-attack, auto-shot or a harmful spell on them), you get "Bob attacked Rogz Fang · Tarren Mill".
+  If Rogz is on your hitlist, it says "Bob is going after Rogz Fang (hitlist)".
+  - It's a toast in your zone and a chat line elsewhere, like "Friend attacked".
+  - It doesn't fire if the enemy was already attacking them. That's the "Friend attacked" alert.
+  - Once per enemy every 2 minutes. Attacking someone doesn't add them to the hitlist.
+  - Set it under "Friend attacks someone" in Options, with its own sound on the Sounds page.
+
 ## 0.6.0
 Compatible with 0.3.x to 0.5.5. Friends need 0.6.0 to send or receive sightings.
 - **Shared hitlist sightings:** when a friend spots someone from their hitlist, you get

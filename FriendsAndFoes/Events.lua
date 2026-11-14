@@ -6,11 +6,12 @@ local L = ns.L
 local Events = {}
 ns.Events = Events
 
-local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", DIE = "pvp", KILL = "pvp", SIGHT = "pvp" }
+local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", ENG = "pvp", DIE = "pvp", KILL = "pvp", SIGHT = "pvp" }
 
 local ICON = {
   level = "Interface\\Icons\\Spell_Holy_SurgeOfLight",
   attacked = "Interface\\Icons\\Ability_Warrior_Challange",
+  engage = "Interface\\Icons\\Ability_Warrior_Charge",
   died = "Interface\\Icons\\Ability_Rogue_FeignDeath",
   kill = "Interface\\Icons\\Ability_DualWield",
   share = "Interface\\Icons\\INV_Letter_15",
@@ -261,6 +262,22 @@ H.ATK = function(msg, isSelf, p, f)
     far = ns.S().nearbyOnly and not ns.PvP.IsMyZone(f.zone), category = "pvp", icon = ICON.attacked,
     title = title, text = text,
     player = attackers[1] and attackers[1].name,
+  })
+end
+
+-- a friend started a fight with an enemy player
+H.ENG = function(msg, isSelf, p, f)
+  local u = ns.DecodeUnit(f.target)
+  if not (u and u.name) then return end
+  enemyTouch(u, f.zone)
+  local h = hitUpdate(u, f.zone) -- doesn't add them to the hitlist
+  local title, text, line = ns.Flavor.Engage(p, who(p), ns.ClassColored(u.name, u.class), h, f.zone)
+  feed(p, "engage", line)
+  if isSelf then return end
+  ns.Toast.Push({
+    chat = line, kind = "engage", category = "pvp", icon = ICON.engage,
+    title = title, text = text, player = u.name,
+    far = ns.S().nearbyOnly and not ns.PvP.IsMyZone(f.zone), -- far away: a chat line
   })
 end
 

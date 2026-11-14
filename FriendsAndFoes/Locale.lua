@@ -18,7 +18,7 @@ L.BTN_PREVIEW = "Preview"
 L.THEME_NAMES = { minimal = "Modern", achievement = "Classic" }
 -- Achievement-style toasts: the small header above the message
 L.HEADER = {
-  attacked = "Friend under attack", died = "Friend killed", kill = "Friend's kill",
+  attacked = "Friend under attack", engage = "Friend on the attack", died = "Friend killed", kill = "Friend's kill",
   level = "Level up", loot = "Epic loot", gear = "New gear", sighting = "Hitlist sighting",
   share = "Hitlist shared",
 }
@@ -57,6 +57,9 @@ L.SHORT_DIED_UNKNOWN = "%s killed by an enemy player"
 L.SHORT_KILL = "%s killed %s"
 L.SHORT_REVENGE = "%s killed %s (revenge)"
 L.SHORT_ATTACKED = "%s attacked by %s"
+L.SHORT_ENGAGE = "%s attacked %s"
+L.ENGAGE = { "%s attacked %s", "%s jumped %s", "%s picked a fight with %s" }
+L.ENGAGE_HITLIST = "%s is going after %s (hitlist)"
 
 -- feed
 L.FEED_LEVEL = "%s reached level %d"
@@ -173,7 +176,7 @@ L.BTN_SIM = "Simulate events"
 L.DND_HEADER = "Do not disturb"
 L.OPT_DND_COMBAT = "Hold progress toasts in combat"
 L.OPT_DND_INSTANCE = "Hold toasts in dungeons, raids and battlegrounds"
-L.OPT_NEARBY_ONLY = "Friend attacked outside my zone: chat only"
+L.OPT_NEARBY_ONLY = "Fights outside my zone: chat only"
 L.OPT_SHARE = "Hitlist shared"
 L.DEBUG_AUTO_OFF = "Debug logging switched itself off after 7 days. /fnf debug turns it back on."
 L.ERRORS_LINE = "Errors caught: %d (last 50 saved)"
@@ -183,7 +186,7 @@ L.SIM_STOPPED = "simulation stopped - back to real data"
 L.OPT_SIM_STOP = "Stop simulation"
 L.BTN_SIM_STOP = "Stop"
 L.TIP_SIM_STOP = "Stops a running simulation: no more fake alerts, fake toasts are dismissed, and the window shows your real data again."
-L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|died|kill|sighting|all> [self]  |  /fnf sim stop  |  /fnf sim view  |  /fnf sim clear"
+L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|engage|died|kill|sighting|all> [self]  |  /fnf sim stop  |  /fnf sim view  |  /fnf sim clear"
 L.SIM_CLEARED = "simulation data cleared"
 
 -- slash
@@ -206,7 +209,7 @@ L.TIP_LEVEL = "A friend levels up."
 L.TIP_LOOT = "A friend loots or crafts an epic BoE."
 L.TIP_GEAR = "A friend equips a blue-or-better item they haven't worn before."
 L.TIP_SHARE = "A friend sends you their hitlist."
-L.TIP_NEARBY_ONLY = "Attacks on friends in another zone show as a chat line instead of a toast - you can't get there in time anyway."
+L.TIP_NEARBY_ONLY = "Fights in another zone (a friend attacked, or attacking someone) show as a chat line instead of a toast - you can't get there in time anyway."
 L.TIP_ALL_SOUNDS = "Turn every Friends & Foes sound on or off at once."
 L.TIP_DND_COMBAT = "While you're in combat, only PvP alerts pop up. The rest wait until combat ends."
 L.TIP_DND_INSTANCE = "In dungeons and raids, toasts wait until you're back outside."
@@ -320,3 +323,5 @@ L.SND_INVITE = "Group invite"
 L.SND_MAP_PING = "Map ping"
 L.SND_ALARM = "Alarm"
 L.SND_COIN = "Coins"
+L.OPT_ENGAGE = "Friend attacks someone"
+L.TIP_ENGAGE = "A friend starts a fight with an enemy player in world PvP (auto-attack or a harmful spell on them)."

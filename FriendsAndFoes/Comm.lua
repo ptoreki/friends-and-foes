@@ -88,10 +88,11 @@ local SCHEMA = {
   KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak" }, -- streak: kills in a row incl. this
   HIT  = { "share", "entries" },
   SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
+  ENG  = { "zone", "target" }, -- the sender started a fight with an enemy player
 }
 Comm.SCHEMA = SCHEMA
 
-local PRIORITY_OF = { ATK = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------

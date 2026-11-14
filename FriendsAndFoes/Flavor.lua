@@ -174,6 +174,15 @@ end
 -- attacked: victim p, who = coloured victim, by = coloured attacker list,
 -- attackers = decoded units (to look up past kills on this friend)
 ---------------------------------------------------------------------------
+---------------------------------------------------------------------------
+-- engage: friend p (who) started a fight with v; h = v's hitlist entry if they're on it
+---------------------------------------------------------------------------
+function Flavor.Engage(p, who, v, h, zone)
+  if not on() then return compact(L.SHORT_ENGAGE:format(who, v), zone) end
+  local title = h and L.ENGAGE_HITLIST:format(who, v) or pick(L.ENGAGE):format(who, v)
+  return result(title, nil, zone)
+end
+
 function Flavor.Attacked(p, who, by, attackers, zone)
   if not on() then return compact(L.SHORT_ATTACKED:format(who, by), zone) end
   local title = pick(L.ATTACKED):format(who, by)

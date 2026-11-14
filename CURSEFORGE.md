@@ -13,7 +13,7 @@ Stay connected with your friends in WoW Forever. See their level-ups, epic loot 
 > **Beta:** still being tested. Report anything odd (see below).
 ### What you get
 - **Friends' progress:** level-ups, epics and new gear as chat lines. Big moments (level 60, epic BoE, revenge, kill streaks) pop up as toasts.
-- **World PvP alerts:** a friend attacked in your zone, killed, or getting a kill, with who and where.
+- **World PvP alerts:** a friend attacked, attacking someone, killed, or getting a kill, with who and where.
 - **Hitlist:** anyone who kills you or a friend. They get a nameplate skull and a tooltip with their record, and you're alerted when you or a friend spots them.
 - **Tracking:** kills, deaths and takedowns per player, plus a weekly summary with your nemesis.
 - **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short (*"Bob killed by Rogz · Duskwood"*).

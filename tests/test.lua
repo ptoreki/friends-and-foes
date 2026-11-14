@@ -592,7 +592,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 22, "8 alerts + 3 places + 8 sounds + style + message style + chat tab (" .. dropdowns .. ")")
+  check(dropdowns == 24, "9 alerts + 3 places + 9 sounds + style + message style + chat tab (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -953,6 +953,45 @@ do
   check(lastId ~= coinId, "default plays the built-in sound")
   drainToasts()
   PlaySound = origPS
+end
+
+-- a friend attacks someone (starts the fight)
+do
+  -- received
+  drainToasts()
+  local shown = toasted(function()
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ENG", { zone = "Hillsbrad Foothills (Tarren Mill)", target = "Gank Target:MAGE:30:" }, "eg1"), "WHISPER", 77)
+  end)
+  check(shown and ns.Plain(lastFeed()):find("Buddy Pal", 1, true) and lastFeed():find("Gank Target", 1, true)
+    and lastFeed():find("Tarren Mill", 1, true), "friend attacks someone in my zone: toast + feed: " .. ns.Plain(lastFeed()))
+  check(real.hitlist["Gank Target"] == nil and real.players["Gank Target"].enemy, "attacking someone doesn't put them on the hitlist")
+  local far = toasted(function()
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ENG", { zone = "Duskwood", target = "Far Target:MAGE:30:" }, "eg2"), "WHISPER", 77)
+  end)
+  check(not far and #CHAT == 1, "in another zone: a chat line")
+  -- detected on your own client
+  local enemyTarget = true
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName, UnitIsUnit = UnitIsUnit }
+  UnitExists = function(u) if u == "target" and enemyTarget then return true end return o.UnitExists(u) end
+  UnitIsPlayer = function(u) if u == "target" then return enemyTarget end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if u == "target" then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) if u == "target" then return "Prey", "Person" end return o.UnitName(u) end
+  UnitIsUnit = function() return false end
+  SENT = {}
+  FIRE("PLAYER_ENTER_COMBAT")
+  check(lastFeed():find("Prey Person", 1, true) ~= nil, "starting auto-attack on an enemy player is an attack: " .. ns.Plain(lastFeed()))
+  RUN_TICKERS(3)
+  local sentEng = false
+  for _, s in ipairs(SENT) do if s.payload:find("	ENG	", 1, true) then sentEng = true end end
+  check(sentEng, "sent to friends")
+  local n = #real.feed
+  FIRE("START_AUTOREPEAT_SPELL")
+  check(#real.feed == n, "same enemy again within 2 minutes: not repeated")
+  enemyTarget = false
+  for k, v in pairs(o) do _G[k] = v end
+  ADVANCE(15)
+  RUN_TICKERS(2)
+  check(ns.errors == 0, "no errors in friend-attacks alerts (" .. tostring(ns.lastError) .. ")")
 end
 
 -- per-event sound, whatever the display; milestones chime even when their kind is silent

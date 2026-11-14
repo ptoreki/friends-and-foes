@@ -207,6 +207,38 @@ local function onHit()
   end
 end
 
+---------------------------------------------------------------------------
+-- you start a fight: auto-attack / auto-shot or a harmful spell on an enemy player you target.
+-- Not if they were already attacking you (that's "attacked"). Once per enemy every 2 minutes.
+---------------------------------------------------------------------------
+local engaged = {}
+local ENGAGE_COOLDOWN = 120
+
+function PvP.CheckEngage()
+  if not PvP.InWorldPvPContext() then return end
+  local info = PvP.ReadEnemy("target")
+  if not (info and info.name) then return end
+  if UnitCanAttack then
+    local can = UnitCanAttack("player", "target")
+    if issecret(can) or not can then return end
+  end
+  local now = GetTime()
+  if enc and now - enc.last <= ENCOUNTER_GAP and enc.attackers[info.name] then return end -- they started it
+  if engaged[info.name] and now - engaged[info.name] < ENGAGE_COOLDOWN then return end
+  engaged[info.name] = now
+  remember(info)
+  ns.Events.Emit("ENG", { zone = PvP.ZoneText(), target = ns.EncodeUnit(info) })
+end
+
+ns.On("PLAYER_ENTER_COMBAT", function() PvP.CheckEngage() end)   -- auto-attack on
+ns.On("START_AUTOREPEAT_SPELL", function() PvP.CheckEngage() end) -- auto-shot / wand
+ns.OnUnit("UNIT_SPELLCAST_SUCCEEDED", "player", function(_, _, spellID)
+  if not spellID or issecret(spellID) then return end
+  if not (C_Spell and C_Spell.IsSpellHarmful) then return end
+  local ok, harmful = pcall(C_Spell.IsSpellHarmful, spellID)
+  if ok and not issecret(harmful) and harmful then PvP.CheckEngage() end
+end)
+
 ns.OnUnit("UNIT_COMBAT", "player", function(_, action)
   if not issecret(action) and (action == "HEAL" or action == "ENERGIZE") then return end
   onHit()

@@ -64,6 +64,7 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | LVL | `PLAYER_LEVEL_UP` (every level) | level |
 | LOOT | Looted or crafted item: **epic or better**, BoE or BoU | link, source (`loot`/`craft`) |
 | GEAR | Newly equipped item: **blue or better**, never equipped on this character before. Changes within 4 seconds are bundled | link (best item), count |
+| ENG | You start a fight: auto-attack / auto-shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL) or a harmful spell (UNIT_SPELLCAST_SUCCEEDED + C_Spell.IsSpellHarmful) on a targeted enemy player, not already attacking you; once per enemy per 2 min | zone, target |
 | ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join, 2 attackers per message) | enc, zone, attackers |
 | DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3), ended (the kill streak this death ended) |
 | KILL | Honorable-kill / honor-award message | victim (may be empty), vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |

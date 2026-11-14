@@ -27,6 +27,9 @@ local BUILDERS = {
   attacked = function()
     return "ATK", { enc = ns.NewId(true), zone = ZONE_ATTACK, attackers = ns.EncodeUnits(ENEMIES, 2) }
   end,
+  engage = function()
+    return "ENG", { zone = ZONE_ATTACK, target = ns.EncodeUnit(ENEMIES[1]) }
+  end,
   died = function()
     return "DIE", { zone = ZONE_ATTACK, killer = ns.EncodeUnit(ENEMIES[1]), conf = "c", assists = ns.EncodeUnits({ ENEMIES[2] }, 3), ended = 4 }
   end,
@@ -35,7 +38,7 @@ local BUILDERS = {
     return "KILL", { victim = e.name, vclass = e.class, vlevel = e.level, vguild = e.guild, zone = "Stranglethorn Vale", streak = 5 }
   end,
 }
-Sim.KINDS = { "level", "loot", "gear", "attacked", "died", "kill", "sighting" }
+Sim.KINDS = { "level", "loot", "gear", "attacked", "engage", "died", "kill", "sighting" }
 
 -- deliver as if Simfriend's client had sent it (local only)
 local function deliverFromFriend(kind, fields)
