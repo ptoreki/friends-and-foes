@@ -16,6 +16,10 @@ Compatible with 0.3.x to 0.5.3.
   time - 4 deaths in 12 min - in Hillsbrad Foothills (Tarren Mill))". The place is the subzone
   when there is one. Level-up, loot and gear toasts are one line ("Bob reached level 30").
 - Dropped the "N deaths/kills in M minutes" and "rampage" notes; "5th today" stays.
+- **Kill streaks:** kills in a row without dying in world PvP. "Bob killed Rogz · 3 in a row · Duskwood";
+  5 and 10 in a row always pop up as a toast. A death that ends a streak of 3 or more says so:
+  "Bob killed by Rogz · ended a 6-kill streak". Each player's own addon keeps their count, so it's
+  right even if you were offline for part of it. Streaks show once the killer has 0.5.4.
 - **Long messages are no longer cut off.** Toasts are a bit wider and wrap onto up to 3 lines. In
   the window, hovering a row shows any cut-off text (e.g. a long Feed entry) in full.
 

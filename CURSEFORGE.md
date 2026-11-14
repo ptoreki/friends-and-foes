@@ -20,7 +20,7 @@ It stays out of your way until something worth knowing happens.
 
 **Friends' progress**
 - Level-ups, epic BoE loot and new gear, shown as a short line in chat with clickable items.
-- Milestones pop up as a small toast: reaching **level 60**, **looting an epic BoE**, and **revenge kills**.
+- Milestones pop up as a small toast: reaching **level 60**, **looting an epic BoE**, **revenge kills**, and **kill streaks** (5 and 10 in a row).
 
 **World PvP alerts**
 - **Friend attacked:** a toast when a friend is attacked in **your zone**, so you can go help. Fights elsewhere get a chat line instead.
@@ -40,6 +40,7 @@ It stays out of your way until something worth knowing happens.
 - *"Rogz Fang killed Bob again (3rd) · 5th today · Tarren Mill"*
 - *"Alice avenged Bob on Rogz Fang · Duskwood"*
 - *"Bob owns Rogz Fang (3rd) · Duskwood"*
+- *"Bob killed Kragg Bear · 5 in a row! · Southshore"*, and when it ends: *"Bob killed by Rogz Fang · ended a 5-kill streak · Southshore"*
 - With flavor text off: *"Bob killed by Rogz Fang · Duskwood"*
 
 ### Your choice, per event

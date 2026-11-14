@@ -20,7 +20,22 @@ local ICON = {
 ns.ICON = ICON
 
 -- sim = true marks the event as simulated: it goes to the scratch store on every client.
+-- Kill streak (kills in a row without dying in world PvP) is counted by the player's own client,
+-- which sees all of their kills and deaths, and sent along with KILL / DIE.
+local function trackStreak(kind, fields, sim)
+  if sim then return end -- simulated events never touch the real streak
+  local c = FriendsAndFoesCharDB
+  if kind == "KILL" then
+    c.streak = (c.streak or 0) + 1
+    fields.streak = c.streak
+  elseif kind == "DIE" then
+    fields.ended = c.streak or 0
+    c.streak = 0
+  end
+end
+
 function Events.Emit(kind, fields, sim)
+  trackStreak(kind, fields, sim)
   local _, class = UnitClass("player")
   local msg = { kind = kind, id = ns.NewId(sim), class = class, level = UnitLevel("player"), f = fields }
   local wire = ns.Comm.Fit(msg)
@@ -266,7 +281,7 @@ H.DIE = function(msg, isSelf, p, f)
     end
   end
 
-  local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone)
+  local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone, tonumber(f.ended))
   feed(p, "died", line)
   if isSelf then return end
   ns.Toast.Push({
@@ -293,11 +308,12 @@ H.KILL = function(_, isSelf, p, f)
   end
 
   local v = ns.ClassColored(name, victim.class)
-  local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone)
+  local streak = tonumber(f.streak)
+  local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone, streak)
   feed(p, "kill", line)
   if isSelf then return end
   ns.Toast.Push({
-    chat = line, milestone = revenge, kind = "kill", category = "pvp", icon = ICON.kill,
+    chat = line, milestone = revenge or ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
     title = title, text = text,
     player = name,
   })

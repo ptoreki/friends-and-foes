@@ -439,6 +439,36 @@ ns.S().flavor = true
 check(ns.Flavor.Place("Hillsbrad Foothills (Tarren Mill)") == "Tarren Mill" and ns.Flavor.Place("Duskwood") == "Duskwood" and ns.Flavor.Place(nil) == "?", "place: subzone if any, else zone")
 check(ns.errors == 0, "no errors in flavor (" .. tostring(ns.lastError) .. ")")
 
+-- kill streaks: counted by the killer's own client, sent with KILL, ended by a PvP death
+FriendsAndFoesCharDB.streak = 0
+SENT = {}
+for i = 1, 3 do
+  ADVANCE(20)
+  ns.Events.Emit("KILL", { victim = "Streak Victim" .. i, vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" })
+end
+check(FriendsAndFoesCharDB.streak == 3, "own streak counts kills in a row: " .. tostring(FriendsAndFoesCharDB.streak))
+RUN_TICKERS(4)
+local lastKill
+for _, s in ipairs(SENT) do if s.payload:find("	KILL	", 1, true) then lastKill = s.payload end end
+check(lastKill and lastKill:sub(-2) == "	3", "KILL carries the streak: " .. tostring(lastKill))
+ns.Events.Emit("DIE", { zone = "Duskwood", killer = "Ender Man:ROGUE:60:", conf = "c", assists = "" })
+check(FriendsAndFoesCharDB.streak == 0, "a PvP death resets the streak")
+check(lastFeed():find("ended a 3-kill streak", 1, true) ~= nil, "death notes the streak it ended: " .. lastFeed())
+-- received
+ns.S().show.kill = "chat"
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Row Three", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood", streak = "3" }, "ks3"), "WHISPER", 77)
+check(lastFeed():find("3 in a row", 1, true) ~= nil, "received streak shown: " .. lastFeed())
+local streakToast = toasted(function()
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Row Five", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood", streak = "5" }, "ks5"), "WHISPER", 77)
+end)
+check(streakToast and lastFeed():find("5 in a row!", 1, true) ~= nil, "5 in a row is a milestone toast even with kills on chat")
+ns.S().show.kill = "toast"
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", "3	KILL	old1	Buddy Pal	PRIEST	31	0.5.3	Old Client	MAGE	60		Duskwood", "WHISPER", 77)
+check(lastFeed():find("Old Client", 1, true) and not lastFeed():find("in a row", 1, true), "message from an older client (no streak field) still works")
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Ender Man:ROGUE:60:", conf = "c", assists = "", ended = "6" }, "kd6"), "WHISPER", 77)
+check(lastFeed():find("ended a 6-kill streak", 1, true) ~= nil, "received death notes the ended streak: " .. lastFeed())
+check(ns.errors == 0, "no errors in streaks (" .. tostring(ns.lastError) .. ")")
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

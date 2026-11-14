@@ -60,8 +60,8 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | LOOT | Looted or crafted item: **epic or better**, BoE or BoU | link, source (`loot`/`craft`) |
 | GEAR | Newly equipped item: **blue or better**, never equipped on this character before. Changes within 4 seconds are bundled | link (best item), count |
 | ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join, 2 attackers per message) | enc, zone, attackers |
-| DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3) |
-| KILL | Honorable-kill message | victim, vclass, vlevel, vguild, zone |
+| DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3), ended (the kill streak this death ended) |
+| KILL | Honorable-kill message | victim, vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
 | HIT | Manual hitlist share | share id, packed entries |
 
 Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
@@ -147,6 +147,13 @@ Rules:
     - 10 or more: "X's nemesis Y strikes (Nth)"
   - Each player's `deathTimes` and `killTimes` keep the last 2 days, at most 50 each:
     - 3 or more deaths today, or 5 or more kills today: "Nth today"
+  - **Kill streak:** kills in a row without a world PvP death. Each client counts its own
+    (`FriendsAndFoesCharDB.streak`, per character; simulated events don't count) and sends it with
+    KILL. A DIE sends the streak it ended, then resets it. Fields added at the end are ignored by
+    older clients, and missing ones read as empty.
+    - from 3: "N in a row" (it takes the place of "Nth today")
+    - 5, 10, then every 5 more: "N in a row!", a milestone that always toasts (flavor on only)
+    - a death that ended 3 or more: "ended a N-kill streak"
   - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "X owns Y (Nth)".
   - Revenge names the friends that enemy had killed ("X avenged A on Y").
   - An attack mentions the attacker's past kills on that friend ("(killed them N×)").

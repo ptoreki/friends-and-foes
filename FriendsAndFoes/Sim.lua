@@ -28,11 +28,11 @@ local BUILDERS = {
     return "ATK", { enc = ns.NewId(true), zone = ZONE_ATTACK, attackers = ns.EncodeUnits(ENEMIES, 2) }
   end,
   died = function()
-    return "DIE", { zone = ZONE_ATTACK, killer = ns.EncodeUnit(ENEMIES[1]), conf = "c", assists = ns.EncodeUnits({ ENEMIES[2] }, 3) }
+    return "DIE", { zone = ZONE_ATTACK, killer = ns.EncodeUnit(ENEMIES[1]), conf = "c", assists = ns.EncodeUnits({ ENEMIES[2] }, 3), ended = 4 }
   end,
   kill = function()
     local e = ENEMIES[1]
-    return "KILL", { victim = e.name, vclass = e.class, vlevel = e.level, vguild = e.guild, zone = "Stranglethorn Vale" }
+    return "KILL", { victim = e.name, vclass = e.class, vlevel = e.level, vguild = e.guild, zone = "Stranglethorn Vale", streak = 5 }
   end,
 }
 Sim.KINDS = { "level", "loot", "gear", "attacked", "died", "kill", "sighting" }

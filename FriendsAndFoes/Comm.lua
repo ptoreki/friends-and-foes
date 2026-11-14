@@ -84,8 +84,8 @@ local SCHEMA = {
   LOOT = { "link", "source" },
   GEAR = { "link", "count" },
   ATK  = { "enc", "zone", "attackers" },
-  DIE  = { "zone", "killer", "conf", "assists" },
-  KILL = { "victim", "vclass", "vlevel", "vguild", "zone" },
+  DIE  = { "zone", "killer", "conf", "assists", "ended" },        -- ended: kill streak this death ended
+  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak" }, -- streak: kills in a row incl. this
   HIT  = { "share", "entries" },
 }
 Comm.SCHEMA = SCHEMA

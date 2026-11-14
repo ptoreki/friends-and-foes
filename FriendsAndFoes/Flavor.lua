@@ -3,7 +3,7 @@ local L = ns.L
 
 -- Short PvP lines: who did what, then extras, then where - separated by " · ".
 -- With flavor on, wording varies and calls out history the addon already keeps:
--- repeat killers, busy days, revenge on behalf of a friend.
+-- repeat killers, kill streaks, busy days, revenge on behalf of a friend.
 -- Each builder returns title, text, line (the line goes to chat and the Feed).
 local Flavor = {}
 ns.Flavor = Flavor
@@ -71,6 +71,17 @@ local function today(list, minToday)
   if n >= minToday then return L.TODAY:format(Flavor.Ordinal(n)) end
 end
 
+-- kill streaks: shown from 3 in a row; 5 and 10 are milestones (always a toast)
+local STREAK_SHOW = 3
+function Flavor.StreakMilestone(n)
+  return on() and n ~= nil and (n == 5 or n == 10 or (n > 10 and n % 5 == 0)) or false
+end
+
+local function streakText(n)
+  if not n or n < STREAK_SHOW then return nil end
+  return (Flavor.StreakMilestone(n) and L.STREAK_BIG or L.STREAK):format(n)
+end
+
 -- title = who did what; text = extras and place; line (chat/Feed) = both
 local function result(title, extra, zone)
   local parts = {}
@@ -90,7 +101,7 @@ end
 -- died: victim p (friend or you), who = coloured victim, by = coloured killer or nil,
 -- h = killer's hitlist entry or nil
 ---------------------------------------------------------------------------
-function Flavor.Died(p, who, by, h, zone)
+function Flavor.Died(p, who, by, h, zone, ended)
   p.deathTimes = stamp(p.deathTimes)
   local n
   if h then
@@ -114,14 +125,15 @@ function Flavor.Died(p, who, by, h, zone)
   else
     title = pick(L.DIED):format(who, by)
   end
-  return result(title, today(p.deathTimes, 3), zone)
+  local extra = (ended and ended >= STREAK_SHOW) and L.STREAK_ENDED:format(ended) or today(p.deathTimes, 3)
+  return result(title, extra, zone)
 end
 
 ---------------------------------------------------------------------------
 -- kill: killer p, who = coloured killer, v = coloured victim, e = victim's player record,
 -- hit = victim's hitlist entry (if revenge), revenge = boolean
 ---------------------------------------------------------------------------
-function Flavor.Kill(p, who, v, e, hit, revenge, zone)
+function Flavor.Kill(p, who, v, e, hit, revenge, zone, streak)
   p.killTimes = stamp(p.killTimes)
   e.kb = e.kb or {}
   e.kb[p.name] = (e.kb[p.name] or 0) + 1
@@ -150,7 +162,7 @@ function Flavor.Kill(p, who, v, e, hit, revenge, zone)
   else
     title = pick(L.KILL):format(who, v)
   end
-  return result(title, today(p.killTimes, 5), zone)
+  return result(title, streakText(streak) or today(p.killTimes, 5), zone)
 end
 
 ---------------------------------------------------------------------------
