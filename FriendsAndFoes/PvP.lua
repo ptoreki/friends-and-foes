@@ -365,6 +365,62 @@ ns.OnReady(function()
   HONOR_PATTERNS[#HONOR_PATTERNS + 1] = "^(.-) dies, honorable kill"
 end)
 
+-- WoW Forever's honor message names no one: "You have been awarded 7 Honor." So the victim is
+-- worked out from what's on screen: a dead enemy player you target / mouse over / see a nameplate
+-- of, or one whose nameplate just went away because they died. Unknown -> a kill without a name.
+local plateEnemy = {}   -- nameplate unit -> enemy info while that plate is shown
+local recentDead = {}   -- { info, t }: enemy players seen dead (newest last)
+local usedVictim = {}   -- name -> time it was credited (one death, one kill)
+local DEAD_WINDOW, REUSE_AFTER = 5, 15
+
+local function isDead(unit)
+  if not UnitIsDeadOrGhost then return nil end
+  local ok, dead = pcall(UnitIsDeadOrGhost, unit)
+  if not ok or issecret(dead) then return nil end
+  return dead and true or false
+end
+
+ns.On("NAME_PLATE_UNIT_ADDED", function(unit)
+  if issecret(unit) then return end
+  local info = PvP.ReadEnemy(unit)
+  if info and info.name then plateEnemy[unit] = info end
+end)
+
+ns.On("NAME_PLATE_UNIT_REMOVED", function(unit)
+  if issecret(unit) then return end
+  local info = plateEnemy[unit]
+  plateEnemy[unit] = nil
+  if info and isDead(unit) then
+    recentDead[#recentDead + 1] = { info = info, t = GetTime() }
+    if #recentDead > 10 then table.remove(recentDead, 1) end
+  end
+end)
+
+local function fresh(info, now)
+  return info and info.name and not (usedVictim[info.name] and now - usedVictim[info.name] < REUSE_AFTER)
+end
+
+function PvP.FindDeadEnemy()
+  local now = GetTime()
+  for _, unit in ipairs({ "target", "mouseover", "focus" }) do
+    local info = PvP.ReadEnemy(unit)
+    if fresh(info, now) and isDead(unit) then return info end
+  end
+  for unit, info in pairs(plateEnemy) do
+    if fresh(info, now) and isDead(unit) then return info end
+  end
+  for i = #recentDead, 1, -1 do
+    local d = recentDead[i]
+    if now - d.t <= DEAD_WINDOW and fresh(d.info, now) then return d.info end
+  end
+end
+
+-- an honor award without a name in it ("You have been awarded 7 Honor.")
+local function namelessHonor(msg)
+  local lower = msg:lower()
+  return lower:find("honor", 1, true) ~= nil and msg:find("%d") ~= nil
+end
+
 ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
   if issecret(msg) or type(msg) ~= "string" then
     ns.SetCap("honor", "secret")
@@ -378,7 +434,21 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
   end
   victim = ns.CleanName(victim)
   if not victim then
-    ns.Debug("HONOR-NOMATCH", msg)
+    if not namelessHonor(msg) then
+      ns.Debug("HONOR-NOMATCH", msg)
+      return
+    end
+    ns.SetCap("honor", "ok")
+    local dead = PvP.FindDeadEnemy()
+    ns.Debug("HONOR-NAMELESS", msg, dead and dead.name or "victim unknown")
+    if dead then usedVictim[dead.name] = GetTime() end
+    ns.Events.Emit("KILL", {
+      victim = dead and dead.name or "",
+      vclass = dead and dead.class or "",
+      vlevel = dead and dead.level or "",
+      vguild = dead and dead.guild or "",
+      zone = PvP.ZoneText(),
+    })
     return
   end
   ns.SetCap("honor", "ok")

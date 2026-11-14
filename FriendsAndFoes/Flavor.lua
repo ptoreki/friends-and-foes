@@ -135,6 +135,11 @@ end
 ---------------------------------------------------------------------------
 function Flavor.Kill(p, who, v, e, hit, revenge, zone, streak)
   p.killTimes = stamp(p.killTimes)
+  if not v then -- victim unknown
+    local title = L.KILL_UNKNOWN:format(who)
+    if not on() then return compact(title, zone) end
+    return result(title, streakText(streak) or today(p.killTimes, 5), zone)
+  end
   e.kb = e.kb or {}
   e.kb[p.name] = (e.kb[p.name] or 0) + 1
   local n = e.kb[p.name]

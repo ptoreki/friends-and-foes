@@ -2,6 +2,10 @@
 
 ## 0.5.4
 Compatible with 0.3.x to 0.5.3.
+- **Fixed: friends' kills never showed.** WoW Forever's honor message is just "You have been
+  awarded 7 Honor.", with no name, so earlier versions ignored it. Now it counts as a kill, and the
+  victim is worked out from the screen: your dead target, or an enemy whose nameplate just
+  disappeared because they died. If that's not possible you still get "Bob got a kill · Ashenvale".
 - **Only kills add someone to the hitlist.** An attack on you or a friend still triggers an alert
   but no longer adds the attacker. Assists don't add anyone either.
 - When a kill adds someone, the attacks they made before that are carried over, so the count

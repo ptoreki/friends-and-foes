@@ -61,7 +61,7 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | GEAR | Newly equipped item: **blue or better**, never equipped on this character before. Changes within 4 seconds are bundled | link (best item), count |
 | ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join, 2 attackers per message) | enc, zone, attackers |
 | DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3), ended (the kill streak this death ended) |
-| KILL | Honorable-kill message | victim, vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
+| KILL | Honorable-kill / honor-award message | victim (may be empty), vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
 | HIT | Manual hitlist share | share id, packed entries |
 
 Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
@@ -85,6 +85,15 @@ Rules:
     are not added to the hitlist.
 - **Names-unreadable fallback:** a death the recap shows came from a player is recorded even
   when no encounter was detected. The Settings tab shows which fallback mode is active.
+- **Who was killed:** Forever's honor message names no one ("You have been awarded 7 Honor.").
+  The victim is worked out from the screen:
+  1. a dead enemy player as target, mouseover or focus
+  2. a visible nameplate of a dead enemy player
+  3. an enemy player whose nameplate went away dead within the last 5 seconds
+
+  A corpse is credited once per 15 seconds. If none of these applies, the KILL is sent with an
+  empty victim: "X got a kill · Place". Clients older than 0.5.4 ignore those. A message that does
+  name the victim (the classic wording) is still used directly.
 - **Kill vs. assist:** killing blows can't be detected without the combat log, so a friend's honorable
   kills are counted as **takedowns**.
 

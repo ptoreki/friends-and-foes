@@ -293,8 +293,19 @@ end
 
 H.KILL = function(_, isSelf, p, f)
   local name = ns.CleanName(f.victim)
-  if not name then return end
   p.k = p.k + 1
+  local streak = tonumber(f.streak)
+  if not name then
+    -- the killer's client couldn't tell who died (Forever's honor message has no name)
+    local title, text, line = ns.Flavor.Kill(p, who(p), nil, nil, nil, false, f.zone, streak)
+    feed(p, "kill", line)
+    if isSelf then return end
+    ns.Toast.Push({
+      chat = line, milestone = ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
+      title = title, text = text,
+    })
+    return
+  end
   local victim = { name = name, class = f.vclass ~= "" and f.vclass or nil, level = f.vlevel, guild = f.vguild ~= "" and f.vguild or nil }
   local e = enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
@@ -308,7 +319,6 @@ H.KILL = function(_, isSelf, p, f)
   end
 
   local v = ns.ClassColored(name, victim.class)
-  local streak = tonumber(f.streak)
   local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone, streak)
   feed(p, "kill", line)
   if isSelf then return end

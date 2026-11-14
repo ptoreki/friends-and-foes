@@ -31,6 +31,7 @@ L.STREAK = "%d in a row"
 L.STREAK_BIG = "%d in a row!"
 L.STREAK_ENDED = "ended a %d-kill streak"
 L.KILL = { "%s killed %s", "%s took down %s", "%s dropped %s", "%s sent %s to the spirit healer" }
+L.KILL_UNKNOWN = "%s got a kill"
 L.KILL_REVENGE = "%s got revenge on %s"
 L.KILL_AVENGED = "%s avenged %s on %s"
 L.KILL_OWNS = "%s owns %s (%s)"

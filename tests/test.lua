@@ -469,6 +469,59 @@ FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "
 check(lastFeed():find("ended a 6-kill streak", 1, true) ~= nil, "received death notes the ended streak: " .. lastFeed())
 check(ns.errors == 0, "no errors in streaks (" .. tostring(ns.lastError) .. ")")
 
+-- WoW Forever's honor message has no name: "You have been awarded 7 Honor."
+-- the victim comes from a dead enemy on screen, else the kill is sent without a name
+do
+  local enemyUnits = {} -- unit -> { first, surname, dead }
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName,
+    UnitClass = UnitClass, UnitLevel = UnitLevel, UnitIsDeadOrGhost = UnitIsDeadOrGhost, UnitIsUnit = UnitIsUnit }
+  UnitExists = function(u) return enemyUnits[u] ~= nil or o.UnitExists(u) end
+  UnitIsPlayer = function(u) if enemyUnits[u] then return true end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if enemyUnits[u] then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) local e = enemyUnits[u]; if e then return e[1], e[2] end return o.UnitName(u) end
+  UnitClass = function(u) if enemyUnits[u] then return "Rogue", "ROGUE" end return o.UnitClass(u) end
+  UnitLevel = function(u) if enemyUnits[u] then return 24 end return o.UnitLevel(u) end
+  UnitIsDeadOrGhost = function(u) local e = enemyUnits[u]; return e and e[3] or false end
+  UnitIsUnit = function() return false end
+  local HONOR = "You have been awarded 7 Honor."
+  FriendsAndFoesCharDB.streak = 0
+  -- 1) dead enemy target
+  enemyUnits.target = { "Corpse", "Target", true }
+  ADVANCE(30)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Corpse Target", 1, true) ~= nil and ns.caps.honor == "ok", "nameless honor: victim = dead enemy target: " .. lastFeed())
+  -- the same corpse isn't credited twice
+  ADVANCE(1)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("got a kill", 1, true) ~= nil, "same corpse not credited twice -> kill without a name: " .. lastFeed())
+  enemyUnits.target = nil
+  -- 2) nameplate removed because the enemy died
+  enemyUnits.nameplate3 = { "Plate", "Faller", false }
+  FIRE("NAME_PLATE_UNIT_ADDED", "nameplate3")
+  enemyUnits.nameplate3[3] = true
+  FIRE("NAME_PLATE_UNIT_REMOVED", "nameplate3")
+  enemyUnits.nameplate3 = nil
+  ADVANCE(1)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Plate Faller", 1, true) ~= nil, "nameless honor: victim = enemy whose nameplate vanished dead: " .. lastFeed())
+  -- 3) nothing on screen -> kill without a name, still sent and counted
+  ADVANCE(30)
+  SENT = {}
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("got a kill", 1, true) ~= nil and FriendsAndFoesCharDB.streak == 4, "unknown victim: still a kill, streak counts: " .. lastFeed())
+  RUN_TICKERS(4)
+  check(#SENT > 0, "unknown-victim kill is still sent to friends")
+  -- received from a friend
+  ns.S().show.kill = "toast"
+  local anonToast = toasted(function()
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "", vclass = "", vlevel = "", vguild = "", zone = "Ashenvale", streak = "2" }, "anon1"), "WHISPER", 77)
+  end)
+  check(anonToast and lastFeed():find("Buddy Pal", 1, true) and lastFeed():find("got a kill", 1, true), "friend's nameless kill shows as a toast: " .. lastFeed())
+  for k, v in pairs(o) do _G[k] = v end
+  FriendsAndFoesCharDB.streak = 0
+  check(ns.errors == 0, "no errors in nameless honor (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true
