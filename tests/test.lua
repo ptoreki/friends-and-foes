@@ -336,6 +336,16 @@ check(not plate.fnfMark:IsShown(), "skull hidden when plate removed")
 UnitName, UnitIsPlayer, C_NamePlate = origUnitName, origIsPlayer, nil
 check(ns.errors == 0, "no errors in routing/marks (" .. tostring(ns.lastError) .. ")")
 
+-- a friend's kill defaults to a toast; an old saved "chat" switches once
+check(ns.S().show.kill == "toast", "friend's kill defaults to toast")
+ns.S().show.kill, ns.S().killToast = "chat", nil
+FIRE("ADDON_LOADED", "FriendsAndFoes")
+check(ns.S().show.kill == "toast" and ns.S().killToast, "old 'chat' default switched to toast once")
+ns.S().show.kill = "chat"
+FIRE("ADDON_LOADED", "FriendsAndFoes")
+check(ns.S().show.kill == "chat", "a later choice of chat is kept")
+ns.S().show.kill = "toast"
+
 -- once: attack-only hitlist entries (no kills, no note) are dropped
 local mdb = { realms = { Forever = { players = {}, feed = {}, hitlist = {
   A = { name = "A", attacks = 2, kills = 0 }, B = { name = "B", attacks = 1, kills = 1 }, C = { name = "C", attacks = 1, kills = 0, note = "watch" } } } } }

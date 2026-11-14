@@ -8,6 +8,9 @@ Compatible with 0.3.x to 0.5.3.
   stays right.
 - **One-time cleanup:** hitlist entries with no kills are removed, unless you wrote a note on them.
 - Hitlists shared from older versions no longer add anyone without kills.
+- **A friend's kill is now a toast by default**, like attacks and deaths. It used to be a chat line,
+  so it was easy to miss. If you had it on Chat, it switches to Toast once; you can change it back
+  in Options.
 
 ## 0.5.2
 Compatible with 0.3.x to 0.5.1.

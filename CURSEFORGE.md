@@ -47,7 +47,7 @@ In **Options → AddOns → Friends & Foes**, every event gets its own choice:
 - **Show:** Toast, Chat or Off
 - **Sound:** on or off
 
-The defaults are quiet: toasts only for fights you could join and for milestones, a chat line for everything else, and soft built-in game sounds.
+The defaults are quiet: toasts for your friends' fights (attacked nearby, killed, or scoring a kill) and for milestones, a chat line for everything else, and soft built-in game sounds.
 
 You can also choose:
 - **Which friends** you exchange alerts with: everyone, or only the friends you pick.

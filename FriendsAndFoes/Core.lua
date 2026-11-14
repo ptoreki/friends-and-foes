@@ -15,7 +15,7 @@ local DEFAULTS = {
   share = { level = true, loot = true, gear = true, pvp = true },
   -- how each kind shows: "toast" | "chat" | "off". Urgent PvP toasts; progress goes to chat.
   -- Milestones (level 60, looted epic BoE, revenge kill) toast anyway unless "off".
-  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "chat", sighting = "chat", share = "chat" },
+  show = { level = "chat", loot = "chat", gear = "chat", attacked = "toast", died = "toast", kill = "toast", sighting = "chat", share = "chat" },
   chatFrame = 1,
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
@@ -162,6 +162,11 @@ ns.On("ADDON_LOADED", function(name)
       if v == false and db.settings.show[k] then db.settings.show[k] = "off" end
     end
     db.settings.toast = nil
+  end
+  -- 0.5.3 and earlier defaulted a friend's kill to chat; it's a toast now (once).
+  if not db.settings.killToast then
+    if db.settings.show.kill == "chat" then db.settings.show.kill = "toast" end
+    db.settings.killToast = true
   end
   -- 0.4.2 and earlier: sound per category (pvp, progress; "sighting" means the same now).
   -- Keep "off" choices for the kinds in that category.

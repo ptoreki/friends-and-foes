@@ -110,8 +110,8 @@ Rules:
 ## Alerts (toast, chat or off)
 - **Rule:** if you can act on it in the next 30 seconds, it's a toast. Everything else is a chat line.
   Each kind can be set to Toast, Chat or Off in Settings (`settings.show`). Defaults:
-  - **Toast:** friend attacked, friend killed
-  - **Chat:** level up, loot/craft, new gear, friend's kill, hitlist sighting, hitlist share
+  - **Toast:** friend attacked, friend killed, friend's kill
+  - **Chat:** level up, loot/craft, new gear, hitlist sighting, hitlist share
 - **Nearby only** (`settings.nearbyOnly`, default on): "friend attacked" is shown as a toast only when the
   friend's zone (from the message) is your current zone. Otherwise it's a chat line.
 - **Milestones always toast** (unless that kind is Off): reaching level 60 (`ns.MILESTONE_LEVEL`),
