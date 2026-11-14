@@ -77,8 +77,7 @@ Rules:
 - **Collapse:** a GEAR event isn't sent if the same item was shared as LOOT within the last 5 minutes.
 - **Where your PvP is tracked** (`settings.track`, Options → Where it works):
   - the open world (on): cities count, objective subzones (the EPL towers) never do
-  - battlegrounds (off)
-  - arenas (off)
+  - battlegrounds (off). Forever has no arenas; one would count as a battleground.
   - Dungeons and raids are never tracked. Duels are excluded automatically, because attackers must
     be the opposite faction.
 - **Encounter:** starts when you take a hit while a hostile player is targeting you. It ends after
@@ -161,7 +160,7 @@ Rules:
   5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is
   movable (`/fnf unlock`).
 - **Do not disturb:** in combat only PvP and sighting toasts show.
-- **Alerts while in an instance** (`settings.where[party|raid|pvp|arena]`): show, hold (the default:
+- **Alerts while in an instance** (`settings.where[party|raid|pvp]`): show, hold (the default:
   toasts wait until you leave), chat (everything becomes a chat line, even milestones), or off
   (nothing shown; still recorded). Previews ignore this. The old `dnd.instance` false migrates to
   show everywhere.

@@ -329,14 +329,13 @@ function Options.BuildNative()
     { "show", L.WHERE_SHOW, L.TIP_WHERE_SHOW }, { "hold", L.WHERE_HOLD, L.TIP_WHERE_HOLD },
     { "chat", L.WHERE_CHAT, L.TIP_WHERE_CHAT }, { "off", L.WHERE_OFF, L.TIP_WHERE_OFF },
   }
-  for _, w in ipairs({ { "party", L.WHERE_PARTY }, { "raid", L.WHERE_RAID }, { "pvp", L.WHERE_PVP }, { "arena", L.WHERE_ARENA } }) do
+  for _, w in ipairs({ { "party", L.WHERE_PARTY }, { "raid", L.WHERE_RAID }, { "pvp", L.WHERE_PVP } }) do
     local s = Settings.RegisterAddOnSetting(where, "FNF_where_" .. w[1], w[1], S().where, varType("String"), w[2], D.where[w[1]])
     Settings.CreateDropdown(where, s, choices(rules), L.TIP_WHERE_ALERTS)
   end
   header(whereLayout, L.TRACK_HEADER, L.TIP_TRACK)
   checkbox(where, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
   checkbox(where, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
-  checkbox(where, "track_arena", S().track, "arena", L.TRACK_ARENA, D.track.arena, L.TIP_TRACK_ARENA)
 
   -- Appearance
   local look, lookLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_APPEARANCE)

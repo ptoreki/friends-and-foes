@@ -56,7 +56,7 @@ You can also choose:
 - **Which friends** you exchange alerts with: everyone, or only the friends you pick.
 - **What you share:** levels, loot, gear and PvP, each separately.
 - **Do not disturb:** hold progress toasts in combat.
-- **Where it works:** for dungeons, raids, battlegrounds and arenas separately, choose whether alerts show, wait until you're out, become chat lines, or stay off. You also choose whether your own PvP is tracked in the open world, battlegrounds and arenas.
+- **Where it works:** for dungeons, raids and battlegrounds separately, choose whether alerts show, wait until you're out, become chat lines, or stay off. You also choose whether your own PvP is tracked in the open world and in battlegrounds.
 
 ### How it works
 - Your friends need the addon too. Each player's addon reports only **their own** events (their level-ups, loot, and the fights they're in) and sends them to friends who have it.

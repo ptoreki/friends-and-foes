@@ -592,7 +592,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 15, "8 alerts + 4 places + style + message style + chat tab (" .. dropdowns .. ")")
+  check(dropdowns == 14, "8 alerts + 3 places + style + message style + chat tab (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -747,7 +747,7 @@ do
   check(ns.PvP.InWorldPvPContext(), "battlegrounds tracked when turned on")
   ns.S().track.pvp = false
   here = "arena"
-  check(not ns.PvP.InWorldPvPContext(), "arenas not tracked by default")
+  check(ns.InstanceType() == "pvp" and not ns.PvP.InWorldPvPContext(), "an arena (if ever) counts as a battleground")
   here = "none"
   check(ns.PvP.InWorldPvPContext(), "open world tracked")
   ns.S().track.world = false

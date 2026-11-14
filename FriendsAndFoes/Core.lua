@@ -25,9 +25,9 @@ local DEFAULTS = {
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },
   dnd = { combat = true },
   -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
-  where = { party = "hold", raid = "hold", pvp = "hold", arena = "hold" },
+  where = { party = "hold", raid = "hold", pvp = "hold" },
   -- where your own PvP (attacks, deaths, kills, sightings) is tracked
-  track = { world = true, pvp = false, arena = false },
+  track = { world = true, pvp = false },
   minimap = { hide = false, angle = 210 }, -- hidden by default where the minimap addon menu exists
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
@@ -47,13 +47,14 @@ end
 
 function ns.S() return FriendsAndFoesDB.settings end
 
--- where you are: "world", "party" (dungeon or scenario), "raid", "pvp" (battleground), "arena",
--- or "unknown" if the game won't say
+-- where you are: "world", "party" (dungeon or scenario), "raid", "pvp" (battleground),
+-- or "unknown" if the game won't say. Forever has no arenas; one would count as a battleground.
 function ns.InstanceType()
   local inInstance, kind = IsInInstance()
   if issecret(inInstance) or issecret(kind) then return "unknown" end
   if not inInstance then return "world" end
   if kind == "scenario" or kind == nil or kind == "none" then return "party" end
+  if kind == "arena" then return "pvp" end
   return kind
 end
 
