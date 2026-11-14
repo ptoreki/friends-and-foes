@@ -133,6 +133,25 @@ local function build(p)
   y = y - 30
   button(p, 120, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end):SetPoint("TOPLEFT", x, y)
 
+  -- toast style: click to switch, Preview to see it
+  y = y - 30
+  text(p, "GameFontHighlightSmall", x, y - 4, L.OPT_THEME)
+  local theme = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
+  theme:SetSize(100, 22)
+  theme:SetPoint("TOPLEFT", x + 74, y)
+  theme.refresh = function() theme:SetText(L.THEME_NAMES[ns.Toast.Theme()] or ns.Toast.Theme()) end
+  theme:SetScript("OnClick", function()
+    local list, cur = ns.Toast.THEMES, ns.Toast.Theme()
+    local nextTheme = list[1]
+    for i, name in ipairs(list) do
+      if name == cur then nextTheme = list[i % #list + 1] end
+    end
+    S().theme = nextTheme
+    theme.refresh()
+  end)
+  cyclers[#cyclers + 1] = theme
+  button(p, 80, L.BTN_PREVIEW, function() ns.Toast.Test() end):SetPoint("LEFT", theme, "RIGHT", 6, 0)
+
   -- beta tools: only while debug logging is on
   beta = CreateFrame("Frame", nil, p)
   beta:SetPoint("TOPLEFT", 16, -400)

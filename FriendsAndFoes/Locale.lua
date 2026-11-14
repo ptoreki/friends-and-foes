@@ -12,6 +12,19 @@ L.TOAST_LEVEL = "%s leveled up"
 L.TOAST_GEAR_MORE = "%s +%d more"
 L.TOAST_LEVEL_MAX = "%s hit level %d!"
 L.CHAT_PREFIX = "F&F:"
+-- toast themes
+L.OPT_THEME = "Toast style"
+L.BTN_PREVIEW = "Preview"
+L.THEME_NAMES = { minimal = "Minimal", achievement = "Achievement" }
+-- Achievement-style toasts: the small header above the message
+L.HEADER = {
+  attacked = "Friend under attack", died = "Friend killed", kill = "Friend's kill",
+  level = "Level up", loot = "Epic loot", gear = "New gear", sighting = "Hitlist sighting",
+  share = "Hitlist shared",
+}
+L.HEADER_MILESTONE = { level = "Max level!", loot = "Epic BoE!" }
+L.HEADER_REVENGE = "Revenge!"
+L.HEADER_STREAK = "Kill streak!"
 L.CHAT_SHARE = "%s is sharing their hitlist with you"
 L.TOOLTIP_HIT = "Hitlist: %d kills, %d attacks on us"
 L.TOOLTIP_VICTIMS = "killed %s"

@@ -2,6 +2,13 @@
 
 ## 0.5.4
 Compatible with 0.3.x to 0.5.3.
+- **Toast styles:** choose in Options:
+  - **Minimal** (the default): the compact one-line strip.
+  - **Achievement**: WoW's own achievement pop-up look, with a small header ("Friend killed",
+    "Revenge!", "Kill streak!", "Max level!") above the message. Red-tinted for PvP, purple for
+    sightings.
+
+  **Preview** shows one of each.
 - **Fixed: friends' kills never showed.** WoW Forever's honor message is just "You have been
   awarded 7 Honor.", with no name, so earlier versions ignored it. Now it counts as a kill, and the
   victim is worked out from the screen: your dead target, or an enemy whose nameplate just

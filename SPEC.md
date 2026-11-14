@@ -140,6 +140,13 @@ Rules:
   - a tooltip line: kills, attacks, who they killed, and your note
   - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
     still produce a chat line or toast.
+- **Toast style** (`settings.theme`): `minimal` (default) or `achievement`.
+  - Achievement uses `Interface\AchievementFrame` alert art. If the art is missing, it falls back
+    to a dark panel.
+  - It shows a header (by event kind, or "Revenge!", "Kill streak!", "Max level!"), the title, and
+    the details.
+  - It's tinted red for PvP and purple for sightings.
+  - Frames are pooled per style.
 - **Toast layout:** one compact line (icon, title, details; long text wraps to at most 3 lines) on a dark strip with a thin coloured
   edge: red for PvP, gold for progress, purple for sightings. It fades in and out. PvP toasts stay
   5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is

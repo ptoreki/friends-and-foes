@@ -27,7 +27,8 @@ local SOUNDS = {
   sighting = SK.TELL_MESSAGE or 3081,            -- the whisper ping
 }
 
-local queue, active, pool = {}, {}, {}
+local queue, active = {}, {}
+local pools = {} -- theme -> spare frames
 local anchor
 
 ---------------------------------------------------------------------------
@@ -87,53 +88,137 @@ local function release(f)
   end
   f:Hide()
   f.spec = nil
-  pool[#pool + 1] = f
+  pools[f.theme] = pools[f.theme] or {}
+  table.insert(pools[f.theme], f)
   Toast.Layout()
   Toast.Pump()
 end
 
+---------------------------------------------------------------------------
+-- themes: how a toast looks. Each builds its parts once and fills them per toast.
+---------------------------------------------------------------------------
+local THEMES = {}
+Toast.THEMES = { "minimal", "achievement" } -- order in Options
+
+-- Minimal (default): one compact line on a dark strip with a thin coloured edge.
+THEMES.minimal = {
+  build = function(f)
+    f:SetSize(WIDTH, HEIGHT)
+    local bg = f:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0, 0, 0, 0.6)
+
+    f.edge = f:CreateTexture(nil, "BORDER")
+    f.edge:SetPoint("TOPLEFT")
+    f.edge:SetPoint("BOTTOMLEFT")
+    f.edge:SetWidth(3)
+
+    f.icon = f:CreateTexture(nil, "ARTWORK")
+    f.icon:SetSize(18, 18)
+    f.icon:SetPoint("LEFT", 9, 0)
+    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    f.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    f.label:SetPoint("LEFT", f.icon, "RIGHT", 7, 0)
+    f.label:SetPoint("RIGHT", -8, 0)
+    f.label:SetJustifyH("LEFT")
+    f.label:SetWordWrap(true)
+    f.label:SetJustifyV("MIDDLE")
+    if f.label.SetMaxLines then f.label:SetMaxLines(MAX_LINES) end
+  end,
+  render = function(f, spec)
+    f.icon:SetTexture(spec.icon or ns.ICON.fallback)
+    local text = (spec.text and spec.text ~= "") and ("  |cffbbbbbb" .. spec.text .. "|r") or ""
+    f.label:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or "") .. text)
+    -- grow to fit wrapped text (up to MAX_LINES) instead of cutting it off
+    local textH = tonumber(f.label:GetStringHeight()) or 0
+    f:SetHeight(math.max(HEIGHT, math.ceil(textH) + 12))
+    local c = EDGE[spec.category] or EDGE.progress
+    f.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
+  end,
+}
+
+-- Achievement: WoW's own achievement-alert artwork. A small header says what kind of news it
+-- is, then who did what, then the details. Tinted red for PvP and purple for sightings.
+local ACH_W, ACH_H = 300, 80
+local ACH_TINT = { pvp = { 1, 0.62, 0.55 }, progress = { 1, 1, 1 }, sighting = { 0.85, 0.7, 1 } }
+
+local function artOrFallback(tex, file, l, r, top, b, fallback)
+  -- SetTexture returns false when the file doesn't exist in this client
+  local ok = tex:SetTexture(file)
+  if ok == false then
+    tex:SetColorTexture(fallback[1], fallback[2], fallback[3], fallback[4])
+    return false
+  end
+  tex:SetTexCoord(l, r, top, b)
+  return true
+end
+
+THEMES.achievement = {
+  build = function(f)
+    f:SetSize(ACH_W, ACH_H)
+    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg:SetAllPoints()
+    f.hasArt = artOrFallback(f.bg, "Interface\\AchievementFrame\\UI-Achievement-Alert-Background",
+      0, 0.605, 0, 0.703, { 0.08, 0.06, 0.03, 0.92 })
+
+    f.icon = f:CreateTexture(nil, "ARTWORK")
+    f.icon:SetSize(40, 40)
+    f.icon:SetPoint("LEFT", 22, -1)
+    f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    f.iconFrame = f:CreateTexture(nil, "OVERLAY")
+    f.iconFrame:SetSize(58, 58)
+    f.iconFrame:SetPoint("CENTER", f.icon, "CENTER", 0, 0)
+    artOrFallback(f.iconFrame, "Interface\\AchievementFrame\\UI-Achievement-IconFrame",
+      0, 0.5625, 0, 0.5625, { 0, 0, 0, 0 })
+
+    f.header = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.header:SetPoint("TOP", 26, -13)
+    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.title:SetPoint("TOPLEFT", f.icon, "TOPRIGHT", 14, -6)
+    f.title:SetPoint("RIGHT", -18, 0)
+    f.title:SetJustifyH("CENTER")
+    f.title:SetWordWrap(true)
+    if f.title.SetMaxLines then f.title:SetMaxLines(2) end
+    f.sub = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.sub:SetPoint("TOPLEFT", f.title, "BOTTOMLEFT", 0, -2)
+    f.sub:SetPoint("TOPRIGHT", f.title, "BOTTOMRIGHT", 0, -2)
+    f.sub:SetJustifyH("CENTER")
+    f.sub:SetWordWrap(false)
+    f.sub:SetTextColor(0.75, 0.75, 0.75)
+  end,
+  render = function(f, spec)
+    f.icon:SetTexture(spec.icon or ns.ICON.fallback)
+    local header = spec.header
+      or (spec.milestone and L.HEADER_MILESTONE[spec.kind])
+      or (spec.kind and L.HEADER[spec.kind]) or L.ADDON
+    f.header:SetText((spec.sim and "[SIM] " or "") .. header)
+    f.title:SetText(spec.title or "")
+    f.sub:SetText(spec.text or "")
+    local c = ACH_TINT[spec.category] or ACH_TINT.progress
+    if f.hasArt then f.bg:SetVertexColor(c[1], c[2], c[3]) end
+    f:SetHeight(ACH_H)
+  end,
+}
+
+function Toast.Theme()
+  local th = ns.S().theme
+  return THEMES[th] and th or "minimal"
+end
+
 local function render(f)
-  local spec = f.spec
-  f.icon:SetTexture(spec.icon or ns.ICON.fallback)
-  local text = (spec.text and spec.text ~= "") and ("  |cffbbbbbb" .. spec.text .. "|r") or ""
-  f.label:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or "") .. text)
-  -- grow to fit wrapped text (up to MAX_LINES) instead of cutting it off
-  local textH = tonumber(f.label:GetStringHeight()) or 0
-  f:SetHeight(math.max(HEIGHT, math.ceil(textH) + 12))
-  local c = EDGE[spec.category] or EDGE.progress
-  f.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
-  f.duration = spec.category == "pvp" and DURATION_PVP or DURATION
+  THEMES[f.theme].render(f, f.spec)
+  f.duration = f.spec.category == "pvp" and DURATION_PVP or DURATION
   f.remaining = f.duration
   f:SetAlpha(0)
 end
 
-local function createToast()
+local function createToast(theme)
   local f = CreateFrame("Button", nil, UIParent)
-  f:SetSize(WIDTH, HEIGHT)
+  f.theme = theme
   f:SetFrameStrata("HIGH")
   f:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-  local bg = f:CreateTexture(nil, "BACKGROUND")
-  bg:SetAllPoints()
-  bg:SetColorTexture(0, 0, 0, 0.6)
-
-  f.edge = f:CreateTexture(nil, "BORDER")
-  f.edge:SetPoint("TOPLEFT")
-  f.edge:SetPoint("BOTTOMLEFT")
-  f.edge:SetWidth(3)
-
-  f.icon = f:CreateTexture(nil, "ARTWORK")
-  f.icon:SetSize(18, 18)
-  f.icon:SetPoint("LEFT", 9, 0)
-  f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-
-  f.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  f.label:SetPoint("LEFT", f.icon, "RIGHT", 7, 0)
-  f.label:SetPoint("RIGHT", -8, 0)
-  f.label:SetJustifyH("LEFT")
-  f.label:SetWordWrap(true)
-  f.label:SetJustifyV("MIDDLE")
-  if f.label.SetMaxLines then f.label:SetMaxLines(MAX_LINES) end
+  THEMES[theme].build(f)
 
   f:SetScript("OnEnter", function(self)
     self.hover = true
@@ -211,7 +296,8 @@ local function isHeld(spec)
 end
 
 local function show(spec)
-  local f = table.remove(pool) or createToast()
+  local theme = Toast.Theme()
+  local f = table.remove(pools[theme] or {}) or createToast(theme)
   f.spec = spec
   render(f)
   active[#active + 1] = f

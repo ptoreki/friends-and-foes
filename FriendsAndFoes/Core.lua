@@ -19,6 +19,7 @@ local DEFAULTS = {
   chatFrame = 1,
   nearbyOnly = true, -- "friend attacked" toasts only when they're in your zone; chat otherwise
   flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
+  theme = "minimal", -- toast look: "minimal" | "achievement"
   mark = true, -- skull on hitlist players' nameplates + a tooltip line
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
   sound = { enabled = true, level = false, loot = true, gear = false, attacked = true, died = true, kill = false, sighting = true, share = false },

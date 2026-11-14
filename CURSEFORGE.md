@@ -48,6 +48,8 @@ In **Options → AddOns → Friends & Foes**, every event gets its own choice:
 - **Show:** Toast, Chat or Off
 - **Sound:** on or off
 
+Toasts come in two styles: **Minimal**, a slim one-line strip, or **Achievement**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
+
 The defaults are quiet: toasts for your friends' fights (attacked nearby, killed, or scoring a kill) and for milestones, a chat line for everything else, and soft built-in game sounds.
 
 You can also choose:

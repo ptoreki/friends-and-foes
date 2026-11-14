@@ -302,7 +302,7 @@ H.KILL = function(_, isSelf, p, f)
     if isSelf then return end
     ns.Toast.Push({
       chat = line, milestone = ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
-      title = title, text = text,
+      title = title, text = text, header = ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK or nil,
     })
     return
   end
@@ -323,6 +323,7 @@ H.KILL = function(_, isSelf, p, f)
   feed(p, "kill", line)
   if isSelf then return end
   ns.Toast.Push({
+    header = (revenge and L.HEADER_REVENGE) or (ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK) or nil,
     chat = line, milestone = revenge or ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
     title = title, text = text,
     player = name,

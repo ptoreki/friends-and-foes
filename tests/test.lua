@@ -522,6 +522,31 @@ do
   check(ns.errors == 0, "no errors in nameless honor (" .. tostring(ns.lastError) .. ")")
 end
 
+-- toast themes: minimal (default) and achievement; each theme has its own frames
+check(ns.Toast.Theme() == "minimal", "default toast theme is minimal")
+drainToasts()
+ns.S().theme = "achievement"
+ns.Toast.Push({ kind = "kill", category = "pvp", title = "Bob killed Rogz", text = "Duskwood", header = "Revenge!", force = true })
+local achFrame
+for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "Bob killed Rogz" then achFrame = f end end
+check(achFrame and achFrame.theme == "achievement" and achFrame.header and achFrame.header:GetText() == "Revenge!"
+  and achFrame.title:GetText() == "Bob killed Rogz", "achievement theme: header, title")
+drainToasts()
+ns.Toast.Push({ kind = "died", category = "pvp", title = "Bob killed by Rogz", force = true })
+local reused
+for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "Bob killed by Rogz" then reused = f end end
+check(reused == achFrame and reused.header:GetText() == "Friend killed", "achievement frames are reused; header from the event kind")
+ns.S().theme = "bogus"
+check(ns.Toast.Theme() == "minimal", "unknown theme falls back to minimal")
+ns.S().theme = "minimal"
+drainToasts()
+ns.Toast.Push({ kind = "died", category = "pvp", title = "Back to minimal", force = true })
+local minFrame
+for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "Back to minimal" then minFrame = f end end
+check(minFrame and minFrame.theme == "minimal" and minFrame.label ~= nil, "switching back uses minimal frames")
+drainToasts()
+check(ns.errors == 0, "no errors in themes (" .. tostring(ns.lastError) .. ")")
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true
