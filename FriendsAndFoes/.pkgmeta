@@ -1,0 +1,6 @@
+# BigWigs packager config (used by .github/workflows/release.yml). Dot-files are not packaged.
+package-as: FriendsAndFoes
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown

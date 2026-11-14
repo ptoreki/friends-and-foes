@@ -18,7 +18,7 @@ if (Test-Path $zipPath) { Remove-Item $zipPath -Force -Confirm:$false }
 
 $zip = [System.IO.Compression.ZipFile]::Open($zipPath, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-  Get-ChildItem $addon -Recurse -File | ForEach-Object {
+  Get-ChildItem $addon -Recurse -File | Where-Object { $_.Name -notlike ".*" } | ForEach-Object {
     $rel = $_.FullName.Substring($addon.Length + 1).Replace('\', '/')
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, "FriendsAndFoes/$rel") | Out-Null
   }

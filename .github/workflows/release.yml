@@ -1,0 +1,49 @@
+# Push a tag like v0.5.3 to release. Tests run first; the tag must match the version in
+# FriendsAndFoes.toc and Core.lua. The BigWigs packager then builds the zip and uploads it to
+# CurseForge, Wago and a GitHub release. Each upload is skipped until its ID/token is set
+# (see PUBLISHING.md).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the packager reads tags/history
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test
+        run: npm ci && npm test
+
+      - name: Tag must match the addon version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          toc=$(grep -oP '^## Version:\s*\K\S+' FriendsAndFoes/FriendsAndFoes.toc)
+          core=$(grep -oP '^ns\.VERSION = "\K[^"]+' FriendsAndFoes/Core.lua)
+          if [ "$toc" != "$tag" ] || [ "$core" != "$tag" ]; then
+            echo "Tag $tag does not match .toc ($toc) / Core.lua ($core). Bump the version first."
+            exit 1
+          fi
+
+      - name: Ship the changelog with the addon
+        run: cp CHANGELOG.md FriendsAndFoes/CHANGELOG.md
+
+      - name: Package and upload
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -t FriendsAndFoes
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
