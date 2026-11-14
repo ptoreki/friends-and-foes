@@ -1015,6 +1015,24 @@ do
   check(ns.errors == 0, "no errors in kill merging (" .. tostring(ns.lastError) .. ")")
 end
 
+-- hitlist hover: who a player killed, and how often
+do
+  local h = { name = "Count Me", kills = 4, attacks = 6, victims = { ["Bob One"] = true, ["Alice Two"] = true, ["Old Victim"] = true },
+    kv = { ["Bob One"] = 3, ["Alice Two"] = 1 }, lastSeen = time() }
+  local k = ns.Data.KillsOn(h)
+  check(#k == 3 and k[1][1] == "Bob One" and k[1][2] == 3 and k[2][1] == "Alice Two" and k[2][2] == 1
+    and k[3][1] == "Old Victim" and k[3][2] == nil, "KillsOn: most kills first, uncounted last")
+  local lines = {}
+  local oAdd, oDouble = GameTooltip.AddLine, GameTooltip.AddDoubleLine
+  GameTooltip.AddLine = function(_, s) lines[#lines + 1] = ns.Plain(s or "") end
+  GameTooltip.AddDoubleLine = function(_, l, r) lines[#lines + 1] = ns.Plain(l or "") .. " = " .. ns.Plain(r or "") end
+  ns.UI.HitTooltip(CreateFrame(), h)
+  local text = table.concat(lines, " | ")
+  check(text:find("Bob One = 3x", 1, true) and text:find("Alice Two = 1x", 1, true) and text:find("Old Victim = before counting began", 1, true)
+    and text:find("4 kills, 6 attacks", 1, true), "hover tooltip: per-friend kill counts: " .. text)
+  GameTooltip.AddLine, GameTooltip.AddDoubleLine = oAdd, oDouble
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

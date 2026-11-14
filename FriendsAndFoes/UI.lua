@@ -219,6 +219,27 @@ function UI.SetSearch(text)
   UI.Refresh()
 end
 
+-- tooltip for a hitlist row: record, who they killed (with counts), last seen, note
+function UI.HitTooltip(owner, h)
+  GameTooltip:SetOwner(owner, "ANCHOR_CURSOR")
+  GameTooltip:AddLine(ns.ClassColored(h.name, h.class) .. (h.guild and ("  |cff888888<" .. h.guild .. ">|r") or ""))
+  GameTooltip:AddLine(L.HIT_TIP_RECORD:format(ns.Count(h.kills), ns.Count(h.attacks)), 1, 1, 1)
+  local kills = ns.Data.KillsOn(h)
+  if #kills > 0 then
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(L.HIT_TIP_KILLED, 1, 0.82, 0)
+    for _, v in ipairs(kills) do
+      local rec = R().players[v[1]]
+      local right = v[2] and L.HIT_TIP_TIMES:format(v[2]) or L.HIT_TIP_EARLIER
+      GameTooltip:AddDoubleLine(ns.ClassColored(v[1], rec and rec.class), right, 1, 1, 1, 1, 1, 1)
+    end
+  end
+  GameTooltip:AddLine(" ")
+  GameTooltip:AddLine(L.HIT_TIP_LAST:format(lastText(h)), 0.7, 0.7, 0.7)
+  if h.note then GameTooltip:AddLine(h.note, 1, 1, 1, true) end
+  GameTooltip:Show()
+end
+
 -- the rows currently listed (sorted), for tests
 function UI.Rows() return data end
 
@@ -670,6 +691,11 @@ local function build()
     end
     -- cells are cut to their column; hovering a row shows any cut-off text in full
     row:SetScript("OnEnter", function(self)
+      -- hitlist: who this player killed in your group, and how often
+      if currentTab == "hitlist" and self.entry and self.entry.name then
+        UI.HitTooltip(self, self.entry)
+        return
+      end
       local cut = {}
       for c, cell in ipairs(self.cells) do
         if cell:IsShown() and cell.IsTruncated and cell:IsTruncated() then

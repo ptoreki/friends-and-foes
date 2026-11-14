@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.2
+Compatible with 0.3.x to 0.6.1.
+- **Who killed whom:** hover a player on the Hitlist to see their kills and attacks on your
+  group, then who of your friends they killed and how often ("Bob 3x, Alice 1x"), when they were
+  last seen, and your note.
+  - Kills from before 0.5.1, when per-friend counting started, are listed as "before counting
+    began".
+- The tooltip on a hitlist player's nameplate shows the counts too: "killed Bob 3x, Alice 1x".
+
 ## 0.6.1
 Compatible with 0.3.x to 0.6.0. Friends need 0.6.1 to send these alerts.
 - **New alert: a friend attacks someone.** When a friend starts a fight with an enemy player

@@ -155,6 +155,25 @@ function Data.Hit(name)
   end)
 end
 
+-- Who a hitlist player has killed, and how often: { { name, count }, ... }, most kills first.
+-- count is nil for victims from before per-friend counting (0.5.1).
+function Data.KillsOn(h)
+  local out, seen = {}, {}
+  for name, n in pairs(h and h.kv or {}) do
+    out[#out + 1] = { name, ns.Count(n) }
+    seen[name] = true
+  end
+  for name in pairs(h and h.victims or {}) do
+    if not seen[name] then out[#out + 1] = { name, nil } end
+  end
+  table.sort(out, function(a, b)
+    local ca, cb = a[2] or 0, b[2] or 0
+    if ca ~= cb then return ca > cb end
+    return a[1] < b[1]
+  end)
+  return out
+end
+
 function Data.Feed(kind, text)
   local feed = Data.Realm().feed
   local entry = { t = time(), kind = kind, text = text }

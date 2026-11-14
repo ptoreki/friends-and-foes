@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.6.1"
+ns.VERSION = "0.6.2"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts

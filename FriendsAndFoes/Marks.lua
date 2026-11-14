@@ -22,11 +22,16 @@ function Marks.HitFor(unit)
   return name and ns.Data.FindHit(name)
 end
 
+-- "Bob 3x, Alice 1x" - who they killed and how often (top 3)
 local function victimsText(h)
   local list = {}
-  for v in pairs(h.victims or {}) do list[#list + 1] = v end
-  table.sort(list)
-  if #list > 3 then list = { list[1], list[2], list[3], "..." } end
+  for i, v in ipairs(ns.Data.KillsOn(h)) do
+    if i > 3 then
+      list[#list + 1] = "..."
+      break
+    end
+    list[#list + 1] = v[2] and L.KILLS_ON_COUNT:format(v[1], v[2]) or v[1]
+  end
   return table.concat(list, ", ")
 end
 
