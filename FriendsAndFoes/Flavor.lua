@@ -76,6 +76,11 @@ end
 -- died: victim p (friend or you), who = coloured victim, by = coloured killer or nil,
 -- h = killer's hitlist entry or nil
 ---------------------------------------------------------------------------
+-- flavor off: one short line, who did what, then where
+local function compact(line)
+  return line, nil, line
+end
+
 function Flavor.Died(p, who, by, h, zone)
   p.deathTimes = stamp(p.deathTimes)
   local n
@@ -83,6 +88,9 @@ function Flavor.Died(p, who, by, h, zone)
     h.kv = h.kv or {}
     h.kv[p.name] = (h.kv[p.name] or 0) + 1
     n = h.kv[p.name]
+  end
+  if not on() then
+    return compact(by and L.SHORT_DIED:format(who, by, zone) or L.SHORT_DIED_UNKNOWN:format(who, zone))
   end
 
   local title, detail
@@ -116,6 +124,9 @@ function Flavor.Kill(p, who, v, e, hit, revenge, zone)
   e.kb = e.kb or {}
   e.kb[p.name] = (e.kb[p.name] or 0) + 1
   local n = e.kb[p.name]
+  if not on() then
+    return compact((revenge and L.SHORT_REVENGE or L.SHORT_KILL):format(who, v, zone))
+  end
 
   local title, detail
   if revenge then
@@ -152,6 +163,7 @@ end
 -- attackers = decoded units (to look up past kills on this friend)
 ---------------------------------------------------------------------------
 function Flavor.Attacked(p, who, by, attackers, zone)
+  if not on() then return compact(L.SHORT_ATTACKED:format(who, by, zone)) end
   local title = pick(L.ATTACKED):format(who)
   local parts = { L.ATTACKED_BY:format(by) }
   if on() then

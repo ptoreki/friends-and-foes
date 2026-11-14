@@ -271,6 +271,10 @@ function Toast.Push(spec)
     return
   end
   if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast
+  -- flavor off: the toast is the same one short line as the chat/Feed line
+  if ns.S().flavor == false and spec.chat and not spec.force then
+    spec.title, spec.text, spec.collapseKey = spec.chat, nil, nil
+  end
   spec.created = GetTime()
   if spec.collapseKey and spec.merge then
     for _, f in ipairs(active) do
@@ -301,7 +305,8 @@ function Toast.Sighting(name, class, zone, hit)
     kind = "sighting", category = "sighting", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
     title = L.TOAST_SIGHTING:format(who),
     text = L.TOAST_SIGHTING_TEXT:format(zone or "?", hit.attacks or 0, hit.kills or 0),
-    chat = L.CHAT_SIGHTING:format(who, zone or "?", hit.attacks or 0, hit.kills or 0),
+    chat = ns.S().flavor == false and L.SHORT_SIGHTING:format(who, zone or "?")
+      or L.CHAT_SIGHTING:format(who, zone or "?", hit.attacks or 0, hit.kills or 0),
     player = name,
   })
 end

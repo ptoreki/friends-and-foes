@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2
+Compatible with 0.3.x to 0.5.1.
+- **Flavor text can be turned off for short, plain messages:** who did what, then where. With it
+  off, every toast is a single line, the same as the chat line:
+  - "Bob killed by Rogz Fang - Duskwood"
+  - "Bob killed Rogz Fang (revenge) - Duskwood"
+  - "Bob attacked by Rogz Fang - Duskwood"
+  - "Hitlist: Rogz Fang spotted - Arathi Highlands"
+  - "Bob reached level 60", "Bob looted [item]"
+- The option is "Flavor text" in Options (it replaces "Varied PvP messages").
+
 ## 0.5.1
 Compatible with 0.3.x to 0.5.0.
 - **Varied PvP messages.** Deaths, kills and attacks now use different wordings and call out

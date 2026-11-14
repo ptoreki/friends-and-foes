@@ -145,6 +145,10 @@ Rules:
   - Revenge names the friends that enemy had hit ("avenged").
   - An attack mentions the attacker's past kills on that friend.
   - Otherwise one plain wording is picked at random.
+- **Flavor off:** every message is one short line, who did what, then where. PvP:
+  "X killed by Y - Zone", "X killed Y [(revenge)] - Zone", "X attacked by Y - Zone", and
+  "Hitlist: Y spotted - Zone". Progress uses the Feed line. The toast shows that line only, with
+  no second part and no merging.
   The same line goes to the toast, the chat line and the Feed. Counts are per client, since each
   client builds them from the events it received.
 - **Revenge:** a kill on a hitlist entry adds "revenge!" and "R<n>" to the Kills column.

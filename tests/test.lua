@@ -392,6 +392,24 @@ ns.S().flavor = false
 ADVANCE(20)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk10"), "WHISPER", 77)
 check(lastFeed():find("killed", 1, true) and not lastFeed():find("owns", 1, true), "flavor off: plain wording: " .. lastFeed())
+local function plain(s) return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
+check(plain(lastFeed()) == "Buddy Pal killed Vic Tim - Duskwood", "compact kill: " .. plain(lastFeed()))
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fc1"), "WHISPER", 77)
+check(plain(lastFeed()) == "Buddy Pal killed by Nem Esis - Duskwood", "compact death: " .. plain(lastFeed()))
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "fc2", zone = "Duskwood", attackers = "Nem Esis:ROGUE:60:" }, "fc2"), "WHISPER", 77)
+check(plain(lastFeed()) == "Buddy Pal attacked by Nem Esis - Duskwood", "compact attack: " .. plain(lastFeed()))
+ADVANCE(20)
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Nem Esis", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fc3"), "WHISPER", 77)
+check(plain(lastFeed()) == "Buddy Pal killed Nem Esis (revenge) - Duskwood", "compact revenge: " .. plain(lastFeed()))
+-- the toast is the same single line
+drainToasts()
+local shownToast
+for _, f in ipairs(FRAMES) do if f.spec and f.spec.kind == "kill" then shownToast = f.spec end end
+check(shownToast == nil or (shownToast.text == nil and plain(shownToast.title) == plain(lastFeed())), "compact toast = one line")
+ns.Toast.Push({ kind = "kill", category = "pvp", title = "T", text = "X", chat = "line", milestone = true })
+local top
+for _, f in ipairs(FRAMES) do if f.spec and f.spec.chat == "line" then top = f.spec end end
+check(top and top.title == "line" and top.text == nil, "compact toast uses the chat line as its only text")
 ns.S().flavor = true
 check(ns.errors == 0, "no errors in flavor (" .. tostring(ns.lastError) .. ")")
 

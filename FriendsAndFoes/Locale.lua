@@ -51,7 +51,14 @@ L.KILLS_TODAY = "%s kill today"
 L.ATTACKED = { "%s is under attack!", "%s is in a fight!", "%s got jumped!" }
 L.ATTACKED_BY = "by %s"
 L.ATTACKER_HISTORY = "%s has killed them %d times before"
-L.OPT_FLAVOR = "Varied PvP messages"
+L.OPT_FLAVOR = "Flavor text (off: short - who, what, where)"
+-- flavor off: compact, one line
+L.SHORT_DIED = "%s killed by %s - %s"
+L.SHORT_DIED_UNKNOWN = "%s killed by an enemy player - %s"
+L.SHORT_KILL = "%s killed %s - %s"
+L.SHORT_REVENGE = "%s killed %s (revenge) - %s"
+L.SHORT_ATTACKED = "%s attacked by %s - %s"
+L.SHORT_SIGHTING = "Hitlist: %s spotted - %s"
 
 -- feed
 L.FEED_LEVEL = "%s reached level %d"
