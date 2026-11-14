@@ -13,6 +13,16 @@ Compatible with 0.3.x to 0.5.4.
   - **Advanced:** minimap button, debug logging, Print status, Simulate, and Clear simulated data.
 
   The old panel stays as a fallback if the game's settings system isn't available.
+- **Toast styles renamed:** Modern (the slim strip, the default) and Classic (the achievement
+  look).
+- **Stop simulation:**
+  - The simulation banner's button, **Advanced → Stop**, or `/fnf sim stop`.
+  - Pending fake alerts are cancelled, fake toasts are dismissed, and the window shows your real
+    data again.
+- **Friends on the other faction are left out:** they don't appear in your Friends list, and
+  alerts aren't exchanged with them. Their fights would otherwise put players from your own
+  faction on your hitlist.
+- **Fixed:** you no longer show up in your own Friends list.
 - **Window:**
   - Click a column header to sort by it, and click again to flip the order. An arrow shows the
     current sort.

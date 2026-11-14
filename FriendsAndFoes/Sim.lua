@@ -78,10 +78,29 @@ function Sim.Run(kind, asSelf)
   return true
 end
 
+-- each run gets a number; Stop bumps it so pending steps of an older run don't fire
+local generation = 0
+
 function Sim.RunAll(asSelf)
+  generation = generation + 1
+  local gen = generation
+  Sim.running = true
   for i, kind in ipairs(Sim.KINDS) do
-    C_Timer.After((i - 1) * 0.6, function() ns.Try("sim", Sim.Run, kind, asSelf) end)
+    C_Timer.After((i - 1) * 0.6, function()
+      if gen ~= generation then return end
+      ns.Try("sim", Sim.Run, kind, asSelf)
+      if i == #Sim.KINDS then Sim.running = false end
+    end)
   end
+end
+
+-- stop a running simulation: no more fake alerts, fake toasts dismissed, real data shown
+function Sim.Stop()
+  generation = generation + 1
+  Sim.running = false
+  if ns.Toast and ns.Toast.DropSim then ns.Toast.DropSim() end
+  ns.viewSim = false
+  if ns.UI then ns.UI.Refresh() end
 end
 
 function Sim.Clear()
@@ -95,6 +114,9 @@ function Sim.Command(args)
   local prefix = "|cff33ff99" .. L.ADDON .. "|r "
   if kind == "" or kind == "help" then
     print(prefix .. L.SIM_HELP)
+  elseif kind == "stop" then
+    Sim.Stop()
+    print(prefix .. L.SIM_STOPPED)
   elseif kind == "clear" then
     Sim.Clear()
     print(prefix .. L.SIM_CLEARED)

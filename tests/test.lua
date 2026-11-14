@@ -653,6 +653,51 @@ ns.UI.Show("friends")
 ns.UI.Show("feed")
 check(ns.errors == 0, "no errors in window sort/paging (" .. tostring(ns.lastError) .. ")")
 
+-- you are not in your own Friends list
+ns.UI.Show("friends")
+local meListed = false
+for _, e in ipairs(ns.UI.Rows()) do if e.name == ns.me then meListed = true end end
+check(real.players[ns.me] and real.players[ns.me].friend and not meListed, "you don't show up under Friends")
+
+-- friends on the other faction: left out of the roster, their events dropped, not shown
+do
+  local origInfo, origById = C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetGameAccountInfoByID
+  C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "X", factionName = "Alliance", gameAccountID = 77 } end
+  C_BattleNet.GetGameAccountInfoByID = function() return { characterName = "Buddy", realmName = "X", factionName = "Alliance", gameAccountID = 77 } end
+  ns.Comm.RebuildRoster()
+  check(next(ns.Comm.roster) == nil and next(ns.Comm.everyone) == nil, "other-faction friend not in the roster")
+  check(ns.Comm.lastRosterReport:find("other faction", 1, true) ~= nil, "roster report says other faction")
+  local before = #real.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 50 }, "fac1"), "WHISPER", 77)
+  check(#real.feed == before, "other-faction friend's events ignored")
+  C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetGameAccountInfoByID = origInfo, origById
+  ns.Comm.RebuildRoster()
+  check(ns.Comm.roster["Buddy Pal"] ~= nil, "same-faction friend back in the roster")
+  local hordeOnly = { name = "Ally Friend", friend = true, faction = "Alliance", k = 0, d = 0, a = 0, lastSeen = time() }
+  real.players["Ally Friend"] = hordeOnly
+  ns.UI.Show("friends")
+  local allyListed = false
+  for _, e in ipairs(ns.UI.Rows()) do if e.name == "Ally Friend" then allyListed = true end end
+  check(not allyListed, "a known friend now on the other faction isn't listed")
+  real.players["Ally Friend"] = nil
+end
+
+-- stop simulation: pending fake alerts don't fire, fake toasts dismissed, real data shown
+do
+  local simFeed = #(ns.Data.SimRealm().feed)
+  ns.Sim.RunAll(false)
+  check(ns.Sim.running, "simulation running")
+  ns.Toast.Push({ kind = "died", category = "pvp", title = "fake", sim = true, force = true })
+  ns.Sim.Stop()
+  RUN_TIMERS()
+  check(#(ns.Data.SimRealm().feed) == simFeed and not ns.Sim.running and not ns.viewSim, "stopped: no more simulated events, real view")
+  local simShown = false
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.sim then simShown = true end end
+  check(not simShown, "simulated toasts dismissed")
+  SlashCmdList.FRIENDSANDFOES("sim stop")
+  check(ns.errors == 0, "no errors stopping simulation (" .. tostring(ns.lastError) .. ")")
+end
+
 -- per-event sound, whatever the display; milestones chime even when their kind is silent
 local snd = ns.S().sound
 snd.level = true

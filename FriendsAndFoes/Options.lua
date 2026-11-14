@@ -370,6 +370,7 @@ function Options.BuildNative()
   header(advLayout, L.TOOLS_HEADER)
   button(advLayout, L.OPT_STATUS, L.BTN_STATUS, function() ns.PrintStatus() end, L.TIP_STATUS)
   button(advLayout, L.OPT_SIM, L.BTN_SIM, function() ns.Sim.RunAll(false) end, L.TIP_SIM)
+  button(advLayout, L.OPT_SIM_STOP, L.BTN_SIM_STOP, function() ns.Sim.Stop() end, L.TIP_SIM_STOP)
   button(advLayout, L.OPT_SIM_CLEAR, L.BTN_SIM_CLEAR, function() ns.Sim.Clear() end, L.TIP_SIM_CLEAR)
 
   Settings.RegisterAddOnCategory(main)

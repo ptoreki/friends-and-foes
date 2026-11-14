@@ -15,7 +15,7 @@ L.CHAT_PREFIX = "F&F:"
 -- toast themes
 L.OPT_THEME = "Toast style"
 L.BTN_PREVIEW = "Preview"
-L.THEME_NAMES = { minimal = "Minimal", achievement = "Achievement" }
+L.THEME_NAMES = { minimal = "Modern", achievement = "Classic" }
 -- Achievement-style toasts: the small header above the message
 L.HEADER = {
   attacked = "Friend under attack", died = "Friend killed", kill = "Friend's kill",
@@ -178,8 +178,12 @@ L.OPT_SHARE = "Hitlist shared"
 L.DEBUG_AUTO_OFF = "Debug logging switched itself off after 7 days. /fnf debug turns it back on."
 L.ERRORS_LINE = "Errors caught: %d (last 50 saved)"
 L.SIM_BANNER = "SIMULATION VIEW"
-L.SIM_EXIT = "Real data"
-L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|died|kill|sighting|all> [self]  |  /fnf sim view  |  /fnf sim clear"
+L.SIM_EXIT = "Stop simulation"
+L.SIM_STOPPED = "simulation stopped - back to real data"
+L.OPT_SIM_STOP = "Stop simulation"
+L.BTN_SIM_STOP = "Stop"
+L.TIP_SIM_STOP = "Stops a running simulation: no more fake alerts, fake toasts are dismissed, and the window shows your real data again."
+L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|died|kill|sighting|all> [self]  |  /fnf sim stop  |  /fnf sim view  |  /fnf sim clear"
 L.SIM_CLEARED = "simulation data cleared"
 
 -- slash
@@ -208,8 +212,8 @@ L.TIP_DND_COMBAT = "While you're in combat, only PvP alerts pop up. The rest wai
 L.TIP_DND_INSTANCE = "In dungeons and raids, toasts wait until you're back outside."
 L.TOASTS_HEADER = "Toasts"
 L.THEME_TIPS = {
-  minimal = "A slim one-line strip with a coloured edge.",
-  achievement = "Styled like WoW's achievement pop-up, with a header saying what happened.",
+  minimal = "Modern: a slim one-line strip with a coloured edge.",
+  achievement = "Classic: styled like WoW's achievement pop-up, with a header saying what happened.",
 }
 L.TIP_THEME = "How pop-up toasts look. Use Preview to compare."
 L.OPT_PREVIEW = "Preview"

@@ -48,7 +48,7 @@ In **Options → AddOns → Friends & Foes**, every event gets its own choice:
 - **Show:** Toast, Chat or Off
 - **Sound:** on or off
 
-Toasts come in two styles: **Minimal**, a slim one-line strip, or **Achievement**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
+Toasts come in two styles: **Modern**, a slim one-line strip, or **Classic**, styled like WoW's own achievement pop-up. Use **Preview** to compare.
 
 The defaults are quiet: toasts for your friends' fights (attacked nearby, killed, or scoring a kill) and for milestones, a chat line for everything else, and soft built-in game sounds.
 
@@ -59,7 +59,7 @@ You can also choose:
 
 ### How it works
 - Your friends need the addon too. Each player's addon reports only **their own** events (their level-ups, loot, and the fights they're in) and sends them to friends who have it.
-- It works with your **Battle.net friends** who are online in WoW Forever. You don't need to be grouped, on the same server, or in the same zone.
+- It works with your **Battle.net friends** who are online in WoW Forever **on your faction**. You don't need to be grouped, on the same server, or in the same zone.
 - No external servers, websites or accounts are involved. Everything goes through the game's own addon messaging, and your data stays in your own SavedVariables.
 - It uses only the standard addon API: no automation, no combat log, nothing outside the game.
 

@@ -123,7 +123,11 @@ local FRIEND_COLS = {
 -- friends we've heard from, plus online Battle.net friends in Forever the addon can see
 -- but hasn't received anything from yet (so you can tell "not detected" from "silent")
 local function fetchFriends()
-  local list = sortedValues(R().players, function(p) return p.friend end)
+  -- you are not your own friend; friends on the other faction aren't shown
+  local list = sortedValues(R().players, function(p)
+    return p.friend and not p.self and p.name ~= ns.me
+      and not (p.faction and ns.myFaction and p.faction ~= ns.myFaction)
+  end)
   if ns.viewSim then return list end
   wipe(onlineNow)
   local onlineRows = {}
@@ -492,10 +496,7 @@ local function build()
   local simText = simBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   simText:SetPoint("LEFT")
   simText:SetText("|cffff9933" .. L.SIM_BANNER .. "|r")
-  local simExit = button(simBanner, 80, L.SIM_EXIT, function()
-    ns.viewSim = false
-    UI.Refresh()
-  end)
+  local simExit = button(simBanner, 110, L.SIM_EXIT, function() ns.Sim.Stop() end)
   simExit:SetPoint("LEFT", simText, "RIGHT", 6, 0)
   simBanner:Hide()
 

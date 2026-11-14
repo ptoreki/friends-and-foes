@@ -15,7 +15,12 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 - Nothing has been tested on a live client. Friends are the testers.
 
 ## Friends and sync
-- A "friend" is a Battle.net friend who is **online in WoW Forever** (same WoW project) and has the addon.
+- A "friend" is a Battle.net friend who is **online in WoW Forever** (same WoW project), **on your
+  faction**, and has the addon.
+  - Other-faction friends are left out of the roster: nothing is sent to them, their events are
+    dropped, and they aren't listed. Their fights would otherwise put your own faction on the
+    hitlist.
+  - You never appear in your own Friends list.
   Forever has no realms: `GetRealmName` returns an internal server name ("CAMWOW EU4 Realm 8 PvP")
   that differs between friends who play together, so it is ignored. Names are unique region-wide.
 - **Picked friends** (`FriendsAndFoesDB.group`, keyed by BattleTag): if the set is empty, every
@@ -140,7 +145,8 @@ Rules:
   - a tooltip line: kills, attacks, who they killed, and your note
   - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
     still produce a chat line or toast.
-- **Toast style** (`settings.theme`): `minimal` (default) or `achievement`.
+- **Toast style** (`settings.theme`): `minimal`, shown as "Modern" (the default), or `achievement`,
+  shown as "Classic".
   - Achievement uses `Interface\AchievementFrame` alert art. If the art is missing, it falls back
     to a dark panel.
   - It shows a header (by event kind, or "Revenge!", "Kill streak!", "Max level!"), the title, and

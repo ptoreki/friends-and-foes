@@ -164,6 +164,14 @@ function Comm.SameWorld(g)
   return false, "other realm"
 end
 
+-- Friends on the other faction are left out: you can't group or help each other in world PvP,
+-- and their fights would put your own faction's players on your hitlist.
+function Comm.OtherFaction(faction)
+  if not faction or issecret(faction) or faction == "" or faction == "Neutral" then return false end
+  if not ns.myFaction or ns.myFaction == "Neutral" then return false end
+  return faction ~= ns.myFaction
+end
+
 function Comm.RebuildRoster()
   lastRebuild = GetTime()
   wipe(roster)
@@ -186,6 +194,7 @@ function Comm.RebuildRoster()
         if not g.isOnline then why = "offline"
         elseif not g.characterName then why = "no character name"
         elseif not same then why = notWhy
+        elseif Comm.OtherFaction(g.factionName) then why = "other faction"
         end
         local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
         if not why and (not name or name == ns.me) then why = "self" end
@@ -514,6 +523,10 @@ ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
     ns.Debug("BN-DROP", why, g.realmName, ns.realm, tostring(g.wowProjectID))
     return
   end
+  if Comm.OtherFaction(g.factionName) then
+    ns.Debug("BN-DROP", "other faction", g.characterName, g.factionName)
+    return
+  end
   local name = ns.CleanName(g.characterName)
   if not name then return end
   if Comm.GroupActive() then
@@ -525,7 +538,11 @@ ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   end
   ns.SetCap("bnet", "ok")
   local sender = accept(text, name, "bn")
-  if sender then learnFull(rosterFind(name), sender, g.gameAccountID) end
+  if sender then
+    learnFull(rosterFind(name), sender, g.gameAccountID)
+    local rec = ns.Data.FindPlayer(sender)
+    if rec and g.factionName and not issecret(g.factionName) then rec.faction = g.factionName end
+  end
 end)
 
 ns.On("CHAT_MSG_ADDON", function(prefix, text, channel, sender)

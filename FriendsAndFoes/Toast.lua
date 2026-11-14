@@ -354,6 +354,17 @@ function Toast.Chat(text, sim)
   frame:AddMessage("|cff33ff99" .. L.CHAT_PREFIX .. "|r " .. (sim and "|cff999999[SIM]|r " or "") .. text, r, g, b)
 end
 
+-- remove simulated toasts, queued and on screen
+function Toast.DropSim()
+  for i = #queue, 1, -1 do
+    if queue[i].sim then table.remove(queue, i) end
+  end
+  for i = #active, 1, -1 do
+    local f = active[i]
+    if f.spec and f.spec.sim then release(f) end
+  end
+end
+
 function Toast.Push(spec)
   if not anchor then return end
   local mode = Toast.Mode(spec)
