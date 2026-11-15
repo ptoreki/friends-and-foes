@@ -362,3 +362,5 @@ L.GROW_UP = "Upward"
 L.OPT_TOAST_MAX = "Toasts on screen"
 L.TIP_TOAST_MAX = "How many toasts show at once. Extra ones wait their turn."
 L.CONFIRM_FORGET = "This removes %d hitlist players right away (entries with a note are kept). Continue?"
+-- catch-up after being offline
+L.CHAT_CAUGHT_UP = "While you were away: %d events from %s. They're in the Feed."

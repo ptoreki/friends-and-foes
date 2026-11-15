@@ -469,7 +469,7 @@ check(FriendsAndFoesCharDB.streak == 3, "own streak counts kills in a row: " .. 
 RUN_TICKERS(4)
 local lastKill
 for _, s in ipairs(SENT) do if s.payload:find("	KILL	", 1, true) then lastKill = s.payload end end
-check(lastKill and lastKill:sub(-2) == "	3", "KILL carries the streak: " .. tostring(lastKill))
+check(lastKill and lastKill:sub(-3) == "	3	", "KILL carries the streak: " .. tostring(lastKill))
 ns.Events.Emit("DIE", { zone = "Duskwood", killer = "Ender Man:ROGUE:60:", conf = "c", assists = "" })
 check(FriendsAndFoesCharDB.streak == 0, "a PvP death resets the streak")
 check(lastFeed():find("ended a 3-kill streak", 1, true) ~= nil, "death notes the streak it ended: " .. lastFeed())
@@ -1277,5 +1277,51 @@ check(ns.Comm.lastRosterReport == nil and ns.Comm.roster["Buddy Pal"] ~= nil, "n
 ns.S().debug = false
 ns.Try("forced", function() error("boom") end)
 check(#FriendsAndFoesDB.errorLog == 1, "errors recorded even with debug off")
+
+-- catch-up: friends send you what you missed while you were offline
+do
+  local rr = ns.Data.RealRealm()
+  -- own events are kept for friends who are offline now
+  local before = #ns.Comm.Outbox()
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = "Out Box:ROGUE:60:", conf = "c", assists = "" })
+  local box = ns.Comm.Outbox()
+  check(#box == before + 1 and box[#box].kind == "DIE" and box[#box].f.killer == "Out Box:ROGUE:60:", "own event kept for catch-up")
+  -- asking: only after being away a while
+  RUN_TICKERS(60)
+  SENT = {}
+  check(not ns.Comm.AskCatchUp(time() - 30), "no catch-up after a reload")
+  check(ns.Comm.AskCatchUp(time() - 7200), "catch-up asked after 2 hours away")
+  RUN_TICKERS(4)
+  local req
+  for _, s in ipairs(SENT) do if s.payload:find("\tREQ\t", 1, true) then req = s.payload end end
+  check(req and req:find("\t7200$") ~= nil, "REQ carries the window: " .. tostring(req))
+  -- answering: a friend asks, we send them our own recent events
+  RUN_TICKERS(60)
+  SENT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("REQ", { window = 3600 }, "q1"), "WHISPER", 77)
+  RUN_TICKERS(60)
+  local die
+  for _, s in ipairs(SENT) do if s.payload:find("Out Box", 1, true) then die = s.payload end end
+  check(die and die:find("\tDIE\t", 1, true) and die:match("\t(%d+)$") ~= nil, "answer replays our DIE with its age: " .. tostring(die))
+  -- receiving: past events go to the Feed and hitlist, no toast and no chat line per event
+  local t0 = toasted(function()
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Past Ganker:ROGUE:60:", conf = "c", assists = "", ago = 3600 }, "past1"), "WHISPER", 77)
+  end)
+  check(not t0 and #CHAT == 0, "past event: no toast or chat line")
+  local ph = rr.hitlist["Past Ganker"]
+  check(ph and ph.kills == 1, "past death puts the killer on the hitlist")
+  local entry, idx
+  for i, e in ipairs(rr.feed) do if e.text:find("Past Ganker", 1, true) then entry, idx = e, i end end
+  check(entry and math.abs(entry.t - (time() - 3600)) <= 5, "past event in the Feed at the time it happened")
+  check(entry and (idx == #rr.feed or rr.feed[idx + 1].t >= entry.t), "Feed stays in time order")
+  check(ph and ph.lastSeen and ph.lastSeen <= time() - 3500, "hitlist last seen = when it happened")
+  RUN_TIMERS()
+  check(#CHAT == 1 and CHAT[1]:find("While you were away", 1, true) ~= nil, "one summary chat line after a catch-up: " .. tostring(CHAT[1]))
+  -- something already seen live isn't applied twice
+  FriendsAndFoesDB.got["Buddy Pal:old1"] = time() - 600
+  local n = #rr.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Old News:ROGUE:60:", conf = "c", assists = "", ago = 600 }, "old1"), "WHISPER", 77)
+  check(#rr.feed == n and rr.hitlist["Old News"] == nil, "replay of an event seen live is ignored")
+end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

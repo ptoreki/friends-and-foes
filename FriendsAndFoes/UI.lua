@@ -528,10 +528,14 @@ UI.RefreshSettings = function() if ns.Options then ns.Options.Refresh() end end
 ---------------------------------------------------------------------------
 -- window
 ---------------------------------------------------------------------------
+-- w is the minimum width: a button always grows to fit its label
 local function button(parent, w, text, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(w, 22)
   b:SetText(text)
+  local fs = b.GetFontString and b:GetFontString()
+  local tw = fs and fs.GetStringWidth and fs:GetStringWidth()
+  if type(tw) == "number" then w = math.max(w, math.ceil(tw) + 24) end
+  b:SetSize(w, 22)
   b:SetScript("OnClick", onClick)
   return b
 end
@@ -790,16 +794,30 @@ local function build()
 
   -- hitlist detail (note / remove / share)
   detail = CreateFrame("Frame", nil, win)
-  detail:SetPoint("BOTTOMLEFT", 16, 24)
-  detail:SetPoint("BOTTOMRIGHT", -16, 24)
+  -- above the page arrows (bottom right), so the two rows never touch
+  detail:SetPoint("BOTTOMLEFT", 16, 30)
+  detail:SetPoint("BOTTOMRIGHT", -16, 30)
   detail:SetHeight(46)
+  -- buttons right to left: [Clear hitlist][Share hitlist], then [Save][Remove] before them
+  detail.share = button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end)
+  detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
+  detail.clear = button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end)
+  detail.clear:SetPoint("RIGHT", detail.share, "LEFT", -6, 0)
+  detail.remove = button(detail, 70, L.REMOVE, function() UI.RemoveFromHitlist(selected) end)
+  detail.remove:SetPoint("RIGHT", detail.clear, "LEFT", -16, 0)
+  detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+  detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
+  -- the selected player's name line stops before the share status
   detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   detail.label:SetPoint("TOPLEFT")
+  detail.label:SetPoint("RIGHT", detail.remove, "RIGHT", 0, 0)
+  detail.label:SetJustifyH("LEFT")
+  if detail.label.SetWordWrap then detail.label:SetWordWrap(false) end
   local noteLabel = detail:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   noteLabel:SetPoint("BOTTOMLEFT", 0, 4)
   noteLabel:SetText(L.NOTE)
   detail.note = CreateFrame("EditBox", nil, detail, "InputBoxTemplate")
-  detail.note:SetSize(300, 20)
+  detail.note:SetHeight(20)
   detail.note:SetPoint("LEFT", noteLabel, "RIGHT", 10, 0)
   detail.note:SetAutoFocus(false)
   detail.note:SetMaxLetters(200)
@@ -812,17 +830,11 @@ local function build()
     detail.note:ClearFocus()
   end
   detail.save = button(detail, 60, L.SAVE, saveNote)
-  detail.save:SetPoint("LEFT", detail.note, "RIGHT", 8, 0)
+  detail.save:SetPoint("RIGHT", detail.remove, "LEFT", -6, 0)
+  -- the note box stretches to fill the space between "Note:" and Save
+  detail.note:SetPoint("RIGHT", detail.save, "LEFT", -10, 0)
   detail.note:SetScript("OnEnterPressed", saveNote)
   detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  detail.remove = button(detail, 70, L.REMOVE, function() UI.RemoveFromHitlist(selected) end)
-  detail.remove:SetPoint("LEFT", detail.save, "RIGHT", 6, 0)
-  detail.share = button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end)
-  detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
-  detail.clear = button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end)
-  detail.clear:SetPoint("RIGHT", detail.share, "LEFT", -6, 0)
-  detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
 
   -- keep the share queue counter live while the window is open
   C_Timer.NewTicker(1, function()

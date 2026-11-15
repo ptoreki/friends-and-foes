@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.3
+Compatible with 0.3.x to 0.6.2.
+- **Catch-up after being offline:** when you log in, friends who are online send what happened to
+  them in the last 12 hours (attacks, deaths, kills, level-ups, loot).
+  - It goes into your Feed, at the time it happened, and killers go on your hitlist. No toasts or
+    sounds, just one chat line: "While you were away: 5 events from Bob."
+  - Only friends who are online when you log in can send it.
+- **Hitlist window:** the buttons at the bottom can no longer overlap. They're laid out from the
+  right, every button is at least as wide as its label, and the note box takes the space that's
+  left. The row also sits above the page arrows now.
+- **Debug log:** with debug logging on, anything the addon does that takes over 20 ms is logged as
+  [SLOW], and loading screens are marked as [LOADING]. This helps track down a reported window
+  minimize/restore on loading screens.
+
 ## 0.6.2
 Compatible with 0.3.x to 0.6.1.
 - **Who killed whom:** hover a player on the Hitlist to see their kills on your group, then who

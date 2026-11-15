@@ -541,6 +541,10 @@ function Toast.DropSim()
 end
 
 function Toast.Push(spec)
+  if ns.past then
+    Toast.Log(spec, "not shown: happened while you were offline (it's in the Feed)")
+    return
+  end
   if not anchor then
     Toast.Log(spec, "not shown: toasts not ready yet (still loading)")
     return

@@ -37,7 +37,8 @@ end
 local function stamp(list)
   list = type(list) == "table" and list or {}
   local now = time()
-  list[#list + 1] = now
+  list[#list + 1] = ns.Now()
+  table.sort(list)
   while #list > 0 and (now - list[1] > KEEP or #list > KEEP_MAX) do table.remove(list, 1) end
   return list
 end

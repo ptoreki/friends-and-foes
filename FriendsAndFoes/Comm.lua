@@ -79,20 +79,23 @@ end
 
 local MAX_PAYLOAD = 255
 
+-- "ago" (last field): seconds since it happened, set only when replaying events to a friend who was
+-- offline (see catch-up below). Live messages leave it empty; older clients ignore it.
 local SCHEMA = {
-  LVL  = { "level" },
-  LOOT = { "link", "source" },
-  GEAR = { "link", "count", "epics" }, -- epics: how many of the batch were epic or better
-  ATK  = { "enc", "zone", "attackers" },
-  DIE  = { "zone", "killer", "conf", "assists", "ended" },        -- ended: kill streak this death ended
-  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak" }, -- streak: kills in a row incl. this
+  LVL  = { "level", "ago" },
+  LOOT = { "link", "source", "ago" },
+  GEAR = { "link", "count", "epics", "ago" }, -- epics: how many of the batch were epic or better
+  ATK  = { "enc", "zone", "attackers", "ago" },
+  DIE  = { "zone", "killer", "conf", "assists", "ended", "ago" },        -- ended: kill streak this death ended
+  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak", "ago" }, -- streak: kills in a row incl. this
   HIT  = { "share", "entries" },
   SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
-  ENG  = { "zone", "target" }, -- the sender started a fight with an enemy player
+  ENG  = { "zone", "target", "ago" }, -- the sender started a fight with an enemy player
+  REQ  = { "window" }, -- "I just came online: what happened in the last <window> seconds?"
 }
 Comm.SCHEMA = SCHEMA
 
-local PRIORITY_OF = { ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -399,15 +402,19 @@ Comm.PumpRunning = function() return ticker ~= nil end
 ---------------------------------------------------------------------------
 -- broadcast
 ---------------------------------------------------------------------------
-function Comm.SendPayload(payload, prio)
-  for name, r in pairs(roster) do
-    if BNSendGameData and r.gid then
-      enqueue("bn", prio, { target = r.gid, payload = payload })
-    end
-    if r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
-      enqueue("whisper", prio, { target = name, payload = payload })
-    end
+local function sendTo(name, payload, prio)
+  local r = roster[name]
+  if not r then return end
+  if BNSendGameData and r.gid then
+    enqueue("bn", prio, { target = r.gid, payload = payload })
   end
+  if r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
+    enqueue("whisper", prio, { target = name, payload = payload })
+  end
+end
+
+function Comm.SendPayload(payload, prio)
+  for name in pairs(roster) do sendTo(name, payload, prio) end
 end
 
 function Comm.Broadcast(msg)
@@ -467,6 +474,111 @@ function Comm.ShareHitlist()
 end
 
 ---------------------------------------------------------------------------
+-- catch-up: when you log in, friends who are online send you their own events from while you
+-- were away (up to 12 hours). They land in your Feed and hitlist without alerts.
+---------------------------------------------------------------------------
+local CATCHUP_WINDOW = 12 * 3600
+local CATCHUP_MIN_AWAY = 120 -- a /reload or a quick relog doesn't ask
+local OUTBOX_MAX = 40
+local CATCHUP_KINDS = { LVL = true, LOOT = true, GEAR = true, ATK = true, ENG = true, DIE = true, KILL = true }
+Comm.CATCHUP_WINDOW = CATCHUP_WINDOW
+
+-- your own recent events, per character
+local function outbox()
+  local c = FriendsAndFoesCharDB
+  c.outbox = c.outbox or {}
+  local box, now = c.outbox, time()
+  while #box > 0 and (now - (box[1].t or 0) > CATCHUP_WINDOW or #box > OUTBOX_MAX) do table.remove(box, 1) end
+  return box
+end
+Comm.Outbox = outbox
+
+function Comm.Remember(kind, id, fields)
+  if not CATCHUP_KINDS[kind] then return end
+  local f = {}
+  for _, k in ipairs(SCHEMA[kind]) do
+    local v = fields[k]
+    if k ~= "ago" and (type(v) == "string" or type(v) == "number") then f[k] = v end
+  end
+  local box = outbox()
+  box[#box + 1] = { t = time(), kind = kind, id = id, f = f }
+  outbox()
+end
+
+-- what we received, kept 13 hours so a replay of something you already saw is ignored
+local function got()
+  FriendsAndFoesDB.got = FriendsAndFoesDB.got or {}
+  return FriendsAndFoesDB.got
+end
+
+local function pruneGot()
+  local g, cutoff = got(), time() - CATCHUP_WINDOW - 3600
+  for k, t in pairs(g) do
+    if t < cutoff then g[k] = nil end
+  end
+end
+
+-- just logged in: ask online friends what you missed since lastOnline
+function Comm.AskCatchUp(lastOnline)
+  local away = lastOnline and (time() - lastOnline) or CATCHUP_WINDOW
+  if away < CATCHUP_MIN_AWAY then return false end
+  local names = Comm.RosterNames()
+  if #names == 0 then return false end
+  local window = math.floor(math.min(away, CATCHUP_WINDOW))
+  local _, class = UnitClass("player")
+  local msg = { kind = "REQ", id = ns.NewId(), class = class, level = UnitLevel("player"), f = { window = window } }
+  Comm.SendPayload(Comm.Encode(msg), PRIORITY_OF.REQ)
+  ns.Debug("CATCHUP-ASK", window, table.concat(names, ", "))
+  return true
+end
+
+-- a friend just logged in: send them our own events from the window they missed
+local answered = {}
+function Comm.AnswerCatchUp(name, window)
+  window = math.min(tonumber(window) or 0, CATCHUP_WINDOW)
+  if window <= 0 then return 0 end
+  if answered[name] and GetTime() - answered[name] < 60 then return 0 end
+  answered[name] = GetTime()
+  local key = rosterFind(name)
+  if not key then
+    Comm.RebuildRoster()
+    key = rosterFind(name)
+  end
+  if not key then return 0 end
+  local now, n = time(), 0
+  local _, class = UnitClass("player")
+  local share = ns.S().share
+  for _, e in ipairs(outbox()) do
+    local ago = now - e.t
+    local cat = ns.Events.SHARE[e.kind]
+    if ago <= window and cat and share[cat] then
+      local f = {}
+      for k, v in pairs(e.f) do f[k] = v end
+      f.ago = math.max(1, ago)
+      local payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = UnitLevel("player"), f = f })
+      if payload then
+        sendTo(key, payload, "bulk")
+        n = n + 1
+      end
+    end
+  end
+  ns.Debug("CATCHUP-ANSWER", key, window, n)
+  return n
+end
+
+-- when you were last online (account-wide): saved every minute and at logout
+ns.OnReady(function()
+  local db = FriendsAndFoesDB
+  local last = db.lastOnline
+  db.lastOnline = time()
+  pruneGot()
+  C_Timer.NewTicker(60, function() FriendsAndFoesDB.lastOnline = time() end)
+  -- the roster is built a few seconds after login
+  C_Timer.After(15, function() ns.Try("catchup", Comm.AskCatchUp, last) end)
+end)
+ns.On("PLAYER_LOGOUT", function() FriendsAndFoesDB.lastOnline = time() end)
+
+---------------------------------------------------------------------------
 -- receive (both routes, deduplicated)
 ---------------------------------------------------------------------------
 local seen, seenCount = {}, 0
@@ -517,6 +629,18 @@ local function accept(text, routeName, via)
   end
   msg.from = sender
   ns.Debug("RECV", via, routeName, sender, msg.kind, msg.id)
+  if msg.kind == "REQ" then
+    Comm.AnswerCatchUp(sender, msg.f.window)
+    return sender
+  end
+  if CATCHUP_KINDS[msg.kind] then
+    local ago = tonumber(msg.f.ago)
+    if ago and ago > 0 then
+      if got()[key] then return sender end -- already seen live
+      msg.ago = math.min(ago, CATCHUP_WINDOW)
+    end
+    got()[key] = time()
+  end
   ns.Events.Apply(msg, false)
   return sender
 end

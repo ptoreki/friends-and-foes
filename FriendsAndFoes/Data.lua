@@ -143,17 +143,20 @@ end
 
 function Data.Touch(rec, u)
   if not u then return end
+  local t = ns.Now()
+  -- an event from while you were offline doesn't overwrite fresher info
+  local newer = not rec.lastSeen or t >= rec.lastSeen
   if u.class and u.class ~= "" then rec.class = u.class end
   local lvl = tonumber(u.level)
-  if lvl and lvl > 0 then rec.level = lvl end
-  if u.guild and u.guild ~= "" then rec.guild = u.guild end
-  if u.zone and u.zone ~= "" then rec.lastZone = u.zone end
-  rec.lastSeen = time()
+  if lvl and lvl > 0 and (newer or lvl > (tonumber(rec.level) or 0)) then rec.level = lvl end
+  if newer and u.guild and u.guild ~= "" then rec.guild = u.guild end
+  if newer and u.zone and u.zone ~= "" then rec.lastZone = u.zone end
+  if newer then rec.lastSeen = t end
 end
 
 function Data.Hit(name)
   return getOrCreate(Data.Realm().hitlist, name, function(key)
-    return { name = key, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
+    return { name = key, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, firstSeen = ns.Now() }
   end)
 end
 
@@ -178,8 +181,11 @@ end
 
 function Data.Feed(kind, text)
   local feed = Data.Realm().feed
-  local entry = { t = time(), kind = kind, text = text }
-  feed[#feed + 1] = entry
+  local entry = { t = ns.Now(), kind = kind, text = text }
+  -- kept in time order: something from while you were offline goes in at the time it happened
+  local i = #feed + 1
+  while i > 1 and (feed[i - 1].t or 0) > entry.t do i = i - 1 end
+  table.insert(feed, i, entry)
   while #feed > FEED_MAX do table.remove(feed, 1) end
   return entry
 end

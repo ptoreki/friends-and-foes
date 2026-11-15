@@ -31,9 +31,21 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
   - `BNSendGameData` to the friend's game account
   - an addon `WHISPER` to the friend's character (same faction only)
 - The receiver drops duplicates using `sender:eventId`.
-- Events are sent **live only**. Nothing is replayed at login.
-  - Exception: a manual **Share hitlist** sends your 40 most recent entries. Receivers merge by
-    taking the higher of each counter.
+- Alerts are **live only**. Two things fill in what you missed:
+  - **Catch-up at login.** Each client keeps its own last 12 hours of LVL, LOOT, GEAR, ATK, ENG,
+    DIE and KILL (at most 40, per character, only kinds you share). 15 seconds after login, if
+    you were away at least 2 minutes (`lastOnline`, saved every minute and at logout), you send
+    `REQ` with the window in seconds (at most 12 hours). Each online friend answers once a minute
+    at most, to you only, with their own events from that window, the original IDs, and `ago`
+    (seconds since it happened) as the last field.
+    - A received event with `ago` goes to the Feed (at the time it happened) and the records
+      and hitlist, with **no toast, chat line or sound**. One chat line sums it up afterwards.
+    - It doesn't overwrite fresher info (level, guild, zone, last seen).
+    - Received event IDs are kept 13 hours (`got`) so a replay of something you saw live is
+      ignored.
+    - Only events of friends who are online when you log in can arrive; there's no server.
+  - A manual **Share hitlist** sends your 40 most recent entries. Receivers merge by taking the
+    higher of each counter.
 - Message format (protocol 3): `3\tKIND\tID\tsenderName\tclass\tlevel\taddonVersion\t<fields...>`,
   at most 255 bytes. If a message is too long, guild names are dropped first.
 - The sender name in the header is accepted only if its first name matches what the route
@@ -70,6 +82,10 @@ world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
 | KILL | Honorable-kill / honor-award message | victim (may be empty), vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
 | HIT | Manual hitlist share | share id, packed entries |
 | SIGHT | You spot a hitlist player (once per player every 5 min) | name, class, level, guild, zone |
+| REQ | You log in after being away 2+ minutes | window (seconds) |
+
+LVL, LOOT, GEAR, ENG, ATK, DIE and KILL end with an `ago` field: empty when live, seconds since
+it happened when replayed for catch-up. Older clients ignore it.
 
 Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
 

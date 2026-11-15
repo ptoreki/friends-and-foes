@@ -67,7 +67,8 @@ Debug logging turns itself off after 7 days.
   websites or outside programs.
 - Addons can't see who landed the killing blow in WoW Forever, so any honorable kill you took part in
   counts as a *takedown*.
-- Alerts are live only. Things that happened while you were offline aren't shown afterwards.
+- Alerts are live only. When you log in, friends who are online send what happened to them in
+  the last 12 hours. It goes into your Feed and hitlist quietly, with one chat line, no toasts.
 - Options can't be opened during combat. That's a game rule.
 
 ## Development

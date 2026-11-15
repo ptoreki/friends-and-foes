@@ -7,6 +7,7 @@ local Events = {}
 ns.Events = Events
 
 local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", ENG = "pvp", DIE = "pvp", KILL = "pvp", SIGHT = "pvp" }
+Events.SHARE = SHARE
 
 local ICON = {
   level = "Interface\\Icons\\Spell_Holy_SurgeOfLight",
@@ -45,7 +46,10 @@ function Events.Emit(kind, fields, sim)
   if not decoded then return end
   decoded.from = ns.me
   Events.Apply(decoded, true)
-  if SHARE[kind] and ns.S().share[SHARE[kind]] then ns.Comm.Broadcast(msg) end
+  if SHARE[kind] and ns.S().share[SHARE[kind]] then
+    ns.Comm.Broadcast(msg)
+    if not sim then ns.Comm.Remember(kind, msg.id, fields) end -- for friends who are offline now
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -163,9 +167,14 @@ function Events.Apply(msg, isSelf)
     if isSelf then p.self = true end
     if msg.version and msg.version ~= "" then p.version = msg.version end
     ns.Data.Touch(p, { class = msg.class, level = msg.level })
+    -- msg.ago: a friend's event from while you were offline. Feed and records only, no alerts.
+    if msg.ago then
+      ns.past, ns.eventTime = true, time() - msg.ago
+    end
     h(msg, isSelf, p, msg.f)
   end)
-  ns.simulating = false
+  ns.simulating, ns.past, ns.eventTime = false, nil, nil
+  if ok and msg.ago then Events.CaughtUp(msg.from) end
   if not ok then error(err, 0) end
 
   if not isSelf and not sim and ns.VersionNewer(msg.version, ns.VERSION) then
@@ -179,7 +188,7 @@ end
 H.LVL = function(_, isSelf, p, f)
   local lvl = tonumber(f.level)
   if not lvl then return end
-  p.level = lvl
+  p.level = ns.past and math.max(tonumber(p.level) or 0, lvl) or lvl
   local line = L.FEED_LEVEL:format(who(p), lvl)
   feed(p, "level", line)
   if isSelf then return end
@@ -359,7 +368,7 @@ H.KILL = function(msg, isSelf, p, f)
   local revenge = false
   if hit and counted then
     hit.revenge = (hit.revenge or 0) + 1
-    hit.lastRevenge = time()
+    hit.lastRevenge = ns.Now()
     revenge = true
   end
 
@@ -373,6 +382,27 @@ H.KILL = function(msg, isSelf, p, f)
     title = title, text = text,
     player = name,
   })
+end
+
+-- after a catch-up: one quiet chat line saying what came in, no toasts
+local caught, caughtFrom, caughtPending = 0, {}, false
+function Events.CaughtUp(from)
+  caught = caught + 1
+  caughtFrom[from] = true
+  if caughtPending then return end
+  caughtPending = true
+  C_Timer.After(8, function()
+    caughtPending = false
+    local names = {}
+    for name in pairs(caughtFrom) do names[#names + 1] = ns.ClassColored(name) end
+    table.sort(names)
+    if caught > 0 then
+      ns.Toast.Chat(L.CHAT_CAUGHT_UP:format(caught, ns.JoinNames(names)))
+      ns.Debug("CATCHUP-GOT", caught)
+    end
+    caught = 0
+    wipe(caughtFrom)
+  end)
 end
 
 -- shared hitlist chunk: merge by taking the max of each counter, never overwrite notes

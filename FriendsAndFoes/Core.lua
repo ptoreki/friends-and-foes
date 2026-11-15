@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.6.2"
+ns.VERSION = "0.6.3"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -185,10 +185,26 @@ function ns.On(event, fn)
   list[#list + 1] = fn
 end
 
+-- with debug logging on, any handler that takes longer than SLOW_MS is logged as [SLOW], so a
+-- stall (e.g. during a loading screen) can be traced to us or ruled out
+local SLOW_MS = 20
+local function debugging()
+  local db = FriendsAndFoesDB
+  return db and db.settings and db.settings.debug
+end
+
 frame:SetScript("OnEvent", function(_, event, ...)
   local list = handlers[event]
   if not list then return end
-  for i = 1, #list do ns.Try(event, list[i], ...) end
+  local clock = debugging() and debugprofilestop
+  for i = 1, #list do
+    local t0 = clock and clock()
+    ns.Try(event, list[i], ...)
+    if t0 then
+      local ms = clock() - t0
+      if ms > SLOW_MS then ns.Debug("SLOW", event, i, string.format("%.0f ms", ms)) end
+    end
+  end
 end)
 
 function ns.OnUnit(event, unit, fn)
@@ -199,6 +215,10 @@ function ns.OnUnit(event, unit, fn)
   end
   f:SetScript("OnEvent", function(_, _, ...) ns.Try(event, fn, ...) end)
 end
+
+-- loading screens in the debug log, to line up with anything odd that happens around them
+ns.On("LOADING_SCREEN_ENABLED", function() if debugging() then ns.Debug("LOADING", "start") end end)
+ns.On("LOADING_SCREEN_DISABLED", function() if debugging() then ns.Debug("LOADING", "end") end end)
 
 local readyCallbacks = {}
 function ns.OnReady(fn) readyCallbacks[#readyCallbacks + 1] = fn end
@@ -360,6 +380,9 @@ function ns.JoinNames(list)
   if n == 3 then return list[1] .. ", " .. list[2] .. " and " .. list[3] end
   return list[1] .. ", " .. list[2] .. " and " .. (n - 2) .. " others"
 end
+
+-- the time an event happened: now, or earlier for a friend's event replayed after you were offline
+function ns.Now() return ns.eventTime or time() end
 
 function ns.Ago(t)
   if not t then return "never" end
