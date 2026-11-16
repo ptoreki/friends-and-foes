@@ -200,7 +200,14 @@ function Profile.Apply(p, f)
     p.sk, p.sd = nil, nil -- they stopped sharing PvP
   end
   p.wanted = ns.CleanName(f.wanted)
-  p.zone = Profile.CleanText(f.zone, ZONE_MAX)
+  -- where they are: an empty zone means they turned "Where I am" off - then nothing is kept
+  local zone = Profile.CleanText(f.zone, ZONE_MAX)
+  if zone then
+    p.whereOff = nil
+    Profile.SeenAt(p, zone, time())
+  else
+    p.whereOff, p.zone, p.zoneAt = true, nil, nil
+  end
   p.status = (f.status == "afk" or f.status == "pvp") and f.status or nil
   p.statusAt = time()
   -- as of when (their clock, never in the future on yours); older clients don't say: now
@@ -208,10 +215,21 @@ function Profile.Apply(p, f)
 end
 
 -- what a friend is doing now, if they're online: "Hillsbrad Foothills · in a fight"
+-- A friend's last known place and when they were there (p.zone, p.zoneAt): the newest of
+-- Battle.net (while they're online), their profile message, and their own PvP alerts (which say
+-- where they happened). An older one arriving later never replaces a newer one.
+function Profile.SeenAt(p, zone, t)
+  if not p or p.whereOff or type(zone) ~= "string" or zone == "" or zone == "?" then return end
+  t = t or time()
+  if p.zoneAt and t < p.zoneAt then return end
+  p.zone, p.zoneAt = zone, t
+end
+
 function Profile.NowText(p)
   local online = ns.Comm.everyone[p.name]
   if not online then return nil end
-  local zone = p.zone or online.zone
+  -- Battle.net's zone is live, straight from the game; theirs may be a message behind
+  local zone = online.zone or p.zone
   local status
   if p.status == "afk" then status = L.STATUS_AFK
   elseif p.status == "pvp" and p.statusAt and time() - p.statusAt < FIGHT_FRESH then status = L.STATUS_FIGHT end

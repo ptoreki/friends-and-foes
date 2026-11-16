@@ -112,16 +112,37 @@ local ENEMY_COLS = {
   { L.COL_LAST, 150, lastText, byLast },
 }
 
+-- a friend's kills and deaths: the same numbers as on the Leaderboard and their profile (their
+-- own report; ~ = counted from their alerts because they don't report yet)
+local function friendKD(e)
+  if e.sk then return e.sk, e.sd or 0, false end
+  return C(e.k), C(e.d), true
+end
+local function kdCell(i)
+  return function(e)
+    if e.pending then return "" end
+    local v, est = select(i, friendKD(e)), select(3, friendKD(e))
+    return est and ("|cff888888~" .. v .. "|r") or tostring(v)
+  end, function(e)
+    if e.pending then return -1 end
+    return (select(i, friendKD(e)))
+  end
+end
+local killsCell, killsSort = kdCell(1)
+local deathsCell, deathsSort = kdCell(2)
+
 local FRIEND_COLS = {
   { L.COL_NAME, 165, nameCol, byName },
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_VERSION, 50, function(e)
     if not e.version then return "" end
+    -- newer than yours: time to update; older: tell them to (same colours as on their profile)
     if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
+    if ns.VersionNewer(ns.VERSION, e.version) then return "|cffff7f3f" .. e.version .. "|r" end
     return e.version
   end, function(e) return e.version or "" end },
-  { L.COL_TAKEDOWNS, 70, function(e) return e.pending and "" or C(e.k) end, function(e) return e.pending and -1 or C(e.k) end },
-  { L.COL_DEATHS, 55, function(e) return e.pending and "" or C(e.d) end, function(e) return e.pending and -1 or C(e.d) end },
+  { L.COL_KILLS, 70, killsCell, killsSort },
+  { L.COL_DEATHS, 55, deathsCell, deathsSort },
   { L.COL_ALERTS, 50, function(e)
     local tag = ns.Comm.TagFor(e.name)
     if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
@@ -135,8 +156,9 @@ local FRIEND_COLS = {
     end
     if e.pending then return onlineText(e.zone) .. "|cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
     local online = onlineNow[e.name] and onlineText(type(onlineNow[e.name]) == "string" and onlineNow[e.name] or nil) or ""
-    return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastSeen) .. "|r"
-  end, function(e) return e.pending and math.huge or (e.lastSeen or 0) end },
+    -- the time of that event itself (older saves don't have it: then when we last heard of them)
+    return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastTextAt or e.lastSeen) .. "|r"
+  end, function(e) return e.pending and math.huge or (e.lastTextAt or e.lastSeen or 0) end },
 }
 
 -- friends we've heard from, plus online Battle.net friends in Forever the addon can see
@@ -277,16 +299,23 @@ local function applySort(list, cols)
   local st = sortOf(cols)
   local key = cols[st.col] and cols[st.col][4]
   if not key then return end
-  -- faded hitlist entries (not seen for 90 days) always go last; decided once, before sorting
-  local stale
-  if currentTab == "hitlist" then
-    stale = {}
-    for _, e in ipairs(list) do stale[e] = ns.Data.IsStale(e) end
+  -- always last, whatever the column: faded hitlist entries (not seen for 90 days), and on a
+  -- group board members who are only invited or whose numbers haven't reached you yet.
+  -- Decided once, before sorting.
+  local last = {}
+  for _, e in ipairs(list) do
+    if currentTab == "hitlist" then
+      last[e] = ns.Data.IsStale(e)
+    else
+      last[e] = (e.invited or e.unknown) and true or false
+    end
   end
   table.sort(list, function(a, b)
-    if stale and stale[a] ~= stale[b] then return stale[b] end
+    if last[a] ~= last[b] then return last[b] end
     local ka, kb = key(a), key(b)
     if ka == kb then return (a.name or "") < (b.name or "") end
+    -- a missing value never comes first
+    if ka == nil or kb == nil then return kb == nil end
     if type(ka) ~= type(kb) then ka, kb = tostring(ka), tostring(kb) end
     if st.desc then return ka > kb end
     return ka < kb
@@ -326,6 +355,12 @@ function UI.Rows() return data end
 -- for tests: a tab's columns, and the width the list has for them
 function UI.TabColumns(key) return colsOf(tabDef(key)) end
 UI.LIST_WIDTH = WIDTH - 28 -- the list area is inset 14 on each side
+-- for tests: click row i of the list as the game would ("LeftButton" or "RightButton")
+function UI.ClickRow(i, mouse)
+  local row = rows and rows[i]
+  local click = row and row:GetScript("OnClick")
+  if click then click(row, mouse or "LeftButton") end
+end
 
 function UI.SortBy(col)
   local st = sortState[viewKey()] or {}
@@ -390,21 +425,7 @@ local function refreshDetail()
   end
   detail:Show()
   refreshShareStatus()
-  local h = selected and R().hitlist[selected]
-  if h then
-    local extra = h.sharedBy and ("  |cff888888" .. L.SHARED_BY:format(h.sharedBy) .. "|r") or ""
-    detail.label:SetText(ns.ClassColored(h.name, h.class) .. extra .. "  |cff888888" .. L.SUSPECT_HINT .. "|r")
-    detail.note:SetText(h.note or "")
-    detail.note:Enable()
-    detail.save:Enable()
-    detail.remove:Enable()
-  else
-    detail.label:SetText(L.NONE_SELECTED)
-    detail.note:SetText("")
-    detail.note:Disable()
-    detail.save:Disable()
-    detail.remove:Disable()
-  end
+  detail.label:SetText(L.HITLIST_HINT .. "  |cff888888" .. L.SUSPECT_HINT .. "|r")
 end
 
 ---------------------------------------------------------------------------
@@ -444,6 +465,7 @@ function UI.ProfileView(name)
     line(L.PROF_KILLED, victims ~= "" and victims or DASH)
     line(L.PROF_REVENGE, C(h and h.revenge))
     line(L.PROF_HITLIST, h and L.PROF_ON_HITLIST or L.PROF_NOT_ON_HITLIST)
+    if h and h.sharedBy then line(L.PROF_SHARED_BY, ns.ClassColored(h.sharedBy)) end
     local by = {}
     for _, n in ipairs(ns.Profile.WantedBy(e.name)) do by[#by + 1] = ns.ClassColored(n) end
     line(L.PROF_WANTED_BY, #by > 0 and ns.JoinNames(by) or DASH)
@@ -487,7 +509,12 @@ function UI.ProfileView(name)
     if now then
       line(L.PROF_NOW, GREEN .. now .. "|r")
     else
-      line(L.PROF_LAST_SEEN, ns.Ago(p.lastSeen) .. (p.zone and (" - " .. p.zone) or ""))
+      -- when you last heard from them, and separately where they were last known to be (with
+      -- its own time: the two can differ)
+      line(L.PROF_LAST_SEEN, ns.Ago(p.lastSeen))
+      if p.zone and not p.whereOff then
+        line(L.PROF_LAST_PLACE, p.zone .. (p.zoneAt and ("  |cff888888" .. ns.Ago(p.zoneAt) .. "|r") or ""))
+      end
     end
     local v = p.version
     if not v then line(L.PROF_ADDON, DASH)
@@ -502,7 +529,9 @@ function UI.ProfileView(name)
 end
 
 local function renderProfile()
-  local v = profileName and UI.ProfileView(profileName)
+  -- the Profile tab opened directly, with nobody chosen yet: your own
+  if not profileName then profileName = ns.me end
+  local v = UI.ProfileView(profileName)
   profile.empty:SetShown(v == nil)
   profile.title:SetText(v and v.title or "")
   profile.sub:SetText(v and v.sub or "")
@@ -600,11 +629,15 @@ end
 -- the line under a group board: "Gank Squad: 4 members · 54 takedowns, 20 deaths (K/D 2.70)"
 local function groupHint(g)
   local k, d, n, known = ns.Groups.Totals(g)
-  local line = L.GROUP_TOTALS:format(ns.Groups.Label(g), n, k, d, kdText(k, d, ns.Profile.KD(k, d)))
-  if known < n then line = line .. " " .. L.GROUP_TOTALS_PARTIAL:format(n - known) end
+  -- "1 member" / "2 members": forms = { one, more }
+  local function count(forms, x) return (x == 1 and forms[1] or forms[2]):format(x) end
+  local line = L.GROUP_TOTALS:format(ns.Groups.Label(g), count(L.N_MEMBERS, n), count(L.N_KILLS, k),
+    count(L.N_DEATHS, d), kdText(k, d, ns.Profile.KD(k, d)))
+  if known < n then line = line .. " " .. count(L.GROUP_TOTALS_PARTIAL, n - known) end
   local leading = ns.Groups.Leader(g) == ns.Groups.MyKey()
   return line .. "  " .. (leading and L.GROUP_HINT_LEADER or L.GROUP_HINT)
 end
+UI.GroupHint = groupHint -- (for tests)
 
 local function say(text) print("|cff33ff99" .. L.ADDON .. "|r " .. text) end
 local function why(reason) say(L[reason] or tostring(reason)) end
@@ -1238,18 +1271,12 @@ local function build()
         end
         return
       end
-      if currentTab == "hitlist" and e then
-        selected = e.name
-        UI.Refresh()
-      elseif friendsView() and e and e.pending and not ns.viewSim then
-        UI.TogglePick(e.name) -- online but never heard from: no profile yet, but pickable
-      elseif (currentTab == "board" or currentTab == "kills" or playersView()) and e and e.name and ns.Profile.KindOf(e.name) then
+      -- a click on a name opens their profile, on every tab
+      if friendsView() and e and e.pending and not ns.viewSim then
+        UI.TogglePick(e.name) -- online but never heard from: no profile yet, but you can add them
+      elseif currentTab ~= "feed" and e and e.name and ns.Profile.KindOf(e.name) then
         UI.ShowProfile(e.name) -- (a group member you've never heard from directly has no profile)
       end
-    end)
-    -- hitlist: a click selects (for the note), a double-click opens the profile
-    row:SetScript("OnDoubleClick", function(self)
-      if currentTab == "hitlist" and self.entry and self.entry.name then UI.ShowProfile(self.entry.name) end
     end)
     rows[i] = row
   end
@@ -1288,49 +1315,25 @@ local function build()
   -- two lines at most, so it never reaches the list above it
   if friendsHint.SetMaxLines then friendsHint:SetMaxLines(2) end
 
-  -- hitlist detail (note / remove / share)
+  -- hitlist bottom row: a hint on the left, [Clear hitlist][Share hitlist] on the right.
+  -- (A player's note, kill list and the rest are on their profile: click them.)
   detail = CreateFrame("Frame", nil, win)
   -- above the page arrows (bottom right), so the two rows never touch
   detail:SetPoint("BOTTOMLEFT", 16, 30)
   detail:SetPoint("BOTTOMRIGHT", -16, 30)
   detail:SetHeight(46)
-  -- buttons right to left: [Clear hitlist][Share hitlist], then [Save][Remove] before them
   detail.share = button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end)
   detail.share:SetPoint("BOTTOMRIGHT", 0, 0)
   detail.clear = button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end)
   detail.clear:SetPoint("RIGHT", detail.share, "LEFT", -6, 0)
-  detail.remove = button(detail, 70, L.REMOVE, function() UI.RemoveFromHitlist(selected) end)
-  detail.remove:SetPoint("RIGHT", detail.clear, "LEFT", -16, 0)
   detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
   detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
-  -- the selected player's name line stops before the share status
-  detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  detail.label:SetPoint("TOPLEFT")
-  detail.label:SetPoint("RIGHT", detail.remove, "RIGHT", 0, 0)
+  -- the hint stops before the buttons; two lines at most
+  detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  detail.label:SetPoint("BOTTOMLEFT", 0, 4)
+  detail.label:SetPoint("RIGHT", detail.clear, "LEFT", -16, 0)
   detail.label:SetJustifyH("LEFT")
-  if detail.label.SetWordWrap then detail.label:SetWordWrap(false) end
-  local noteLabel = detail:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  noteLabel:SetPoint("BOTTOMLEFT", 0, 4)
-  noteLabel:SetText(L.NOTE)
-  detail.note = CreateFrame("EditBox", nil, detail, "InputBoxTemplate")
-  detail.note:SetHeight(20)
-  detail.note:SetPoint("LEFT", noteLabel, "RIGHT", 10, 0)
-  detail.note:SetAutoFocus(false)
-  detail.note:SetMaxLetters(200)
-  local function saveNote()
-    local h = selected and R().hitlist[selected]
-    if h then
-      local t = detail.note:GetText()
-      h.note = (t and t ~= "") and t or nil
-    end
-    detail.note:ClearFocus()
-  end
-  detail.save = button(detail, 60, L.SAVE, saveNote)
-  detail.save:SetPoint("RIGHT", detail.remove, "LEFT", -6, 0)
-  -- the note box stretches to fill the space between "Note:" and Save
-  detail.note:SetPoint("RIGHT", detail.save, "LEFT", -10, 0)
-  detail.note:SetScript("OnEnterPressed", saveNote)
-  detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  if detail.label.SetMaxLines then detail.label:SetMaxLines(2) end
 
   -- Profile tab: name on top, facts on the left, recent PvP on the right, controls below
   profile = CreateFrame("Frame", nil, win)
@@ -1711,8 +1714,10 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     else
       print(prefix .. L.CHAT_TAB_USAGE:format(ns.S().chatFrame or 1))
     end
+  elseif msg == "alerts" or msg:find("^alerts ") then
+    groupCommand(strtrim(msg:sub(7))) -- your alert list
   elseif msg == "group" or msg:find("^group ") then
-    groupCommand(strtrim(msg:sub(6)))
+    groupCommand(strtrim(msg:sub(6))) -- (the old name of /fnf alerts)
   elseif msg == "sim" or msg:find("^sim ") then
     ns.Sim.Command(strtrim(msg:sub(4)))
   else

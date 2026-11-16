@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.2
+Compatible with 0.3.x to 0.7.1.
+Fixes from the first live tests, and clearer wording and clicks:
+- **Friends tab, Last event:** shows when that event happened, not when you last heard from them
+  (it could say "reached level 9 · 17m ago" for a friend now level 16). An older event that
+  arrives later through catch-up no longer replaces a newer one.
+- **Friends tab, Kills and Deaths:** the same numbers as the Leaderboard and their profile (their
+  own report; ~ when counted from their alerts). Before, it could show 0 deaths where the
+  Leaderboard showed 2. The column is called Kills now, like everywhere else.
+- **Friends tab, Ver:** an older add-on version is flagged too (orange), as on their profile.
+- **Group board:** members who are only invited (or whose numbers haven't reached you yet) stay
+  at the bottom whatever you sort by; before, an invite could sit above members.
+- **Group totals** read "1 member, 1 kill, 6 deaths" (was "1 members, 1 takedowns").
+- **Friends' locations were sometimes wrong** ("seen" somewhere they weren't):
+  - An event that arrived late (caught up, or passed on by another friend) made them look "seen
+    just now"; it now counts at the time it happened.
+  - Online: the zone comes from Battle.net (live) first, not from a message that may be behind.
+  - Offline profiles show "Last seen" (when you last heard from them) and "Last place" (where,
+    with its own time) separately, from the newest of Battle.net, their profile and their own
+    PvP alerts. Friends with "Where I am" off: no place is kept.
+- **One click opens a profile on every tab**, the Hitlist too (it used to need a double-click).
+  A player's note is on their profile; the Hitlist's bottom row is just Share and Clear.
+- **The Profile tab shows your own profile** when you open it without choosing anyone.
+- **"Alert list"** instead of "picks": "Add to alert list" / "Remove from alert list" on a
+  friend's profile, and `/fnf alerts` (`/fnf group` still works).
+- **"Kills" everywhere** instead of "takedowns" (weekly summary, help texts).
+- Confirmed live: creating a group and inviting work, including reading your BattleTag.
+
 ## 0.7.1
 Compatible with 0.3.x to 0.7.0. Sharing kill lists and passing on events need 0.7.1 on both sides.
 - **Back button** on the Profile page and kill lists ("< Leaderboard", "< Bob Pal", ...): goes back

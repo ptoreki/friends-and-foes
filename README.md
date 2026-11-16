@@ -24,7 +24,7 @@ epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks 
 - **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted,
   where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy
   for your friends to see.
-- **Tracking:** kills, deaths and takedowns per player, and a weekly summary with your nemesis.
+- **Tracking:** kills and deaths per player, and a weekly summary with your nemesis.
 - **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short
   (*"Bob killed by Rogz · Duskwood"*).
 - **Toasts** in four styles: Modern, Classic, Alliance and Horde. You can set their size, duration,
@@ -57,7 +57,7 @@ on your faction. You don't need to group, share a server, or be in the same zone
 | `/fnf groups [new\|invite\|join\|decline\|leave\|remove ...]` | List your shared groups, or manage one (see `/fnf groups`) |
 | `/fnf profile [name]` | Open a profile (yours if no name) |
 | `/fnf options` | Open the options |
-| `/fnf group [name\|all]` | List friends, pick who you exchange alerts with, or go back to everyone |
+| `/fnf alerts [name\|all]` | Your alert list: show it, add or remove a friend, or go back to everyone (`/fnf group` works too) |
 | `/fnf unlock` / `/fnf lock` | Move the toasts |
 | `/fnf size <70-150>` / `/fnf duration <2-10>` | Toast size and how long toasts stay |
 | `/fnf chat <tab>` | Which chat tab gets the chat lines |
@@ -77,8 +77,8 @@ Debug logging turns itself off after 7 days.
 ## Good to know
 - Everything runs inside the game, using the game's own addon messages. There are no accounts,
   websites or outside programs.
-- Addons can't see who landed the killing blow in WoW Forever, so any honorable kill you took part in
-  counts as a *takedown*.
+- Addons can't see who landed the killing blow in WoW Forever, so a *kill* means any honorable
+  kill you got honor for.
 - Alerts are live only, but you don't miss what friends did while you were offline: when you log
   in, and when a friend comes online later, they send what happened to them in the last 24 hours
   (up to 100 events). It goes into your Feed, hitlist and kill lists quietly, with one chat line,

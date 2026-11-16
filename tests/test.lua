@@ -957,7 +957,7 @@ do
   RUN_TIMERS()
   local weekly
   for _, line in ipairs(CHAT) do if line:find("Your PvP week", 1, true) then weekly = line end end
-  check(weekly and weekly:find("3 takedowns, 2 deaths", 1, true) and weekly:find("Nemesis: Rogz Fang (2", 1, true), "weekly summary after a week: " .. tostring(weekly))
+  check(weekly and weekly:find("3 kills, 2 deaths", 1, true) and weekly:find("Nemesis: Rogz Fang (2", 1, true), "weekly summary after a week: " .. tostring(weekly))
   check(FriendsAndFoesDB.weekly.k == 0 and time() - FriendsAndFoesDB.weekly.start < 60, "new week started")
   FriendsAndFoesCharDB.streak = 0
   -- minimap / addon-menu tooltip
@@ -2267,6 +2267,181 @@ do
   ns.Comm.RebuildRoster()
   drain()
   check(ns.errors == errs, "no errors in relayed catch-up (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.2: Friends tab fixes from live screenshots
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local cols = ns.UI.TabColumns("friends")
+  local function cell(c, e) return ns.Plain(tostring(cols[c][3](e))) end
+
+  -- kills/deaths: the friend's own report (same as the Leaderboard), ~ when they don't report
+  local rep = { name = "Report Er", friend = true, k = 4, d = 0, sk = 4, sd = 2, lastSeen = time() }
+  local est = { name = "Esti Mate", friend = true, k = 3, d = 1, lastSeen = time() }
+  check(cols[4][1] == ns.L.COL_KILLS and cell(4, rep) == "4" and cell(5, rep) == "2", "Friends tab: their own numbers, same as the Leaderboard")
+  check(cell(4, est) == "~3" and cell(5, est) == "~1", "Friends tab: counted numbers marked ~")
+  check(cols[5][4](rep) == 2 and cols[5][4]({ pending = true }) == -1, "Friends tab: sorts by the numbers shown")
+
+  -- version: older than yours is flagged too
+  check(cols[3][3]({ version = "0.5.4" }):find("ff7f3f", 1, true) ~= nil, "an older addon version is flagged in the Friends tab")
+  check(cols[3][3]({ version = ns.VERSION }) == ns.VERSION, "the same version isn't")
+
+  -- last event: an older event caught up later doesn't replace a newer one, and the time shown
+  -- is that event's own time
+  local buddy = rr.players["Buddy Pal"]
+  buddy.lastText, buddy.lastTextAt = nil, nil
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 16 }, "lt1"), "WHISPER", 77)
+  check(buddy.lastText:find("16", 1, true) and math.abs(buddy.lastTextAt - time()) <= 2, "last event: the level-up just now")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 9, ago = 7200 }, "lt2"), "WHISPER", 77)
+  RUN_TIMERS()
+  check(buddy.lastText:find("16", 1, true) ~= nil, "an older event caught up later doesn't replace it")
+  buddy.lastSeen = time() -- (heard from them just now)
+  local old = { name = "Old Event", friend = true, k = 0, d = 0, lastText = "reached level 9", lastTextAt = time() - 7200, lastSeen = time() }
+  check(cell(7, old):find("2h ago", 1, true) ~= nil, "the time shown is when that event happened, not when you last heard from them")
+
+  check(ns.errors == errs, "no errors in Friends tab fixes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.2: group board fixes from the live screenshot
+do
+  local errs = ns.errors
+  local G = ns.Groups
+  local oldInfo = BNGetInfo
+  BNGetInfo = function() return 1, "Testme#1111" end
+  local g = G.Create("Sort Test")
+  local me = G.MyKey()
+  local rr = ns.Data.RealRealm()
+  local mine = rr.players[ns.me]
+  -- you: some kills; an invited friend: nothing yet
+  local savedK, savedD = mine.k, mine.d
+  FriendsAndFoesDB.groupStat = nil
+  g.members[G.KeyOf("Invitee#42")] = { a = time(), name = "Invited Pal" }
+  ns.UI.Show("board")
+  ns.UI.SetBoardView(g.id)
+  local function lastRow() local rows = ns.UI.Rows(); return rows[#rows] end
+  ns.UI.SortBy(3) -- Kills
+  check(lastRow().invited, "invited member at the bottom (sorted by kills)")
+  ns.UI.SortBy(3) -- other way round
+  check(lastRow().invited, "and still at the bottom sorted the other way")
+  ns.UI.SortBy(2) -- Name
+  check(lastRow().invited, "and when sorted by name")
+  -- totals: "1 member", "1 kill"
+  mine.k, mine.d = 1, 6
+  for _, p in pairs(rr.players) do if p.self and p ~= mine then p.k, p.d = 0, 0 end end
+  FriendsAndFoesDB.groupStat = nil
+  local hint = ns.Plain(ns.UI.GroupHint(g))
+  check(hint:find("1 member, 1 kill, 6 deaths", 1, true) ~= nil, "totals in the singular: " .. hint)
+  mine.k = 3
+  FriendsAndFoesDB.groupStat = nil
+  hint = ns.Plain(ns.UI.GroupHint(g))
+  check(hint:find("3 kills", 1, true) ~= nil and not hint:find("takedown", 1, true), "plural, and 'kills' like the column: " .. hint)
+  mine.k, mine.d = savedK, savedD
+  FriendsAndFoesDB.groupStat = nil
+  G.Leave(g)
+  ns.UI.SetBoardView("friends")
+  BNGetInfo = oldInfo
+  check(ns.errors == errs, "no errors in group board fixes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.2: friends' locations (live report: "says I saw them somewhere they weren't")
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local buddy = rr.players["Buddy Pal"]
+  buddy.zone, buddy.zoneAt, buddy.whereOff = nil, nil, nil
+
+  -- an old event (caught up / passed on) counts at the time it happened, not when it arrived
+  buddy.lastSeen = time() - 86400
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 30, ago = 7200 }, "pl1"), "WHISPER", 77)
+  RUN_TIMERS()
+  check(math.abs(buddy.lastSeen - (time() - 7200)) <= 5, "an event from 2h ago: last seen 2h ago, not 'just now'")
+
+  -- their PvP alerts say where they were; an older one arriving later doesn't move them back
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "pe1", zone = "Wetlands", attackers = "Some Foe:ROGUE:30:" }, "pl2"), "WHISPER", 77)
+  drainToasts()
+  check(buddy.zone == "Wetlands" and math.abs(buddy.zoneAt - time()) <= 2, "last place from their alert, with its time")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Old Foe", vclass = "", vlevel = "", vguild = "", zone = "Ashenvale", ago = 3600 }, "pl3"), "WHISPER", 77)
+  RUN_TIMERS()
+  check(buddy.zone == "Wetlands", "an older event from elsewhere doesn't overwrite a newer place")
+
+  -- online: Battle.net's live zone first (their profile message may be a step behind)
+  buddy.zone = "Ashenvale"
+  local origInfo = C_BattleNet.GetFriendGameAccountInfo
+  C_BattleNet.GetFriendGameAccountInfo = function() return { isOnline = true, clientProgram = "WoW", characterName = "Buddy", realmName = "X", factionName = "Horde", gameAccountID = 77, areaName = "Duskwood" } end
+  ns.Comm.RebuildRoster()
+  check(ns.Profile.NowText(buddy):find("Duskwood", 1, true) ~= nil, "online: Battle.net's zone, not an older one")
+  check(buddy.zone == "Duskwood", "and it becomes their last place")
+  C_BattleNet.GetFriendGameAccountInfo = origInfo
+
+  -- offline profile: when you last heard from them, and separately where they last were
+  FRIENDS_ONLINE = 0
+  ns.Comm.RebuildRoster()
+  buddy.lastSeen, buddy.zone, buddy.zoneAt = time() - 60, "Wetlands", time() - 3 * 3600
+  local v = ns.UI.ProfileView("Buddy Pal")
+  local function lineOf(label) for _, l in ipairs(v.lines) do if l[1] == label then return ns.Plain(tostring(l[2])) end end end
+  check(lineOf(ns.L.PROF_LAST_SEEN) == "1m ago" and lineOf(ns.L.PROF_LAST_PLACE):find("Wetlands  3h ago", 1, true),
+    "offline: 'Last seen 1m ago' and 'Last place Wetlands, 3h ago' - each with its own time")
+  check(#v.lines <= 9, "the profile still fits: " .. #v.lines .. " lines")
+  FRIENDS_ONLINE = 1
+  ns.Comm.RebuildRoster()
+
+  -- "Where I am" off on their side: no place is kept or shown
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = 1, d = 1, wanted = "", zone = "", status = "" }, "pl4"), "WHISPER", 77)
+  check(buddy.whereOff and buddy.zone == nil, "they share no location: nothing kept")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ENG", { zone = "Duskwood", target = "Some Foe:ROGUE:30:" }, "pl5"), "WHISPER", 77)
+  drainToasts()
+  check(buddy.zone == nil, "not even from their alerts")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = 1, d = 1, wanted = "", zone = "Arathi Highlands", status = "" }, "pl6"), "WHISPER", 77)
+  check(not buddy.whereOff and buddy.zone == "Arathi Highlands", "sharing again: their place is kept again")
+
+  check(ns.errors == errs, "no errors in friend locations (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.2: one click opens a profile on every tab; the Profile tab shows yours by default;
+-- "alert list" and "kills" wording
+do
+  local errs = ns.errors
+  ns.UI.Show("hitlist")
+  local first = ns.UI.Rows()[1]
+  ns.UI.ClickRow(1)
+  check(first and ns.UI.CurrentTab() == "profile" and ns.UI.ProfileName() == first.name, "Hitlist: one click opens the profile")
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "hitlist", "and Back returns to the Hitlist")
+  ns.UI.Show("enemies")
+  local e1 = ns.UI.Rows()[1]
+  ns.UI.ClickRow(1)
+  check(e1 and ns.UI.ProfileName() == e1.name, "Enemies: one click opens the profile too")
+  ns.UI.Show("feed")
+  ns.UI.ClickRow(1)
+  check(ns.UI.CurrentTab() == "feed", "Feed lines don't open anything")
+
+  -- the Profile tab with nobody chosen: your own profile
+  ns.UI.ShowProfile(nil)
+  check(ns.UI.ProfileName() == ns.me, "Profile tab with nobody chosen shows your own profile")
+
+  -- an enemy shared to you: who shared them is on their profile
+  local h = ns.Data.RealRealm().hitlist["Rogz Fang"]
+  h.sharedBy = "Buddy Pal"
+  local v = ns.UI.ProfileView("Rogz Fang")
+  local shared
+  for _, l in ipairs(v.lines) do if l[1] == ns.L.PROF_SHARED_BY then shared = ns.Plain(l[2]) end end
+  check(shared == "Buddy Pal" and #v.lines <= 9, "enemy profile says who shared them, and still fits")
+  h.sharedBy = nil
+
+  -- wording: alert list, /fnf alerts, kills
+  check(ns.L.BTN_PICK_ON == "Add to alert list" and ns.L.BTN_PICK_OFF == "Remove from alert list", "buttons say alert list")
+  SlashCmdList.FRIENDSANDFOES("alerts buddy")
+  check(ns.Comm.IsPicked("Buddy#1234"), "/fnf alerts <friend> adds them to your alert list")
+  SlashCmdList.FRIENDSANDFOES("alerts all")
+  check(not ns.Comm.GroupActive(), "/fnf alerts all empties it")
+  SlashCmdList.FRIENDSANDFOES("group buddy")
+  check(ns.Comm.IsPicked("Buddy#1234"), "the old /fnf group still works")
+  ns.Comm.ClearPicks()
+  local texts = table.concat({ ns.L.WEEKLY, ns.L.TIP_WEEKLY, ns.L.MODE_NO_HONOR, ns.L.PICK_HINT_ALL, ns.L.PICK_HINT_ACTIVE, ns.L.TIP_PICK }, " ")
+  check(not texts:lower():find("takedown", 1, true) and not texts:lower():find("pick", 1, true), "no 'takedowns' or 'pick' left in those texts")
+
+  check(ns.errors == errs, "no errors in click / wording changes (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

@@ -61,7 +61,9 @@ local function who(p) return ns.ClassColored(p.name, p.class) end
 
 -- foes: enemy names the line is about (for their profile's recent PvP)
 local function feed(p, kind, text, foes)
-  if p then p.lastText = text end
+  -- their latest event, and when it happened (an older one caught up later doesn't replace it)
+  local t = ns.Now()
+  if p and (not p.lastTextAt or t >= p.lastTextAt) then p.lastText, p.lastTextAt = text, t end
   ns.Data.Feed(kind, text, p and p.name, foes)
 end
 
@@ -166,6 +168,9 @@ end
 ---------------------------------------------------------------------------
 local H = {}
 
+-- events whose zone is where the sender was (their own fights and sightings)
+local PLACE_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, SIGHT = true }
+
 function Events.Apply(msg, isSelf)
   local h = H[msg.kind]
   if not h then return end
@@ -176,11 +181,15 @@ function Events.Apply(msg, isSelf)
     p.friend = true
     if isSelf then p.self = true end
     if msg.version and msg.version ~= "" then p.version = msg.version end
-    ns.Data.Touch(p, { class = msg.class, level = msg.level })
-    -- msg.ago: a friend's event from while you were offline. Feed and records only, no alerts.
+    -- msg.ago: a friend's event from while you were offline (caught up, or passed on by another
+    -- friend). Feed and records only, no alerts - and it counts at the time it HAPPENED, so an
+    -- old event doesn't make them look "seen just now".
     if msg.ago then
       ns.past, ns.eventTime = true, time() - msg.ago
     end
+    ns.Data.Touch(p, { class = msg.class, level = msg.level })
+    -- their PvP alerts say where they were
+    if not isSelf and PLACE_KINDS[msg.kind] then ns.Profile.SeenAt(p, msg.f.zone, ns.Now()) end
     h(msg, isSelf, p, msg.f)
   end)
   ns.simulating, ns.past, ns.eventTime = false, nil, nil

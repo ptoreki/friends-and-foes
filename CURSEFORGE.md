@@ -18,7 +18,7 @@ Stay connected with your friends in WoW Forever. See their level-ups, epic loot 
 - **Leaderboard:** world PvP kills, deaths and K/D for you and your friends, all-time.
 - **Shared groups:** follow a group's stats together, with group totals. Members pass numbers along, so not everyone needs to be friends with everyone.
 - **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted, where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy for your friends to see.
-- **Tracking:** kills, deaths and takedowns per player, plus a weekly summary with your nemesis.
+- **Tracking:** kills and deaths per player, plus a weekly summary with your nemesis.
 - **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short (*"Bob killed by Rogz · Duskwood"*).
 ### Getting started
 Install it, and have your friends install it too. Battle.net friends playing WoW Forever on your faction are found automatically; no grouping needed. Type **/fnf** or use the minimap addon menu.
@@ -31,7 +31,7 @@ In **Options → AddOns → Friends & Foes**:
 - What you share, and which friends you share with.
 ### Good to know
 - Everything runs inside the game. No accounts or outside programs.
-- Kills count as *takedowns*: addons can't see who landed the killing blow.
+- A kill is any honorable kill you got honor for: add-ons can't see who landed the killing blow.
 - Alerts are live only, but when you log in, online friends fill your Feed and hitlist with what
   you missed. Options can't be opened in combat.
 Includes ProfanityLib (by Deathwing) to filter offensive words out of group names. Licensed under the GNU GPL v3.

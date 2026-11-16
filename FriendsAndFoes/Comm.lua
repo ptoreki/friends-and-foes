@@ -238,6 +238,9 @@ function Comm.RebuildRoster()
           if issecret(zone) or zone == "" then zone = nil end
           local entry = { gid = g.gameAccountID, faction = g.factionName, tag = tag, zone = zone }
           everyone[name] = entry
+          -- Battle.net's zone is live: it's their last known place (shown once they log off)
+          local rec = zone and ns.Profile and ns.Data.FindPlayer(name)
+          if rec and rec.friend then ns.Profile.SeenAt(rec, zone, time()) end
           if g.gameAccountID then tagByGid[g.gameAccountID] = tag or false end
           rememberTag(name, tag)
           if Comm.Allowed(tag) then roster[name] = entry else why = "not picked" end
