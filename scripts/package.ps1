@@ -22,6 +22,8 @@ try {
     $rel = $_.FullName.Substring($addon.Length + 1).Replace('\', '/')
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, "FriendsAndFoes/$rel") | Out-Null
   }
+  # the license goes in the addon folder, as the release packager does
+  [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, (Join-Path $root "LICENSE"), "FriendsAndFoes/LICENSE") | Out-Null
 } finally {
   $zip.Dispose()
 }

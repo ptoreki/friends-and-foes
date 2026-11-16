@@ -12,6 +12,11 @@ local MAX_COLS = 7
 
 local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, prevPage, nextPage
 local groupBar -- Leaderboard: board picker + group buttons
+-- Back (Profile page and Kill list): the places you came through, newest last
+-- ({ tab, offset, boardView, profileName, killsOf })
+local backButton
+local history = {}
+local HISTORY_MAX = 10
 local profile -- the Profile tab's panel
 local profileName -- whose profile it shows
 local tabButtons = {}
@@ -185,6 +190,19 @@ local function boardNow(r)
 end
 
 local boardView = "friends" -- Leaderboard: "friends" or a shared group's id
+local killsOf -- Kill list view: whose kills it shows
+
+-- Kill list: who someone killed (an enemy: which of your friends), most first
+local KILL_COLS = {
+  { L.COL_NAME, 220, nameCol, byName },
+  { L.COL_LEVEL, 30, lvl, byLevel },
+  { L.COL_GUILD, 130, guild, byGuild },
+  { L.COL_KILLS, 70, function(r) return tostring(C(r.n)) end, function(r) return C(r.n) end },
+  { L.COL_LAST_KILL, 210, function(r)
+    if not r.t then return "" end
+    return ns.Ago(r.t) .. (r.zone and ("  |cff888888" .. r.zone .. "|r") or "")
+  end, function(r) return r.t or 0 end },
+}
 
 local BOARD_COLS = {
   { L.COL_RANK, 34, function(r) return r.rank and tostring(r.rank) or "" end, function(r) return -(r.rank or 999) end },
@@ -223,6 +241,9 @@ local TABS = {
       return out
     end },
   { key = "profile", label = L.TAB_PROFILE, columns = {}, fetch = function() return {} end },
+  -- reached from a profile's Kill list button (no tab of its own)
+  { key = "kills", label = L.TAB_KILLS, hidden = true, columns = KILL_COLS, defaultSort = { col = 4, desc = true },
+    fetch = function() return killsOf and ns.Kills.List(killsOf) or {} end },
 }
 
 local function tabDef(key)
@@ -508,6 +529,9 @@ local function renderProfile()
   c.edit:SetShown(editable)
   c.save:SetShown(editable)
   if editable and not c.edit:HasFocus() then c.edit:SetText(v.note or "") end
+  -- Kill list (n): who they killed, how many in all
+  UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Total(ns.Kills.List(profileName))))
+  c.kills:Show()
   local action = c.action
   action:Show()
   action:Enable()
@@ -694,6 +718,30 @@ local function selectTabButton(b, on)
   end
 end
 
+-- what Back says it goes to: a tab ("Leaderboard"), a profile ("Bob Pal"), or a kill list
+local function placeLabel(place)
+  if place.tab == "profile" and place.profileName then return place.profileName end
+  if place.tab == "kills" and place.killsOf then return L.KILLS_OF:format(place.killsOf) end
+  return tabDef(place.tab).label
+end
+
+-- the line under a kill list: whose, how many, and where the numbers come from
+local function killsHint()
+  local name = killsOf or "?"
+  local list = ns.Kills.List(name)
+  local line = L.KILLS_HINT:format(ns.ClassColored(name), #list, ns.Kills.Total(list))
+  local kind = ns.Profile.KindOf(name)
+  local players = R().players
+  local p = players[ns.Data.Resolve(players, name)]
+  local source
+  if kind == "enemy" then source = L.KILLS_SRC_ENEMY
+  elseif name == ns.me then source = L.KILLS_SRC_ME
+  elseif p and p.slainRepAt then source = L.KILLS_SRC_REPORT:format(ns.Ago(p.slainRepAt))
+  elseif ns.Comm.everyone[name] then source = L.KILLS_SRC_ASKING
+  else source = L.KILLS_SRC_LOCAL end
+  return line .. "  |cff888888" .. source .. "|r"
+end
+
 function UI.Refresh()
   if not win or not win:IsShown() then return end
   local def = tabDef(currentTab)
@@ -706,6 +754,10 @@ function UI.Refresh()
   rowsFrame:SetShown(not isProfile)
   profile:SetShown(isProfile)
   searchBox:SetShown(not isProfile)
+  -- Back: on the Profile page and the Kill list, if there's somewhere to go back to
+  local backTo = (isProfile or currentTab == "kills") and history[#history]
+  backButton:SetShown(backTo and true or false)
+  if backTo then UI.SetButtonText(backButton, L.BTN_BACK:format(placeLabel(backTo))) end
   if isProfile then
     data = {}
     pageText:SetText("")
@@ -764,8 +816,10 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(playersView() or currentTab == "board")
-  if currentTab == "board" then
+  friendsHint:SetShown(playersView() or currentTab == "board" or currentTab == "kills")
+  if currentTab == "kills" then
+    friendsHint:SetText(killsHint())
+  elseif currentTab == "board" then
     local g = currentGroup()
     friendsHint:SetText(g and groupHint(g) or L.BOARD_HINT)
   elseif friendsView() and not ns.viewSim then
@@ -785,9 +839,38 @@ function UI.OnDataChanged()
   end)
 end
 
+-- going to the Profile page or a Kill list: remember where you are, for Back
+local function rememberPlace(target, name)
+  local same = currentTab == target
+    and ((target == "profile" and profileName == name) or (target == "kills" and killsOf == name))
+  if same then return end
+  history[#history + 1] = { tab = currentTab, offset = offset, boardView = boardView,
+    profileName = profileName, killsOf = killsOf }
+  if #history > HISTORY_MAX then table.remove(history, 1) end
+end
+
+function UI.Back()
+  local b = table.remove(history)
+  if not b then return end
+  currentTab, offset, boardView = b.tab, b.offset, b.boardView
+  profileName, killsOf = b.profileName, b.killsOf
+  UI.Refresh()
+end
+
+-- for tests
+function UI.CurrentTab() return currentTab end
+function UI.BackLabel() return history[#history] and placeLabel(history[#history]) end
+function UI.KillsOf() return killsOf end
+
 function UI.SelectTab(key)
   if key == "players" then key = "enemies" end -- 0.6 had one Players tab
-  currentTab = tabDef(key).key
+  key = tabDef(key).key
+  if key == "profile" then
+    rememberPlace("profile", profileName)
+  else
+    wipe(history) -- picking a tab yourself starts over
+  end
+  currentTab = key
   offset = 0
   UI.Refresh()
 end
@@ -1032,6 +1115,11 @@ local function build()
   groupBar.decline:SetPoint("LEFT", groupBar.join, "RIGHT", 4, 0)
   groupBar:Hide()
 
+  -- Profile page: back to where you were (same spot as the group bar, which is hidden there)
+  backButton = button(win, 70, "<", function() UI.Back() end)
+  backButton:SetPoint("TOPLEFT", 16, -30)
+  backButton:Hide()
+
   -- simulation banner
   simBanner = CreateFrame("Frame", nil, win)
   simBanner:SetSize(260, 22)
@@ -1045,8 +1133,10 @@ local function build()
 
   local prev
   for i, t in ipairs(TABS) do
-    prev = createTab(win, t.key, t.label, prev, i)
-    tabButtons[#tabButtons + 1] = prev
+    if not t.hidden then -- (the Kill list has no tab: it opens from a profile)
+      prev = createTab(win, t.key, t.label, prev, i)
+      tabButtons[#tabButtons + 1] = prev
+    end
   end
 
   -- list area
@@ -1153,7 +1243,7 @@ local function build()
         UI.Refresh()
       elseif friendsView() and e and e.pending and not ns.viewSim then
         UI.TogglePick(e.name) -- online but never heard from: no profile yet, but pickable
-      elseif (currentTab == "board" or playersView()) and e and e.name and ns.Profile.KindOf(e.name) then
+      elseif (currentTab == "board" or currentTab == "kills" or playersView()) and e and e.name and ns.Profile.KindOf(e.name) then
         UI.ShowProfile(e.name) -- (a group member you've never heard from directly has no profile)
       end
     end)
@@ -1292,8 +1382,11 @@ local function build()
   c:SetPoint("BOTTOMLEFT", 0, 0)
   c:SetPoint("BOTTOMRIGHT", 0, 0)
   c:SetHeight(24)
+  -- right to left: [action][Kill list], then the note box and Save (enemies on your hitlist)
   c.action = button(c, 130, L.BTN_WANTED_SET, function() UI.ProfileAction() end)
   c.action:SetPoint("BOTTOMRIGHT", 0, 0)
+  c.kills = button(c, 90, L.BTN_KILL_LIST, function() UI.ShowKills(profileName) end)
+  c.kills:SetPoint("RIGHT", c.action, "LEFT", -8, 0)
   c.editLabel = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.editLabel:SetPoint("BOTTOMLEFT", 0, 4)
   c.editLabel:SetText(L.NOTE)
@@ -1307,7 +1400,7 @@ local function build()
     UI.ProfileSave(c.edit:GetText())
   end
   c.save = button(c, 60, L.SAVE, saveEdit)
-  c.save:SetPoint("RIGHT", c.action, "LEFT", -16, 0)
+  c.save:SetPoint("RIGHT", c.kills, "LEFT", -16, 0)
   c.edit:SetPoint("RIGHT", c.save, "LEFT", -10, 0)
   c.edit:SetScript("OnEnterPressed", saveEdit)
   c.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -1383,7 +1476,10 @@ function UI.Show(tab)
     return
   end
   if tab then
-    currentTab = tabDef(tab).key
+    local key = tabDef(tab).key
+    -- (ShowProfile / ShowKills remember the way back themselves; opening a tab starts over)
+    if key ~= "profile" and key ~= "kills" then wipe(history) end
+    currentTab = key
     offset = 0
   end
   win:Show()
@@ -1398,8 +1494,18 @@ function UI.ShowProfile(name)
   -- "Rogz" -> "Rogz Fang" when that's the only one, so the page and its buttons use one key
   local key = ns.Data.Resolve(R().players, name)
   if not R().players[key] then key = ns.Data.Resolve(R().hitlist, name) end
+  rememberPlace("profile", key)
   profileName = key
   UI.Show("profile")
+end
+
+-- someone's kill list (opened from their profile); a friend online is asked for their own list
+function UI.ShowKills(name)
+  if not name then return end
+  rememberPlace("kills", name)
+  killsOf = name
+  if ns.Profile.KindOf(name) == "friend" then ns.Kills.Ask(name) end
+  UI.Show("kills")
 end
 
 -- the profile tab's player (for tests)

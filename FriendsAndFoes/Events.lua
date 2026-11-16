@@ -38,6 +38,8 @@ end
 
 function Events.Emit(kind, fields, sim)
   trackStreak(kind, fields, sim)
+  -- may friends pass this on to their other friends? (Options: "Friends may pass on my events")
+  fields.rl = ns.Comm.RelayAllowed() and "1" or ""
   local _, class = UnitClass("player")
   local msg = { kind = kind, id = ns.NewId(sim), class = class, level = UnitLevel("player"), f = fields }
   local wire = ns.Comm.Fit(msg)
@@ -378,6 +380,7 @@ H.KILL = function(msg, isSelf, p, f)
   local victim = { name = name, class = f.vclass ~= "" and f.vclass or nil, level = f.vlevel, guild = f.vguild ~= "" and f.vguild or nil }
   local e = enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
+  ns.Kills.Add(p, e.name, f.zone) -- the killer's kill list
 
   local hit = ns.Data.FindHit(name)
   local revenge = false
@@ -454,6 +457,17 @@ end
 H.GST = function(msg, isSelf, _, f)
   if isSelf then return end
   ns.Groups.OnStats(msg.from, f)
+end
+
+-- kill lists: a friend asks for yours, or answers with theirs
+H.KLQ = function(msg, isSelf, _, f)
+  if isSelf then return end
+  ns.Kills.Answer(msg.from, f.who)
+end
+
+H.KLA = function(msg, isSelf, _, f)
+  if isSelf then return end
+  ns.Kills.OnAnswer(msg.from, f)
 end
 
 -- weekly summary: your own takedowns and deaths, and who killed you most

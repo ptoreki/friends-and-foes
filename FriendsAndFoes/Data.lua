@@ -79,6 +79,20 @@ local function mergeInto(dst, src)
       dst[k] = cur or v
     elseif k == "kv" and type(v) == "table" and type(cur) == "table" then
       for kk, vv in pairs(v) do cur[kk] = ns.Count(cur[kk]) + ns.Count(vv) end -- per-friend kills add up
+    elseif (k == "slain" or k == "slainRep") and type(v) == "table" and type(cur) == "table" then
+      -- kill lists: counts add up (their own report: the higher one), the later time wins
+      for kk, vv in pairs(v) do
+        local c = cur[kk]
+        if type(c) ~= "table" then
+          cur[kk] = vv
+        elseif type(vv) == "table" then
+          c.n = (k == "slain") and (ns.Count(c.n) + ns.Count(vv.n)) or math.max(ns.Count(c.n), ns.Count(vv.n))
+          if vv.t and (not c.t or vv.t > c.t) then
+            c.t = vv.t
+            c.zone = vv.zone or c.zone
+          end
+        end
+      end
     elseif type(v) == "table" and type(cur) == "table" then
       for kk, vv in pairs(v) do cur[kk] = cur[kk] or vv end
     elseif cur == nil then

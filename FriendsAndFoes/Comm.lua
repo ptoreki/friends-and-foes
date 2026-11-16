@@ -79,18 +79,20 @@ end
 
 local MAX_PAYLOAD = 255
 
--- "ago" (last field): seconds since it happened, set only when replaying events to a friend who was
--- offline (see catch-up below). Live messages leave it empty; older clients ignore it.
+-- "ago": seconds since it happened, set only when replaying events to a friend who was offline
+-- (see catch-up below). Live messages leave it empty; older clients ignore it.
+-- "rl" (0.7.1): "1" = the sender lets friends pass this event on to their other friends (relay,
+-- below). Older clients don't send it (= not passed on) and ignore it.
 local SCHEMA = {
-  LVL  = { "level", "ago" },
-  LOOT = { "link", "source", "ago" },
-  GEAR = { "link", "count", "epics", "ago" }, -- epics: how many of the batch were epic or better
-  ATK  = { "enc", "zone", "attackers", "ago" },
-  DIE  = { "zone", "killer", "conf", "assists", "ended", "ago" },        -- ended: kill streak this death ended
-  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak", "ago" }, -- streak: kills in a row incl. this
+  LVL  = { "level", "ago", "rl" },
+  LOOT = { "link", "source", "ago", "rl" },
+  GEAR = { "link", "count", "epics", "ago", "rl" }, -- epics: how many of the batch were epic or better
+  ATK  = { "enc", "zone", "attackers", "ago", "rl" },
+  DIE  = { "zone", "killer", "conf", "assists", "ended", "ago", "rl" },        -- ended: kill streak this death ended
+  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak", "ago", "rl" }, -- streak: kills in a row incl. this
   HIT  = { "share", "entries" },
   SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
-  ENG  = { "zone", "target", "ago" }, -- the sender started a fight with an enemy player
+  ENG  = { "zone", "target", "ago", "rl" }, -- the sender started a fight with an enemy player
   REQ  = { "window" }, -- "I just came online: what happened in the last <window> seconds?"
   -- the sender's profile (0.7): own all-time kills/deaths (empty if they don't share PvP),
   -- most wanted enemy, zone, status ("" | "afk" | "pvp"). Older clients ignore unknown kinds.
@@ -100,12 +102,22 @@ local SCHEMA = {
   -- times in base 36 after `base`), and relayed stats ("First Last:k:d:time;...")
   GRP  = { "gid", "name", "owner", "base", "members" },
   GST  = { "stats" },
+  -- kill lists (0.7.1, Kills.lua): "send me the list of <who>" (your own character), and the
+  -- answer: who it's about, how many victims in all, and the top ones ("Name:count:time;...")
+  KLQ  = { "who" },
+  KLA  = { "who", "total", "list" },
+  -- relayed catch-up (0.7.1): "anything from these friends of mine in the last <window> seconds?"
+  -- and the answer: one event someone else sent you, with who it's from (origin) and its own
+  -- fields joined by "^" in `data`
+  RLQ  = { "window", "names" },
+  RLY  = { "origin", "oclass", "olevel", "okind", "oid", "ago", "data" },
 }
 Comm.SCHEMA = SCHEMA
--- group traffic also flows with friends you didn't pick for alerts
-local GROUP_KINDS = { GRP = true, GST = true }
+-- asked for, not broadcast: group traffic and kill lists also flow with friends you didn't
+-- pick for alerts, and only over Battle.net (no whisper copy)
+local GROUP_KINDS = { GRP = true, GST = true, KLQ = true, KLA = true }
 
-local PRIORITY_OF = { GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { RLQ = "normal", RLY = "bulk", KLQ = "normal", KLA = "bulk", GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -266,6 +278,7 @@ function Comm.GreetNew()
   end
   if not ns.me then return end
   if #profile > 0 and ns.Profile then ns.Profile.Greet(profile) end
+  for _, name in ipairs(profile) do Comm.AskCatchUpFrom(name) end -- what they did while you were away
   if #groups > 0 and ns.Groups then ns.Groups.Greet(groups) end
 end
 
@@ -523,9 +536,9 @@ end
 -- catch-up: when you log in, friends who are online send you their own events from while you
 -- were away (up to 12 hours). They land in your Feed and hitlist without alerts.
 ---------------------------------------------------------------------------
-local CATCHUP_WINDOW = 12 * 3600
+local CATCHUP_WINDOW = 24 * 3600
 local CATCHUP_MIN_AWAY = 120 -- a /reload or a quick relog doesn't ask
-local OUTBOX_MAX = 40
+local OUTBOX_MAX = 100
 local CATCHUP_KINDS = { LVL = true, LOOT = true, GEAR = true, ATK = true, ENG = true, DIE = true, KILL = true }
 Comm.CATCHUP_WINDOW = CATCHUP_WINDOW
 
@@ -551,7 +564,7 @@ function Comm.Remember(kind, id, fields)
   outbox()
 end
 
--- what we received, kept 13 hours so a replay of something you already saw is ignored
+-- what we received, kept a day and an hour so a replay of something you already saw is ignored
 local function got()
   FriendsAndFoesDB.got = FriendsAndFoesDB.got or {}
   return FriendsAndFoesDB.got
@@ -564,18 +577,47 @@ local function pruneGot()
   end
 end
 
+local awayFrom          -- when you went offline before this session (nil until login is done)
+local loginAsked = false -- the login-time ask has happened (or wasn't needed)
+local askedThisSession = {} -- friend -> true once asked, at login or when they came online
+
+local function reqMessage(window)
+  local _, class = UnitClass("player")
+  return { kind = "REQ", id = ns.NewId(), class = class, level = UnitLevel("player"), f = { window = window } }
+end
+
 -- just logged in: ask online friends what you missed since lastOnline
 function Comm.AskCatchUp(lastOnline)
   local away = lastOnline and (time() - lastOnline) or CATCHUP_WINDOW
   if away < CATCHUP_MIN_AWAY then return false end
   local names = Comm.RosterNames()
   if #names == 0 then return false end
+  for _, name in ipairs(names) do askedThisSession[name] = true end
   local window = math.floor(math.min(away, CATCHUP_WINDOW))
-  local _, class = UnitClass("player")
-  local msg = { kind = "REQ", id = ns.NewId(), class = class, level = UnitLevel("player"), f = { window = window } }
-  Comm.SendPayload(Comm.Encode(msg), PRIORITY_OF.REQ)
+  Comm.SendPayload(Comm.Encode(reqMessage(window)), PRIORITY_OF.REQ)
+  Comm.AskRelay(window) -- and what your other friends did, through them
   ns.Debug("CATCHUP-ASK", window, table.concat(names, ", "))
   return true
+end
+
+-- a friend came online after you did: they may have played while you were offline, so ask them
+-- too (once per session; events you already got live are skipped by the receiving side)
+function Comm.AskCatchUpFrom(name)
+  if not (loginAsked and awayFrom) or askedThisSession[name] then return false end
+  askedThisSession[name] = true
+  local away = time() - awayFrom
+  if away < CATCHUP_MIN_AWAY then return false end
+  local window = math.floor(math.min(away, CATCHUP_WINDOW))
+  sendTo(name, Comm.Encode(reqMessage(window)), PRIORITY_OF.REQ)
+  Comm.AskRelay(window, name)
+  ns.Debug("CATCHUP-ASK-LATE", name, window)
+  return true
+end
+
+-- for tests: pretend you went offline at `t` and the login ask is done
+function Comm.SetAwayFrom(t)
+  awayFrom, loginAsked = t, true
+  wipe(askedThisSession)
 end
 
 -- a friend just logged in: send them our own events from the window they missed
@@ -612,15 +654,181 @@ function Comm.AnswerCatchUp(name, window)
   return n
 end
 
+---------------------------------------------------------------------------
+-- relayed catch-up: friends pass on what your OTHER friends did while you were offline, so you
+-- also get the events of a friend you're never online with. Rules:
+--  * the asker names which of their friends they want (those offline now); nothing else is sent
+--  * only events the original sender marked "rl" (their "may be passed on" switch is on and they
+--    haven't limited their alerts to picked friends)
+--  * one hop: an event that came to you passed on is never passed on again
+--  * same as catch-up: last 24 hours, no toasts, and your own picks still filter what you accept
+---------------------------------------------------------------------------
+local HEARD_MAX = 300        -- other friends' events kept to pass on
+local RELAY_NAMES_MAX = 40   -- friends named in one ask
+local SEP = "^"              -- joins an event's own fields inside RLY
+local RELAY_ANSWER_MAX = 100 -- events passed on per ask
+
+-- may friends pass on your events? (sent with each event, as "rl")
+function Comm.RelayAllowed()
+  return ns.S().share.relay ~= false and not Comm.GroupActive()
+end
+
+-- events friends sent you that may be passed on, oldest first
+local function heard()
+  local db = FriendsAndFoesDB
+  db.heard = db.heard or {}
+  local box, cutoff = db.heard, time() - CATCHUP_WINDOW
+  while #box > 0 and ((box[1].t or 0) < cutoff or #box > HEARD_MAX) do table.remove(box, 1) end
+  return box
+end
+Comm.HeardBox = heard
+
+function Comm.Hear(origin, msg)
+  local f = {}
+  for _, k in ipairs(SCHEMA[msg.kind]) do
+    if k ~= "ago" and k ~= "rl" then f[k] = msg.f[k] end
+  end
+  local box = heard()
+  local t = time() - (msg.ago or 0)
+  local i = #box + 1 -- keep time order (a caught-up event can be older than the newest)
+  while i > 1 and (box[i - 1].t or 0) > t do i = i - 1 end
+  table.insert(box, i, { t = t, o = origin, c = msg.class, l = msg.level, k = msg.kind, id = msg.id, f = f })
+  heard()
+end
+
+-- your friends who aren't online now: their events can only reach you through others
+local function offlineFriends()
+  local out = {}
+  for _, p in pairs(ns.Data.RealRealm().players) do
+    if p.friend and not p.self and p.name ~= ns.me and not everyone[p.name]
+      and not ns.Data.FriendIsGone(p) and not Comm.OtherFaction(p.faction) then
+      out[#out + 1] = p.name
+    end
+  end
+  table.sort(out)
+  while #out > RELAY_NAMES_MAX do table.remove(out) end
+  return out
+end
+
+-- ask online friends (or one) for what those offline friends did in the last `window` seconds
+function Comm.AskRelay(window, onlyName)
+  local names = offlineFriends()
+  if #names == 0 then return 0 end
+  local _, class = UnitClass("player")
+  local function build(batch)
+    return { kind = "RLQ", id = ns.NewId(), class = class, level = UnitLevel("player"),
+      f = { window = window, names = table.concat(batch, ";") } }
+  end
+  local msgs, batch = {}, {}
+  for _, name in ipairs(names) do
+    batch[#batch + 1] = name
+    if #Comm.Encode(build(batch)) > 250 then
+      table.remove(batch)
+      msgs[#msgs + 1] = build(batch)
+      batch = { name }
+    end
+  end
+  msgs[#msgs + 1] = build(batch)
+  for _, m in ipairs(msgs) do
+    local payload = Comm.Encode(m)
+    if onlyName then sendTo(onlyName, payload, PRIORITY_OF.RLQ) else Comm.SendPayload(payload, PRIORITY_OF.RLQ) end
+  end
+  ns.Debug("RELAY-ASK", onlyName or "all", window, #names)
+  return #msgs
+end
+
+-- one event passed on, as an RLY payload (guild names dropped if it doesn't fit; nil if still not)
+local function relayPayload(e, ago, dropGuilds)
+  local parts = {}
+  for _, k in ipairs(SCHEMA[e.k]) do
+    if k ~= "ago" and k ~= "rl" then
+      local v = tostring(e.f[k] or ""):gsub("%^", " ")
+      if dropGuilds and UNIT_FIELDS[k] then v = v:gsub("([^:;]*:[^:;]*:[^:;]*):[^;]*", "%1:") end
+      parts[#parts + 1] = v
+    end
+  end
+  local _, class = UnitClass("player")
+  local payload = Comm.Encode({ kind = "RLY", id = ns.NewId(), class = class, level = UnitLevel("player"),
+    f = { origin = e.o, oclass = e.c or "", olevel = e.l or "", okind = e.k, oid = e.id,
+      ago = math.max(1, ago), data = table.concat(parts, SEP) } })
+  if #payload <= MAX_PAYLOAD then return payload end
+  if dropGuilds then return nil end
+  return relayPayload(e, ago, true)
+end
+
+-- a friend asked: pass on what the friends they named did (not their own events: they know those)
+local relayedTo = {} -- asker>origin:id -> GetTime(), so a repeat ask doesn't resend
+function Comm.AnswerRelay(asker, f)
+  local window = math.min(tonumber(f.window) or 0, CATCHUP_WINDOW)
+  if window <= 0 then return 0 end
+  local key = rosterFind(asker) or (everyone[asker] and asker)
+  if not key then return 0 end
+  local want = {}
+  for _, n in ipairs(ns.Split(f.names or "", ";")) do
+    local name = ns.CleanName(n)
+    if name and name ~= asker then want[name] = true end
+  end
+  local now, sent, box = time(), 0, heard()
+  -- newest first, at most RELAY_ANSWER_MAX: other online friends may be sending the same ones
+  for i = #box, 1, -1 do
+    if sent >= RELAY_ANSWER_MAX then break end
+    local e = box[i]
+    local ago = now - e.t
+    local mark = asker .. ">" .. e.o .. ":" .. e.id
+    if want[e.o] and ago <= window and not (relayedTo[mark] and GetTime() - relayedTo[mark] < 600) then
+      local payload = relayPayload(e, ago)
+      if payload then
+        relayedTo[mark] = GetTime()
+        sendTo(key, payload, "bulk")
+        sent = sent + 1
+      end
+    end
+  end
+  ns.Debug("RELAY-ANSWER", asker, window, sent)
+  return sent
+end
+
+-- an event passed on to you by `relayer`: applied like a catch-up event from its origin
+function Comm.OnRelay(relayer, f)
+  local origin = ns.CleanName(f.origin)
+  local kind, oid = f.okind, f.oid
+  if not (origin and CATCHUP_KINDS[kind] and type(oid) == "string" and oid ~= "" and not oid:find("^S")) then return end
+  if origin == ns.me or origin == relayer then return end
+  -- only your own friends' events, and your picks still count
+  local rec = ns.Data.FindPlayer(origin)
+  if not ((rec and rec.friend and not rec.self) or everyone[origin]) then return end
+  if Comm.GroupActive() and not Comm.Allowed(Comm.TagFor(origin)) then return end
+  local ago = tonumber(f.ago)
+  if not ago or ago < 1 or ago > CATCHUP_WINDOW then return end
+  local key = origin .. ":" .. oid
+  if got()[key] then return end -- already have it (live, from them, or from another friend)
+  got()[key] = time()
+  local fields, vals, i = {}, ns.Split(f.data or "", SEP), 0
+  for _, k in ipairs(SCHEMA[kind]) do
+    if k ~= "ago" and k ~= "rl" then
+      i = i + 1
+      fields[k] = vals[i] or ""
+    end
+  end
+  fields.ago = tostring(ago)
+  ns.Debug("RELAY-GOT", relayer, origin, kind, oid)
+  ns.Events.Apply({ kind = kind, id = oid, name = origin, class = (f.oclass ~= "" and f.oclass) or nil,
+    level = tonumber(f.olevel), f = fields, from = origin, ago = ago }, false)
+end
+
 -- when you were last online (account-wide): saved every minute and at logout
 ns.OnReady(function()
   local db = FriendsAndFoesDB
   local last = db.lastOnline
   db.lastOnline = time()
+  awayFrom = last or (time() - CATCHUP_WINDOW)
   pruneGot()
   C_Timer.NewTicker(60, function() FriendsAndFoesDB.lastOnline = time() end)
   -- the roster is built a few seconds after login
-  C_Timer.After(15, function() ns.Try("catchup", Comm.AskCatchUp, last) end)
+  C_Timer.After(15, function()
+    ns.Try("catchup", Comm.AskCatchUp, last)
+    loginAsked = true -- from now on, friends coming online are asked one by one
+  end)
 end)
 ns.On("PLAYER_LOGOUT", function() FriendsAndFoesDB.lastOnline = time() end)
 
@@ -679,6 +887,14 @@ local function accept(text, routeName, via)
     Comm.AnswerCatchUp(sender, msg.f.window)
     return sender
   end
+  if msg.kind == "RLQ" then
+    Comm.AnswerRelay(sender, msg.f)
+    return sender
+  end
+  if msg.kind == "RLY" then
+    Comm.OnRelay(sender, msg.f)
+    return sender
+  end
   if CATCHUP_KINDS[msg.kind] then
     local ago = tonumber(msg.f.ago)
     if ago and ago > 0 then
@@ -686,6 +902,8 @@ local function accept(text, routeName, via)
       msg.ago = math.min(ago, CATCHUP_WINDOW)
     end
     got()[key] = time()
+    -- kept to pass on to your other friends later, if the sender allows it
+    if msg.f.rl == "1" and not msg.id:find("^S") then Comm.Hear(sender, msg) end
   end
   ns.Events.Apply(msg, false)
   return sender

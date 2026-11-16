@@ -19,6 +19,8 @@ epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks 
   reports their own numbers.
 - **Shared groups:** named groups whose stats you follow together, with group totals. Members
   pass each other's numbers along, so not everyone needs to be friends with everyone.
+- **Kill lists:** who you and each friend have killed, and how often (sortable); for an enemy,
+  which of your friends they killed. A friend's own list is fetched from them.
 - **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted,
   where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy
   for your friends to see.
@@ -77,8 +79,11 @@ Debug logging turns itself off after 7 days.
   websites or outside programs.
 - Addons can't see who landed the killing blow in WoW Forever, so any honorable kill you took part in
   counts as a *takedown*.
-- Alerts are live only. When you log in, friends who are online send what happened to them in
-  the last 12 hours. It goes into your Feed and hitlist quietly, with one chat line, no toasts.
+- Alerts are live only, but you don't miss what friends did while you were offline: when you log
+  in, and when a friend comes online later, they send what happened to them in the last 24 hours
+  (up to 100 events). It goes into your Feed, hitlist and kill lists quietly, with one chat line,
+  no toasts. Friends you're never online with still reach you: other friends pass their events
+  on, if they allow it ("Friends may pass on my events" in the options).
 - Options can't be opened during combat. That's a game rule.
 
 ## Development

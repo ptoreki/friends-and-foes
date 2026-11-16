@@ -472,7 +472,8 @@ check(FriendsAndFoesCharDB.streak == 3, "own streak counts kills in a row: " .. 
 RUN_TICKERS(4)
 local lastKill
 for _, s in ipairs(SENT) do if s.payload:find("	KILL	", 1, true) then lastKill = s.payload end end
-check(lastKill and lastKill:sub(-3) == "	3	", "KILL carries the streak: " .. tostring(lastKill))
+local killMsg = lastKill and ns.Comm.Decode(lastKill)
+check(killMsg and killMsg.f.streak == "3" and killMsg.f.rl == "1", "KILL carries the streak (and may be passed on): " .. tostring(lastKill))
 ns.Events.Emit("DIE", { zone = "Duskwood", killer = "Ender Man:ROGUE:60:", conf = "c", assists = "" })
 check(FriendsAndFoesCharDB.streak == 0, "a PvP death resets the streak")
 check(lastFeed():find("ended a 3-kill streak", 1, true) ~= nil, "death notes the streak it ended: " .. lastFeed())
@@ -659,7 +660,7 @@ do
 end
 
 -- layout: every tab's columns fit inside the list (nothing runs past the window edge)
-for _, key in ipairs({ "hitlist", "board", "enemies", "friends", "feed" }) do
+for _, key in ipairs({ "hitlist", "board", "enemies", "friends", "feed", "kills" }) do
   local total = 0
   for _, col in ipairs(ns.UI.TabColumns(key)) do total = total + col[2] end
   check(total > 0 and total <= ns.UI.LIST_WIDTH, "columns of the " .. key .. " tab fit: " .. total .. " of " .. ns.UI.LIST_WIDTH)
@@ -1404,7 +1405,7 @@ do
   check(f.zone == "" and f.status == "", "'Where I am' off: no zone or status in the profile")
   ns.S().share.where = true
   check(ns.Profile.Fields().zone == "Hillsbrad Foothills", "'Where I am' on: zone shared")
-  check(#ns.Options.SHARE == 5 and ns.Options.SHARE[5][1] == "where", "Options list the 'Where I am' switch")
+  check(#ns.Options.SHARE == 6 and ns.Options.SHARE[5][1] == "where" and ns.Options.SHARE[6][1] == "relay", "Options list the 'Where I am' and 'pass on' switches")
   ns.S().share.pvp = true
 
   -- typed text: one plain line, counted and cut in characters, never half of one
@@ -1845,6 +1846,26 @@ do
   ns.UI.SetBoardView(tc.id)
   check(ns.UI.BoardView() == "friends", "a group you left falls back to your friends")
 
+  -- Back on the Profile page: to the tab you came from, as you left it
+  ns.UI.Show("board")
+  ns.UI.SetBoardView(g.id)
+  ns.UI.ShowProfile("Buddy Pal")
+  check(ns.UI.CurrentTab() == "profile" and ns.UI.BackLabel() == ns.L.TAB_BOARD, "profile from the Leaderboard: Back says Leaderboard")
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "board" and ns.UI.BoardView() == g.id, "Back: the Leaderboard, still showing the group")
+  check(ns.UI.BackLabel() == nil, "after going back there's nothing more to go back to")
+  ns.UI.Back() -- does nothing
+  check(ns.UI.CurrentTab() == "board", "Back with nowhere to go does nothing")
+  ns.UI.Show("hitlist")
+  ns.UI.ShowPlayer("Rogz Fang") -- like clicking a toast
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "hitlist", "profile from a toast: Back to the tab you had open")
+  ns.UI.SelectTab("feed")
+  ns.UI.SelectTab("profile")
+  check(ns.UI.BackLabel() == ns.L.TAB_FEED, "Profile tab clicked directly: Back to where you were")
+  ns.UI.Back()
+  ns.UI.SetBoardView("friends")
+
   -- you leave while every other member is offline: they hear it when they come back
   local g3 = G.Create("Late Crew")
   g3.members[KB] = { a = time() - 100, j = time() - 90, name = "Buddy Pal" }
@@ -1944,6 +1965,308 @@ do
   ns.Comm.RebuildRoster()
   drain()
   check(ns.errors == errs, "no errors in shared groups (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.1: kill lists (who each player killed), shared on request; Back through the views;
+-- catch-up from friends who come online after you, 24 hours / 100 events
+do
+  local errs = ns.errors
+  local K, G = ns.Kills, ns.Groups
+  local rr = ns.Data.RealRealm()
+  ns.viewSim = false
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  RUN_TIMERS(); RUN_TICKERS(60); SENT = {}
+  local function sentKinds(kind)
+    local out = {}
+    for _, s in ipairs(SENT) do
+      local m = ns.Comm.Decode(s.payload)
+      if m and m.kind == kind and s.route == "bn" then out[#out + 1] = m end
+    end
+    return out
+  end
+
+  -- a friend's kills are counted per victim
+  local buddy = rr.players["Buddy Pal"]
+  buddy.slain, buddy.slainRep, buddy.slainRepAt = nil, nil, nil
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vex Morrow", vclass = "MAGE", vlevel = 40, vguild = "", zone = "Duskwood" }, "kl1"), "WHISPER", 77)
+  ADVANCE(20)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vex Morrow", vclass = "MAGE", vlevel = 40, vguild = "", zone = "Hillsbrad Foothills" }, "kl2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Grim Shade", vclass = "ROGUE", vlevel = 41, vguild = "", zone = "Duskwood" }, "kl3"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "", vclass = "", vlevel = "", vguild = "", zone = "Duskwood" }, "kl4"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vex Morrow", vclass = "MAGE", vlevel = 40, vguild = "", zone = "Duskwood" }, "kl1"), "WHISPER", 77) -- same message again
+  drainToasts()
+  check(buddy.slain["Vex Morrow"].n == 2 and buddy.slain["Grim Shade"].n == 1, "kills counted per victim (repeats ignored)")
+  check(buddy.slain["Vex Morrow"].zone == "Hillsbrad Foothills", "last kill's zone kept")
+  local list = K.List("Buddy Pal")
+  check(#list == 2 and K.Total(list) == 3, "a nameless kill isn't listed: 2 players, 3 kills")
+  local vex
+  for _, r in ipairs(list) do if r.name == "Vex Morrow" then vex = r end end
+  check(vex and vex.class == "MAGE" and vex.level == 40, "victim's class and level come from what you know of them")
+
+  -- their own list (asked for) merges in: the higher count wins, nothing you saw is lost
+  local T = time() - 100
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLA", { who = "Buddy Pal", total = 3,
+    list = "Vex Morrow:5:" .. G.B36(T) .. ";Old Foe:4:" .. G.B36(T) .. ";Grim Shade:1:" .. G.B36(T) }, "ka1"), "WHISPER", 77)
+  list = K.List("Buddy Pal")
+  local byName = {}
+  for _, r in ipairs(list) do byName[r.name] = r end
+  check(byName["Vex Morrow"].n == 5 and byName["Old Foe"].n == 4 and byName["Grim Shade"].n == 1 and #list == 3,
+    "their own report merged: higher counts win, kills you never saw are added")
+  check(buddy.slainRepAt and buddy.slainRepTotal == 3, "when it came and how many in all are noted")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLA", { who = "Someone Else", total = 1, list = "Vex Morrow:99:" .. G.B36(T) }, "ka2"), "WHISPER", 77)
+  check(byName["Vex Morrow"].n == 5 and K.List("Buddy Pal")[1].n ~= 99, "a list about someone else is ignored")
+
+  -- you answer a friend's request with your own list (only for the character you're playing)
+  local me = rr.players[ns.me]
+  me.slain = { ["Vex Morrow"] = { n = 3, t = time() - 50 }, ["Nem Esis"] = { n = 1, t = time() - 10 } }
+  SENT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLQ", { who = ns.me }, "kq1"), "WHISPER", 77)
+  RUN_TICKERS(20)
+  local ans = sentKinds("KLA")
+  check(#ans == 1 and ans[1].f.who == ns.me and ans[1].f.total == "2" and ans[1].f.list:find("^Vex Morrow:3:") ~= nil,
+    "asked for your list: you send it, most kills first")
+  SENT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLQ", { who = ns.me }, "kq2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLQ", { who = "Testme Alt" }, "kq3"), "WHISPER", 77)
+  RUN_TICKERS(20)
+  check(#sentKinds("KLA") == 0, "not again within a minute, and not for a character you're not on")
+  ADVANCE(61)
+  ns.S().share.pvp = false
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLQ", { who = ns.me }, "kq4"), "WHISPER", 77)
+  RUN_TICKERS(20)
+  check(#sentKinds("KLA") == 0, "not sharing PvP: your list isn't sent")
+  ns.S().share.pvp = true
+  -- a long list is split over messages that each fit
+  ADVANCE(61)
+  me.slain = {}
+  for i = 1, 80 do me.slain["Victimname" .. i .. " Longsurname"] = { n = i, t = time() } end
+  SENT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLQ", { who = ns.me }, "kq5"), "WHISPER", 77)
+  RUN_TICKERS(80)
+  local parts, entries, fits = sentKinds("KLA"), 0, true
+  for _, m in ipairs(parts) do
+    entries = entries + #ns.Split(m.f.list, ";")
+    if #ns.Comm.Encode(m) > 255 then fits = false end
+  end
+  check(#parts >= 3 and entries == 60 and fits, "top 60 of 80 victims, split over messages that fit: " .. #parts .. " / " .. entries)
+  me.slain = nil
+
+  -- opening a friend's kill list asks them (once every 2 minutes)
+  SENT = {}
+  ns.UI.Show("board")
+  ns.UI.ShowProfile("Buddy Pal")
+  ns.UI.ShowKills("Buddy Pal")
+  RUN_TICKERS(10)
+  check(#sentKinds("KLQ") == 1 and sentKinds("KLQ")[1].f.who == "Buddy Pal", "opening their kill list asks them for it")
+  check(ns.UI.CurrentTab() == "kills" and ns.UI.KillsOf() == "Buddy Pal" and #ns.UI.Rows() == 3, "the kill list view shows their victims")
+  check(ns.UI.Rows()[1].name == "Vex Morrow", "most kills first")
+  SENT = {}
+  ns.UI.ShowKills("Buddy Pal")
+  RUN_TICKERS(10)
+  check(#sentKinds("KLQ") == 0, "not asked again right away")
+
+  -- Back goes back through the way you came: kill list -> profile -> Leaderboard
+  check(ns.UI.BackLabel() == "Buddy Pal", "from the kill list, Back says whose profile")
+  ns.UI.ShowProfile("Vex Morrow") -- clicking a victim
+  check(ns.UI.BackLabel() == ns.L.KILLS_OF:format("Buddy Pal"), "from a victim's profile, Back goes to the kill list")
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "kills" and ns.UI.KillsOf() == "Buddy Pal", "Back: the kill list again")
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "profile" and ns.UI.ProfileName() == "Buddy Pal", "Back: their profile")
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "board" and ns.UI.BackLabel() == nil, "Back: the Leaderboard, and that's the start")
+  ns.UI.ShowKills("Buddy Pal")
+  ns.UI.SelectTab("feed")
+  check(ns.UI.BackLabel() == nil, "picking a tab yourself starts over")
+
+  -- an enemy's kill list: the friends they killed
+  local rows = K.List("Rogz Fang")
+  local hasBuddy = false
+  for _, r in ipairs(rows) do if r.name == "Buddy Pal" then hasBuddy = true end end
+  check(#rows >= 1 and hasBuddy, "an enemy's kill list shows the friends they killed")
+
+  -- merging two records of the same player adds their kill lists up
+  local a = { name = "X", slain = { Foo = { n = 2, t = 10 } } }
+  ns.Data.MergeInto(a, { slain = { Foo = { n = 3, t = 20, zone = "Z" }, Bar = { n = 1, t = 5 } } })
+  check(a.slain.Foo.n == 5 and a.slain.Foo.t == 20 and a.slain.Foo.zone == "Z" and a.slain.Bar.n == 1, "kill lists add up when records merge")
+
+  -- one time: kills already in the Feed (since 0.7.0) fill the lists
+  local db = { realms = { Forever = { players = { ["Kil Ler"] = { name = "Kil Ler", k = 2, d = 0 } }, hitlist = {}, feed = {
+    { t = 100, kind = "kill", text = "x", who = "Kil Ler", foes = { "Poor Soul" } },
+    { t = 200, kind = "kill", text = "y", who = "Kil Ler", foes = { "Poor Soul" } },
+    { t = 300, kind = "died", text = "z", who = "Kil Ler", foes = { "Poor Soul" } } } } } }
+  check(K.Backfill(db) == 2 and db.realms.Forever.players["Kil Ler"].slain["Poor Soul"].n == 2, "backfill from the Feed: kills only")
+  check(K.Backfill(db) == 0, "backfill runs once")
+
+  -- catch-up: a friend who comes online after you is asked too; 24 hours; 100 events
+  ns.Comm.SetAwayFrom(time() - 7200)
+  FRIENDS_ONLINE = 0
+  ns.Comm.RebuildRoster()
+  RUN_TICKERS(20); SENT = {}
+  FRIENDS_ONLINE = 1
+  ns.Comm.RebuildRoster()
+  RUN_TICKERS(20)
+  local req = sentKinds("REQ")
+  check(#req == 1 and math.abs(tonumber(req[1].f.window) - 7200) <= 5, "a friend coming online later is asked what you missed")
+  FRIENDS_ONLINE = 0
+  ns.Comm.RebuildRoster()
+  FRIENDS_ONLINE = 1
+  SENT = {}
+  ns.Comm.RebuildRoster()
+  RUN_TICKERS(20)
+  check(#sentKinds("REQ") == 0, "once per session per friend")
+  ns.Comm.SetAwayFrom(time() - 3 * 86400)
+  FRIENDS_ONLINE = 0
+  ns.Comm.RebuildRoster()
+  FRIENDS_ONLINE = 1
+  SENT = {}
+  ns.Comm.RebuildRoster()
+  RUN_TICKERS(20)
+  req = sentKinds("REQ")
+  check(#req == 1 and tonumber(req[1].f.window) == 86400, "away for days: asks for the last 24 hours")
+  check(ns.Comm.CATCHUP_WINDOW == 86400, "catch-up window is 24 hours")
+  local box = ns.Comm.Outbox()
+  local keep = {}
+  for i, e in ipairs(box) do keep[i] = e end
+  for i = 1, 130 do ns.Comm.Remember("LVL", "ob" .. i, { level = i }) end
+  check(#ns.Comm.Outbox() == 100, "up to 100 of your own events kept for friends: " .. #ns.Comm.Outbox())
+  wipe(box)
+  for i, e in ipairs(keep) do box[i] = e end
+
+  RUN_TIMERS(); RUN_TICKERS(60)
+  check(ns.errors == errs, "no errors in kill lists / catch-up (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.1: relayed catch-up. You're friends with Buddy and Alice. Events Alice allows to be passed
+-- on reach Buddy through you (only if Buddy names her), and Alice's events reach you through Buddy.
+do
+  local errs = ns.errors
+  local F = { { gid = 77, name = "Buddy", tag = "Buddy#1234" }, { gid = 78, name = "Alice Wonder", tag = "Alice#5678" } }
+  local o = { num = BNGetNumFriends, info = C_BattleNet.GetFriendGameAccountInfo, acct = C_BattleNet.GetFriendAccountInfo,
+    byId = C_BattleNet.GetGameAccountInfoByID }
+  BNGetNumFriends = function() return #F, #F end
+  C_BattleNet.GetFriendGameAccountInfo = function(i)
+    local f = F[i]
+    return f and { isOnline = true, clientProgram = "WoW", characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = f.gid }
+  end
+  C_BattleNet.GetFriendAccountInfo = function(i) return { battleTag = F[i] and F[i].tag } end
+  C_BattleNet.GetGameAccountInfoByID = function(id)
+    for _, f in ipairs(F) do
+      if f.gid == id then return { characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = id } end
+    end
+  end
+  local function from(name, gid, kind, fields, id)
+    local p = ns.Comm.Encode({ kind = kind, id = id or ns.NewId(), name = name, class = "PRIEST", level = 40, f = fields })
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", p, "WHISPER", gid)
+  end
+  local function sent(gid, kind)
+    local out = {}
+    for _, s in ipairs(SENT) do
+      if s.route == "bn" and s.target == gid then
+        local m = ns.Comm.Decode(s.payload)
+        if m and m.kind == kind then out[#out + 1] = m end
+      end
+    end
+    return out
+  end
+  local function drain() RUN_TIMERS(); RUN_TICKERS(60) end
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  drain(); SENT = {}
+  local rr = ns.Data.RealRealm()
+  local box = ns.Comm.HeardBox()
+  wipe(box)
+
+  -- what you keep to pass on: only events marked "may be passed on"
+  from("Alice Wonder", 78, "KILL", { victim = "Relay Victim", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood", rl = "1" }, "ak1")
+  from("Alice Wonder", 78, "LVL", { level = 51, rl = "" }, "al1")
+  from("Alice Wonder", 78, "DIE", { zone = "Duskwood", killer = "Relay Killer:ROGUE:60:A Very Long Guild Name Here",
+    conf = "c", assists = "Helper One:MAGE:60:Another Long Guild Name;Helper Two:PRIEST:60:Yet Another Guild Name", rl = "1" }, "ad1")
+  drainToasts()
+  check(#box == 2 and box[1].o == "Alice Wonder" and box[1].k == "KILL", "kept to pass on: the events Alice allows (not the one she doesn't)")
+
+  -- Buddy asks for Alice: he gets her events, passed on by you
+  SENT = {}
+  from("Buddy Pal", 77, "RLQ", { window = 3600, names = "Alice Wonder;Not Asked" }, "rq1")
+  drain()
+  local rly = sent(77, "RLY")
+  local ids = {}
+  for _, m in ipairs(rly) do if m.f.origin == "Alice Wonder" then ids[m.f.oid] = m.f.okind end end
+  check(#rly == 2 and ids.ak1 == "KILL" and ids.ad1 == "DIE", "Buddy asked for Alice: her events go to him (newest first)")
+  local fits = true
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  check(fits, "a big event passed on still fits in one message")
+  SENT = {}
+  from("Buddy Pal", 77, "RLQ", { window = 3600, names = "Alice Wonder" }, "rq2")
+  drain()
+  check(#sent(77, "RLY") == 0, "asked again soon: not sent twice")
+  SENT = {}
+  from("Buddy Pal", 77, "RLQ", { window = 3600, names = "Someone Else" }, "rq3")
+  drain()
+  check(#sent(77, "RLY") == 0, "only friends he names: nothing about anyone else")
+  -- his own events never go back to him
+  from("Buddy Pal", 77, "LVL", { level = 44, rl = "1" }, "bl1")
+  SENT = {}
+  from("Buddy Pal", 77, "RLQ", { window = 3600, names = "Buddy Pal" }, "rq4")
+  drain()
+  check(#sent(77, "RLY") == 0, "his own events aren't sent back to him")
+
+  -- you receive Alice's events passed on by Buddy: applied quietly as from Alice
+  local alice = rr.players["Alice Wonder"]
+  alice.slain = nil
+  local shown = ns.Toast.shown or 0
+  CHAT = {}
+  local feedBefore = #rr.feed
+  local data = table.concat({ "Far Victim", "ROGUE", "52", "", "Stranglethorn Vale", "2" }, "^")
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "MAGE", olevel = 52, okind = "KILL", oid = "ak9", ago = 5400, data = data }, "ry1")
+  drainToasts(); RUN_TIMERS()
+  local e
+  for _, x in ipairs(rr.feed) do if x.foes and x.foes[1] == "Far Victim" then e = x end end -- (in time order)
+  check(#rr.feed == feedBefore + 1 and e and e.who == "Alice Wonder" and math.abs(e.t - (time() - 5400)) <= 5,
+    "passed-on event lands in your Feed as Alice's, at the time it happened")
+  check(alice.slain and alice.slain["Far Victim"].n == 1, "and in her kill list")
+  check((ns.Toast.shown or 0) == shown, "no toast for it")
+  check(#CHAT == 1 and CHAT[1]:find("Alice Wonder", 1, true) ~= nil, "one quiet chat line names Alice")
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "MAGE", olevel = 52, okind = "KILL", oid = "ak9", ago = 5400, data = data }, "ry2")
+  check(#rr.feed == feedBefore + 1, "the same event passed on again (or by another friend) is applied once")
+  local kept = #box
+  check(kept == #ns.Comm.HeardBox(), "a passed-on event is never passed on again (one hop)")
+  -- not your friend, yourself, the relayer itself, too old, or not picked: ignored
+  from("Buddy Pal", 77, "RLY", { origin = "Total Stranger", oclass = "", olevel = "", okind = "LVL", oid = "x1", ago = 60, data = "20" }, "ry3")
+  from("Buddy Pal", 77, "RLY", { origin = ns.me, oclass = "", olevel = "", okind = "LVL", oid = "x2", ago = 60, data = "20" }, "ry4")
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "LVL", oid = "x3", ago = 3 * 86400, data = "20" }, "ry5")
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "HIT", oid = "x4", ago = 60, data = "" }, "ry6")
+  check(rr.players["Total Stranger"] == nil and #rr.feed == feedBefore + 1, "strangers, yourself, too old and other kinds are ignored")
+  FriendsAndFoesDB.group = { ["Buddy#1234"] = true } -- you only want alerts from Buddy
+  ns.Comm.RebuildRoster()
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "LVL", oid = "x5", ago = 60, data = "53" }, "ry7")
+  check(#rr.feed == feedBefore + 1, "your picks still count: Alice not picked, her events not taken")
+  ns.Comm.ClearPicks()
+
+  -- your own events: may be passed on unless you said no, or only share with picks
+  check(ns.Comm.RelayAllowed(), "by default friends may pass on your events")
+  ns.S().share.relay = false
+  check(not ns.Comm.RelayAllowed(), "'Friends may pass on my events' off: not allowed")
+  ns.S().share.relay = true
+  FriendsAndFoesDB.group = { ["Buddy#1234"] = true }
+  check(not ns.Comm.RelayAllowed(), "alerts limited to picked friends: never passed on")
+  FriendsAndFoesDB.group = {}
+
+  -- asking: online friends are asked for your offline friends' events
+  F = { F[1] } -- Alice goes offline
+  ns.Comm.RebuildRoster()
+  drain(); SENT = {}
+  check(ns.Comm.AskRelay(3600) == 1, "one ask")
+  drain()
+  local rlq = sent(77, "RLQ")
+  check(#rlq == 1 and rlq[1].f.names:find("Alice Wonder", 1, true) ~= nil and not rlq[1].f.names:find("Buddy", 1, true)
+    and tonumber(rlq[1].f.window) == 3600, "Buddy is asked about Alice (offline), not about himself")
+
+  BNGetNumFriends, C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetFriendAccountInfo, C_BattleNet.GetGameAccountInfoByID = o.num, o.info, o.acct, o.byId
+  ns.Comm.RebuildRoster()
+  drain()
+  check(ns.errors == errs, "no errors in relayed catch-up (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

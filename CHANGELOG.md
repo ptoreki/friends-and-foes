@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.1
+Compatible with 0.3.x to 0.7.0. Sharing kill lists and passing on events need 0.7.1 on both sides.
+- **Back button** on the Profile page and kill lists ("< Leaderboard", "< Bob Pal", ...): goes back
+  the way you came, as you left it: same scroll position, and on the Leaderboard the same group
+  view. Leaderboard, a profile, their kill list, a victim's profile, then Back, Back, Back.
+  Picking a tab yourself starts over.
+- **Kill lists:** who you and each friend have killed, and how often. Open them with the
+  **Kill list (n)** button on any profile: a sortable list of victims with kills, last kill and
+  zone; click a name for their profile. For an enemy, it lists which of your friends they killed.
+  - Opening a friend's list asks them for their own (top 60 victims) and merges it in, so it
+    includes kills you missed. Counting starts with 0.7.0 (kills in your Feed are added once).
+  - Kills where the victim couldn't be named aren't listed (WoW Forever's honor message has no name).
+- **Catch-up after being offline is better:** friends who come online after you are asked too,
+  and the window is 24 hours and up to 100 events (was 12 hours and 40).
+- **Friends pass on each other's events:** if Bob played while you were offline and you're never
+  online at the same time, a friend who got Bob's events passes them on when you log in.
+  - Only friends you name: your client asks about your own friends who are offline.
+  - Only if Bob allows it: new switch "Friends may pass on my events" (Options → Friends &
+    sharing, on by default), and never while Bob only exchanges alerts with picked friends.
+  - One hop only, last 24 hours, no toasts, and your picks still decide whose events you take.
+    Events passed on show up in the Feed, hitlist and kill lists as Bob's.
+  - Friends on 0.7.0 or older don't mark their events, so theirs aren't passed on.
+- The license is in the add-on folder once instead of twice.
+- Release workflow updated to the current GitHub Actions (Node 24).
+
 ## 0.7.0
 Compatible with 0.3.x to 0.6.3. Friends on older versions just don't send profiles yet.
 - **Leaderboard tab:** world PvP kills, deaths and K/D for you and your friends, all-time, most

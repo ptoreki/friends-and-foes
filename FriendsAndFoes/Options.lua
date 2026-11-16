@@ -21,6 +21,7 @@ Options.SHARE = {
   { "level", L.OPT_LEVEL, L.TIP_SHARE_KIND }, { "loot", L.OPT_LOOT, L.TIP_SHARE_KIND },
   { "gear", L.OPT_GEAR, L.TIP_SHARE_KIND }, { "pvp", L.OPT_PVP, L.TIP_SHARE_PVP },
   { "where", L.OPT_SHARE_WHERE, L.TIP_SHARE_WHERE },
+  { "relay", L.OPT_SHARE_RELAY, L.TIP_SHARE_RELAY },
 }
 
 local function S() return ns.S() end
