@@ -2,7 +2,7 @@ local _, ns = ...
 local L = ns.L
 
 -- The main window: a plain, native-looking reference you open now and then.
--- Three tabs (Hitlist, Players, Feed); settings live in the game's Options panel.
+-- Tabs: Hitlist, Leaderboard, Enemies, Friends, Feed, Profile; settings live in the game's Options panel.
 local UI = {}
 ns.UI = UI
 
@@ -10,10 +10,12 @@ local WIDTH, HEIGHT = 700, 470
 local ROWS, ROW_H = 15, 20
 local MAX_COLS = 7
 
-local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, filterBar, prevPage, nextPage
+local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, prevPage, nextPage
+local groupBar -- Leaderboard: board picker + group buttons
+local profile -- the Profile tab's panel
+local profileName -- whose profile it shows
 local tabButtons = {}
 local currentTab = "hitlist"
-local playerFilter = "enemies" -- Players tab: "enemies" | "friends"
 local search = "" -- search box text (lowercase); filters the current list
 local searchBox
 local offset = 0
@@ -159,15 +161,57 @@ local function fetchFriends()
   return list
 end
 
+-- Leaderboard: ~ marks numbers you counted from a friend's alerts (they don't report their own yet)
+-- (group boards: "?" for a member whose numbers haven't reached you yet, "-" for an invite)
+local function est(r, v)
+  if r.invited then return "|cff888888-|r" end
+  if r.unknown then return "|cff888888?|r" end
+  if r.estimated then return "|cff888888~" .. tostring(v) .. "|r" end
+  return tostring(v)
+end
+local function kdText(k, d, kd) return d > 0 and string.format("%.2f", kd) or tostring(k) end
+
+local GREEN = "|cff33ff33"
+local GREY = "|cff888888"
+local function boardNow(r)
+  if r.me then return GREEN .. L.FRIEND_ONLINE .. "|r" end
+  if r.invited then return GREY .. L.GROUP_ROW_INVITED .. "|r" end
+  local now = r.rec and r.rec.friend and ns.Profile.NowText(r.rec)
+  if now then return GREEN .. now .. "|r" end
+  -- a member you're not friends with: how old their numbers are, and who passed them on
+  if r.via then return GREY .. L.GROUP_ROW_VIA:format(ns.Ago(r.at), r.via) .. "|r" end
+  if r.unknown then return GREY .. L.GROUP_ROW_UNKNOWN .. "|r" end
+  return GREY .. ns.Ago(r.lastSeen) .. "|r"
+end
+
+local boardView = "friends" -- Leaderboard: "friends" or a shared group's id
+
+local BOARD_COLS = {
+  { L.COL_RANK, 34, function(r) return r.rank and tostring(r.rank) or "" end, function(r) return -(r.rank or 999) end },
+  { L.COL_NAME, 200, function(r)
+    return nameCol(r) .. (r.me and ("  |cff888888" .. L.YOU .. "|r") or "") .. (r.leader and ("  |cffffd100" .. L.GROUP_LEADER_TAG .. "|r") or "")
+  end, byName },
+  { L.COL_KILLS, 70, function(r) return est(r, r.k) end, function(r) return r.k end },
+  { L.COL_DEATHS, 70, function(r) return est(r, r.d) end, function(r) return r.d end },
+  { L.COL_KD, 60, function(r) return est(r, kdText(r.k, r.d, r.kd)) end, function(r) return r.kd end },
+  { L.COL_NOW, 236, boardNow, function(r) return r.me and math.huge or (r.lastSeen or 0) end },
+}
+
 local TABS = {
   { key = "hitlist", label = L.TAB_HITLIST, columns = HITLIST_COLS,
     fetch = function() return sortedValues(R().hitlist) end },
-  { key = "players", label = L.TAB_PLAYERS,
-    columns = function() return playerFilter == "friends" and FRIEND_COLS or ENEMY_COLS end,
+  { key = "board", label = L.TAB_BOARD, columns = BOARD_COLS, defaultSort = { col = 3, desc = true },
     fetch = function()
-      if playerFilter == "friends" then return fetchFriends() end
-      return sortedValues(R().players, function(p) return p.enemy end)
+      local g = boardView ~= "friends" and ns.Groups.Get(boardView)
+      if not g or ns.Groups.MyState(g) == "out" or ns.viewSim then
+        boardView = "friends"
+        return ns.Profile.Board()
+      end
+      return ns.Profile.Board(g.id)
     end },
+  { key = "enemies", label = L.TAB_ENEMIES, columns = ENEMY_COLS,
+    fetch = function() return sortedValues(R().players, function(p) return p.enemy end) end },
+  { key = "friends", label = L.TAB_FRIENDS, columns = FRIEND_COLS, fetch = fetchFriends },
   { key = "feed", label = L.TAB_FEED,
     columns = {
       { L.COL_TIME, 80, function(e) return ns.Ago(e.t) end },
@@ -178,6 +222,7 @@ local TABS = {
       for i = #feed, 1, -1 do out[#out + 1] = feed[i] end
       return out
     end },
+  { key = "profile", label = L.TAB_PROFILE, columns = {}, fetch = function() return {} end },
 }
 
 local function tabDef(key)
@@ -190,15 +235,18 @@ local function colsOf(def)
   return def.columns
 end
 
-local function friendsView() return currentTab == "players" and playerFilter == "friends" end
+local function friendsView() return currentTab == "friends" end
+local function playersView() return currentTab == "enemies" or currentTab == "friends" end
 
--- sorting: per view, by column; newest first by default
+-- sorting: per tab, by column; newest first by default
 local sortState = {}
-local function viewKey() return currentTab == "players" and ("players_" .. playerFilter) or currentTab end
+local function viewKey() return currentTab end
 local function sortOf(cols)
   local st = sortState[viewKey()]
   if not st then
-    st = { col = #cols, desc = true } -- last column (last seen / time) newest first
+    local default = tabDef(currentTab).defaultSort
+    st = default and { col = default.col, desc = default.desc }
+      or { col = #cols, desc = true } -- last column (last seen / time) newest first
     sortState[viewKey()] = st
   end
   return st
@@ -253,6 +301,10 @@ end
 
 -- the rows currently listed (sorted), for tests
 function UI.Rows() return data end
+
+-- for tests: a tab's columns, and the width the list has for them
+function UI.TabColumns(key) return colsOf(tabDef(key)) end
+UI.LIST_WIDTH = WIDTH - 28 -- the list area is inset 14 on each side
 
 function UI.SortBy(col)
   local st = sortState[viewKey()] or {}
@@ -334,6 +386,304 @@ local function refreshDetail()
   end
 end
 
+---------------------------------------------------------------------------
+-- profile page
+---------------------------------------------------------------------------
+local PROFILE_LINES, RECENT_LINES = 9, 10
+local PROFILE_TOP = -50 -- where the facts and recent PvP start, below the name lines
+local DASH = "|cff888888-|r"
+
+local function className(class)
+  if not class then return "" end
+  local names = LOCALIZED_CLASS_NAMES_MALE
+  return (names and names[class]) or (class:sub(1, 1) .. class:sub(2):lower())
+end
+
+local function nameOr(name) return name and ns.ClassColored(name) or DASH end
+
+-- What the Profile tab shows for a name: { kind, title, sub, lines = { {label, value} },
+-- recent = { feed entries } }, or nil if we know nothing about them.
+function UI.ProfileView(name)
+  local kind = ns.Profile.KindOf(name)
+  if not kind then return nil end
+  local players, hitlist = R().players, R().hitlist
+  local rec = players[ns.Data.Resolve(players, name)]
+  local view = { kind = kind, lines = {} }
+  local function line(label, value) view.lines[#view.lines + 1] = { label, value } end
+
+  if kind == "enemy" then
+    local h = hitlist[ns.Data.Resolve(hitlist, name)]
+    local e = rec or h
+    view.title = classIcon(e.class) .. ns.ClassColored(e.name, e.class)
+    view.sub = L.PROF_ENEMY .. "  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(e), className(e.class)) .. (e.guild and ("  <" .. e.guild .. ">") or "")
+    line(L.PROF_KILLS_ON_US, C(rec and rec.k))
+    line(L.PROF_DIED_TO_US, C(rec and rec.d))
+    line(L.PROF_ATTACKS, math.max(C(rec and rec.atk), C(h and h.attacks)))
+    local victims = h and victimsText(h) or ""
+    line(L.PROF_KILLED, victims ~= "" and victims or DASH)
+    line(L.PROF_REVENGE, C(h and h.revenge))
+    line(L.PROF_HITLIST, h and L.PROF_ON_HITLIST or L.PROF_NOT_ON_HITLIST)
+    local by = {}
+    for _, n in ipairs(ns.Profile.WantedBy(e.name)) do by[#by + 1] = ns.ClassColored(n) end
+    line(L.PROF_WANTED_BY, #by > 0 and ns.JoinNames(by) or DASH)
+    line(L.PROF_LAST_SEEN, lastText(e))
+    view.note = h and h.note
+    view.onHitlist = h ~= nil
+    view.recent = ns.Profile.Recent(e.name, true, RECENT_LINES)
+    return view
+  end
+
+  -- you or a friend
+  local isMe = kind == "me" and name == ns.me
+  local _, myClass = UnitClass("player")
+  local p = rec or { name = name, class = isMe and myClass or nil, level = isMe and UnitLevel("player") or nil, k = 0, d = 0 }
+  view.title = classIcon(p.class) .. ns.ClassColored(p.name, p.class) .. (isMe and ("  |cff888888" .. L.YOU .. "|r") or "")
+  view.sub = L.PROF_FRIEND .. "  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(p), className(p.class))
+
+  local board, row = ns.Profile.Board(), nil
+  for _, r in ipairs(board) do if r.name == p.name then row = r end end
+  local k = row and row.k or (p.sk or C(p.k))
+  local d = row and row.d or (p.sd or C(p.d))
+  local estimated = row and row.estimated or (not isMe and p.sk == nil)
+  local function mark(v) return estimated and ("|cff888888~|r" .. v) or tostring(v) end
+  line(L.PROF_KILLS, mark(k))
+  line(L.PROF_DEATHS, mark(d))
+  line(L.PROF_KD, mark(kdText(k, d, ns.Profile.KD(k, d))))
+  line(L.PROF_RANK, row and L.PROF_RANK_OF:format(row.rank, #board) or DASH)
+  local nem, times = ns.Profile.Nemesis(p.name)
+  line(L.PROF_NEMESIS, nem and L.PROF_NEMESIS_TEXT:format(ns.ClassColored(nem.name, nem.class), times) or DASH)
+  line(L.PROF_WANTED, nameOr(isMe and ns.Profile.Wanted() or p.wanted))
+  if isMe then
+    local zone = GetRealZoneText and GetRealZoneText()
+    if ns.issecret(zone) then zone = nil end
+    local parts = { L.FRIEND_ONLINE, zone }
+    local status = ns.Profile.MyStatus()
+    if status == "afk" then parts[#parts + 1] = L.STATUS_AFK elseif status == "pvp" then parts[#parts + 1] = L.STATUS_FIGHT end
+    line(L.PROF_NOW, GREEN .. table.concat(parts, " \194\183 ") .. "|r")
+    line(L.PROF_ADDON, ns.VERSION)
+  else
+    local now = ns.Profile.NowText(p)
+    if now then
+      line(L.PROF_NOW, GREEN .. now .. "|r")
+    else
+      line(L.PROF_LAST_SEEN, ns.Ago(p.lastSeen) .. (p.zone and (" - " .. p.zone) or ""))
+    end
+    local v = p.version
+    if not v then line(L.PROF_ADDON, DASH)
+    elseif ns.VersionNewer(v, ns.VERSION) then line(L.PROF_ADDON, "|cffffd100" .. L.PROF_NEWER:format(v) .. "|r")
+    elseif ns.VersionNewer(ns.VERSION, v) then line(L.PROF_ADDON, "|cffff7f3f" .. L.PROF_OUTDATED:format(v) .. "|r")
+    else line(L.PROF_ADDON, v) end
+  end
+  view.estimated = estimated
+  view.isMe = isMe
+  view.recent = ns.Profile.Recent(p.name, false, RECENT_LINES)
+  return view
+end
+
+local function renderProfile()
+  local v = profileName and UI.ProfileView(profileName)
+  profile.empty:SetShown(v == nil)
+  profile.title:SetText(v and v.title or "")
+  profile.sub:SetText(v and v.sub or "")
+  for i = 1, PROFILE_LINES do
+    local l = v and v.lines[i]
+    profile.labels[i]:SetText(l and l[1] or "")
+    profile.values[i]:SetText(l and tostring(l[2]) or "")
+  end
+  profile.recentHeader:SetText(v and L.PROF_RECENT or "")
+  local recent = v and v.recent or {}
+  for i = 1, RECENT_LINES do
+    local e = recent[i]
+    profile.recent[i]:SetText(e and ("|cff888888" .. ns.Ago(e.t) .. "|r  " .. e.text) or "")
+  end
+  if v and #recent == 0 then profile.recent[1]:SetText("|cff888888" .. L.PROF_RECENT_NONE .. "|r") end
+  profile.footnote:SetText(v and v.estimated and ("|cff888888" .. L.PROF_ESTIMATED .. "|r") or "")
+
+  -- controls: you = clear most wanted; friend = pick; enemy = note (on your hitlist) + most wanted
+  local c = profile.controls
+  c:SetShown(v ~= nil)
+  if not v then return end
+  local editable = v.kind == "enemy" and v.onHitlist
+  c.editLabel:SetShown(editable)
+  c.edit:SetShown(editable)
+  c.save:SetShown(editable)
+  if editable and not c.edit:HasFocus() then c.edit:SetText(v.note or "") end
+  local action = c.action
+  action:Show()
+  action:Enable()
+  if v.isMe then
+    UI.SetButtonText(action, L.BTN_WANTED_CLEAR)
+    action:SetEnabled(ns.Profile.Wanted() ~= nil)
+  elseif v.kind == "enemy" then
+    local isWanted = ns.Profile.Wanted() == profileName
+    UI.SetButtonText(action, isWanted and L.BTN_WANTED_CLEAR or L.BTN_WANTED_SET)
+  else
+    local tag = ns.Comm.TagFor(profileName)
+    UI.SetButtonText(action, ns.Comm.IsPicked(tag) and L.BTN_PICK_OFF or L.BTN_PICK_ON)
+    action:SetEnabled(tag ~= nil and not ns.viewSim and profileName ~= ns.me)
+  end
+end
+
+function UI.ProfileAction()
+  local kind = ns.Profile.KindOf(profileName)
+  if not kind then return end
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+  if kind == "me" or (kind == "enemy" and ns.Profile.Wanted() == profileName) then
+    ns.Profile.SetWanted(nil)
+    print(prefix .. L.WANTED_CLEARED)
+  elseif kind == "enemy" then
+    print(prefix .. L.WANTED_SET:format(ns.Profile.SetWanted(profileName)))
+  else
+    UI.TogglePick(profileName)
+    return
+  end
+  UI.Refresh()
+end
+
+-- Save on the profile page: the note on an enemy on your hitlist (it never leaves your computer)
+function UI.ProfileSave(text)
+  local kind = ns.Profile.KindOf(profileName)
+  if kind == "enemy" then
+    local h = R().hitlist[ns.Data.Resolve(R().hitlist, profileName)]
+    if h then h.note = (text and text ~= "") and text or nil end
+  end
+  UI.Refresh()
+end
+
+---------------------------------------------------------------------------
+-- shared groups on the Leaderboard
+---------------------------------------------------------------------------
+local function currentGroup()
+  local g = boardView ~= "friends" and ns.Groups.Get(boardView)
+  if g and ns.Groups.MyState(g) ~= "out" then return g end
+end
+
+local function refreshGroupBar()
+  local show = currentTab == "board" and not ns.viewSim
+  groupBar:SetShown(show)
+  if not show then return end
+  if not currentGroup() then boardView = "friends" end
+  groupBar.dropdown.refresh()
+  local g = currentGroup()
+  local st = g and ns.Groups.MyState(g)
+  groupBar.new:SetShown(not g)
+  groupBar.invite:SetShown(st == "in")
+  groupBar.leave:SetShown(st == "in")
+  groupBar.join:SetShown(st == "invited")
+  groupBar.decline:SetShown(st == "invited")
+end
+
+-- the line under a group board: "Gank Squad: 4 members · 54 takedowns, 20 deaths (K/D 2.70)"
+local function groupHint(g)
+  local k, d, n, known = ns.Groups.Totals(g)
+  local line = L.GROUP_TOTALS:format(ns.Groups.Label(g), n, k, d, kdText(k, d, ns.Profile.KD(k, d)))
+  if known < n then line = line .. " " .. L.GROUP_TOTALS_PARTIAL:format(n - known) end
+  local leading = ns.Groups.Leader(g) == ns.Groups.MyKey()
+  return line .. "  " .. (leading and L.GROUP_HINT_LEADER or L.GROUP_HINT)
+end
+
+local function say(text) print("|cff33ff99" .. L.ADDON .. "|r " .. text) end
+local function why(reason) say(L[reason] or tostring(reason)) end
+
+function UI.SetBoardView(v)
+  boardView = v or "friends"
+  offset = 0
+  UI.Refresh()
+end
+function UI.BoardView() return boardView end
+
+-- a one-line text prompt (the game's pop-up with an edit box); nothing happens without one
+local PROMPT = "FRIENDSANDFOES_PROMPT"
+function UI.Prompt(text, onAccept)
+  if not (StaticPopupDialogs and StaticPopup_Show) then return end
+  StaticPopupDialogs[PROMPT] = StaticPopupDialogs[PROMPT] or {
+    text = "%s", button1 = ACCEPT or "Accept", button2 = CANCEL or "Cancel",
+    hasEditBox = true, maxLetters = 24, enterClicksFirstButton = true,
+    OnAccept = function(self, data)
+      local eb = self.editBox or self.EditBox or (self.GetEditBox and self:GetEditBox())
+      local d = data or self.data
+      if eb and d and d.fn then ns.Try("prompt", d.fn, eb:GetText()) end
+    end,
+    EditBoxOnEnterPressed = function(self)
+      local parent = self:GetParent()
+      local d = parent and parent.data
+      if d and d.fn then ns.Try("prompt", d.fn, self:GetText()) end
+      if parent then parent:Hide() end
+    end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+  }
+  StaticPopup_Show(PROMPT, text, nil, { fn = onAccept })
+end
+
+function UI.CreateGroup(name)
+  local g, reason = ns.Groups.Create(name)
+  if not g then return why(reason) end
+  say(L.GROUP_CREATED:format(ns.Groups.Label(g)))
+  UI.SetBoardView(g.id)
+  return g
+end
+
+function UI.NewGroup() UI.Prompt(L.GROUP_NEW_PROMPT, UI.CreateGroup) end
+
+function UI.InviteToGroup(name)
+  local g = currentGroup()
+  local who, reason = ns.Groups.Invite(g, name)
+  if not who then return why(reason) end
+  say(L.GROUP_INVITE_SENT:format(who, ns.Groups.Label(g)))
+  UI.Refresh()
+  return who
+end
+
+-- Invite: a menu of your friends who aren't in the group yet
+function UI.GroupInviteMenu(owner)
+  local g = currentGroup()
+  if not g then return end
+  local names = ns.Groups.Invitable(g)
+  if #names == 0 then return say(L.GROUP_NOBODY_TO_INVITE) end
+  if not (MenuUtil and MenuUtil.CreateContextMenu) then return say(L.GROUPS_USAGE) end
+  MenuUtil.CreateContextMenu(owner, function(_, root)
+    root:CreateTitle(L.GROUP_INVITE_TITLE:format(ns.Groups.Label(g)))
+    for _, name in ipairs(names) do
+      root:CreateButton(ns.ClassColored(name), function() UI.InviteToGroup(name) end)
+    end
+  end)
+end
+
+function UI.JoinGroup()
+  local g = currentGroup()
+  local ok, reason = ns.Groups.Join(g)
+  if not ok then return why(reason) end
+  say(L.GROUP_JOINED:format(ns.Groups.Label(g)))
+  UI.Refresh()
+end
+
+-- leave a group, or decline an invite (no question asked for that)
+function UI.LeaveGroup(decline)
+  local g = currentGroup()
+  if not g then return end
+  local function go()
+    local ok, reason = ns.Groups.Leave(g)
+    if not ok then return why(reason) end
+    say((decline and L.GROUP_DECLINED or L.GROUP_LEFT):format(ns.Groups.Label(g)))
+    UI.SetBoardView("friends")
+  end
+  if decline then return go() end
+  UI.Confirm(L.CONFIRM_LEAVE_GROUP:format(ns.Groups.Label(g)), go)
+end
+
+-- right-click a member on a group board: the leader removes them; on yourself, leave
+function UI.RemoveFromGroup(key, name)
+  local g = currentGroup()
+  if not g then return end
+  if key == ns.Groups.MyKey() then return UI.LeaveGroup() end
+  if ns.Groups.Leader(g) ~= ns.Groups.MyKey() then return why("GROUP_NOT_LEADER") end
+  UI.Confirm(L.CONFIRM_REMOVE_MEMBER:format(name or "?", ns.Groups.Label(g)), function()
+    local ok, reason = ns.Groups.Remove(g, key)
+    if not ok then return why(reason) end
+    UI.Refresh()
+  end)
+end
+
 local function selectTabButton(b, on)
   if PanelTemplates_SelectTab and b.isPanelTab then
     pcall(on and PanelTemplates_SelectTab or PanelTemplates_DeselectTab, b)
@@ -350,8 +700,23 @@ function UI.Refresh()
   currentTab = def.key
   for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == currentTab) end
   simBanner:SetShown(ns.viewSim and true or false)
-  filterBar:SetShown(currentTab == "players")
-  filterBar.dropdown.refresh()
+  refreshGroupBar()
+
+  local isProfile = currentTab == "profile"
+  rowsFrame:SetShown(not isProfile)
+  profile:SetShown(isProfile)
+  searchBox:SetShown(not isProfile)
+  if isProfile then
+    data = {}
+    pageText:SetText("")
+    prevPage:Hide()
+    nextPage:Hide()
+    detail:Hide()
+    friendsHint:Hide()
+    renderProfile()
+    return
+  end
+  friendsHint:Show()
 
   local cols = colsOf(def)
   data = def.fetch()
@@ -399,8 +764,11 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(currentTab == "players")
-  if friendsView() and not ns.viewSim then
+  friendsHint:SetShown(playersView() or currentTab == "board")
+  if currentTab == "board" then
+    local g = currentGroup()
+    friendsHint:SetText(g and groupHint(g) or L.BOARD_HINT)
+  elseif friendsView() and not ns.viewSim then
     friendsHint:SetText((ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL) .. "  " .. L.REMOVE_HINT)
   else
     friendsHint:SetText(L.REMOVE_HINT)
@@ -418,16 +786,14 @@ function UI.OnDataChanged()
 end
 
 function UI.SelectTab(key)
+  if key == "players" then key = "enemies" end -- 0.6 had one Players tab
   currentTab = tabDef(key).key
   offset = 0
   UI.Refresh()
 end
 
-function UI.SetPlayerFilter(which)
-  playerFilter = which == "friends" and "friends" or "enemies"
-  offset = 0
-  UI.Refresh()
-end
+-- 0.6 name: the Enemies/Friends dropdown is two tabs now
+function UI.SetPlayerFilter(which) UI.SelectTab(which == "friends" and "friends" or "enemies") end
 
 function UI.OpenSettings() ns.Options.Open() end
 
@@ -488,12 +854,14 @@ end
 
 -- A dropdown: the game's modern dropdown when available, else a  < value >  stepper.
 -- items = { { value, label }, ... }
-function UI.Dropdown(parent, width, items, get, set)
+function UI.Dropdown(parent, width, itemsOrFn, get, set)
+  -- itemsOrFn: the list, or a function returning it (for lists that change)
+  local function list() return type(itemsOrFn) == "function" and itemsOrFn() or itemsOrFn end
   local ok, dd = pcall(CreateFrame, "DropdownButton", nil, parent, "WowStyle1DropdownTemplate")
   if ok and dd and dd.SetupMenu then
     dd:SetWidth(width)
     dd:SetupMenu(function(_, root)
-      for _, it in ipairs(items) do
+      for _, it in ipairs(list()) do
         root:CreateRadio(it[2], function() return get() == it[1] end, function() set(it[1]) end, it[1])
       end
     end)
@@ -505,6 +873,8 @@ function UI.Dropdown(parent, width, items, get, set)
   local label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   label:SetPoint("CENTER")
   local function step(d)
+    local items = list()
+    if #items == 0 then return end
     local idx = 1
     for i, it in ipairs(items) do if it[1] == get() then idx = i end end
     set(items[(idx - 1 + d) % #items + 1][1])
@@ -519,7 +889,7 @@ function UI.Dropdown(parent, width, items, get, set)
     b:SetScript("OnClick", function() step(d) end)
   end
   f.refresh = function()
-    for _, it in ipairs(items) do if it[1] == get() then label:SetText(it[2]) end end
+    for _, it in ipairs(list()) do if it[1] == get() then label:SetText(it[2]) end end
   end
   return f
 end
@@ -528,14 +898,22 @@ UI.RefreshSettings = function() if ns.Options then ns.Options.Refresh() end end
 ---------------------------------------------------------------------------
 -- window
 ---------------------------------------------------------------------------
--- w is the minimum width: a button always grows to fit its label
-local function button(parent, w, text, onClick)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+-- a button's label, with the button resized to fit it (never below its minimum width).
+-- Use this, not SetText, whenever a button's label changes after it was made.
+function UI.SetButtonText(b, text)
   b:SetText(text)
+  local w = b.minWidth or 0
   local fs = b.GetFontString and b:GetFontString()
   local tw = fs and fs.GetStringWidth and fs:GetStringWidth()
   if type(tw) == "number" then w = math.max(w, math.ceil(tw) + 24) end
   b:SetSize(w, 22)
+end
+
+-- w is the minimum width: a button always grows to fit its label
+local function button(parent, w, text, onClick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b.minWidth = w
+  UI.SetButtonText(b, text)
   b:SetScript("OnClick", onClick)
   return b
 end
@@ -600,7 +978,7 @@ local function build()
   win:Hide()
   tinsert(UISpecialFrames, "FriendsAndFoesFrame")
 
-  -- top row: Players filter (left), Options (right)
+  -- top row: search and Options (right)
   local options = button(win, 80, L.BTN_OPTIONS, function() UI.OpenSettings() end)
   options:SetPoint("TOPRIGHT", -14, -30)
 
@@ -625,16 +1003,34 @@ local function build()
   box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   searchBox = box
 
-  filterBar = CreateFrame("Frame", nil, win)
-  filterBar:SetSize(220, 24)
-  filterBar:SetPoint("TOPLEFT", 16, -30)
-  local showLabel = filterBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  showLabel:SetPoint("LEFT")
-  showLabel:SetText(L.FILTER_SHOW)
-  filterBar.dropdown = UI.Dropdown(filterBar, 140,
-    { { "enemies", L.FILTER_ENEMIES }, { "friends", L.FILTER_FRIENDS } },
-    function() return playerFilter end, function(v) UI.SetPlayerFilter(v) end)
-  filterBar.dropdown:SetPoint("LEFT", showLabel, "RIGHT", 8, 0)
+  -- Leaderboard: which board (your friends or a shared group) and what you can do with it
+  groupBar = CreateFrame("Frame", nil, win)
+  groupBar:SetSize(420, 24)
+  groupBar:SetPoint("TOPLEFT", 16, -30)
+  groupBar.dropdown = UI.Dropdown(groupBar, 170, function()
+    local items = { { "friends", L.BOARD_FRIENDS } }
+    local mine, count = ns.Groups.Mine(), {}
+    for _, g in ipairs(mine) do count[ns.Groups.Label(g):lower()] = (count[ns.Groups.Label(g):lower()] or 0) + 1 end
+    for _, g in ipairs(mine) do
+      local invited = ns.Groups.MyState(g) == "invited"
+      -- two groups with the same name (different creators): say whose is whose
+      local label = ns.Groups.Label(g) .. (count[ns.Groups.Label(g):lower()] > 1 and (" (" .. ns.FirstName(g.owner) .. ")") or "")
+      items[#items + 1] = { g.id, label .. (invited and ("  " .. L.GROUP_INVITED_TAG) or "") }
+    end
+    return items
+  end, function() return boardView end, function(v) UI.SetBoardView(v) end)
+  groupBar.dropdown:SetPoint("LEFT", 0, 0)
+  groupBar.new = button(groupBar, 90, L.BTN_GROUP_NEW, function() UI.NewGroup() end)
+  groupBar.new:SetPoint("LEFT", groupBar.dropdown, "RIGHT", 8, 0)
+  groupBar.invite = button(groupBar, 80, L.BTN_GROUP_INVITE, function(self) UI.GroupInviteMenu(self) end)
+  groupBar.invite:SetPoint("LEFT", groupBar.dropdown, "RIGHT", 8, 0)
+  groupBar.leave = button(groupBar, 70, L.BTN_GROUP_LEAVE, function() UI.LeaveGroup() end)
+  groupBar.leave:SetPoint("LEFT", groupBar.invite, "RIGHT", 4, 0)
+  groupBar.join = button(groupBar, 70, L.BTN_GROUP_JOIN, function() UI.JoinGroup() end)
+  groupBar.join:SetPoint("LEFT", groupBar.dropdown, "RIGHT", 8, 0)
+  groupBar.decline = button(groupBar, 70, L.BTN_GROUP_DECLINE, function() UI.LeaveGroup(true) end)
+  groupBar.decline:SetPoint("LEFT", groupBar.join, "RIGHT", 4, 0)
+  groupBar:Hide()
 
   -- simulation banner
   simBanner = CreateFrame("Frame", nil, win)
@@ -745,17 +1141,25 @@ local function build()
       if mouse == "RightButton" then
         if e and not e.pending and currentTab == "hitlist" then
           UI.RemoveFromHitlist(e.name)
-        elseif e and not e.pending and currentTab == "players" then
+        elseif e and not e.pending and playersView() then
           UI.RemovePlayer(e.name)
+        elseif e and currentTab == "board" and currentGroup() then
+          UI.RemoveFromGroup(e.key, e.name)
         end
         return
       end
-      if currentTab == "hitlist" and self.entry then
-        selected = self.entry.name
+      if currentTab == "hitlist" and e then
+        selected = e.name
         UI.Refresh()
-      elseif friendsView() and self.entry and not ns.viewSim then
-        UI.TogglePick(self.entry.name)
+      elseif friendsView() and e and e.pending and not ns.viewSim then
+        UI.TogglePick(e.name) -- online but never heard from: no profile yet, but pickable
+      elseif (currentTab == "board" or playersView()) and e and e.name and ns.Profile.KindOf(e.name) then
+        UI.ShowProfile(e.name) -- (a group member you've never heard from directly has no profile)
       end
+    end)
+    -- hitlist: a click selects (for the note), a double-click opens the profile
+    row:SetScript("OnDoubleClick", function(self)
+      if currentTab == "hitlist" and self.entry and self.entry.name then UI.ShowProfile(self.entry.name) end
     end)
     rows[i] = row
   end
@@ -791,6 +1195,8 @@ local function build()
   friendsHint:SetPoint("BOTTOMLEFT", 18, 40)
   friendsHint:SetPoint("BOTTOMRIGHT", -18, 40)
   friendsHint:SetJustifyH("LEFT")
+  -- two lines at most, so it never reaches the list above it
+  if friendsHint.SetMaxLines then friendsHint:SetMaxLines(2) end
 
   -- hitlist detail (note / remove / share)
   detail = CreateFrame("Frame", nil, win)
@@ -835,6 +1241,77 @@ local function build()
   detail.note:SetPoint("RIGHT", detail.save, "LEFT", -10, 0)
   detail.note:SetScript("OnEnterPressed", saveNote)
   detail.note:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+  -- Profile tab: name on top, facts on the left, recent PvP on the right, controls below
+  profile = CreateFrame("Frame", nil, win)
+  profile:SetPoint("TOPLEFT", 20, -62) -- below the top row (search, Options)
+  profile:SetPoint("BOTTOMRIGHT", -18, 28)
+  profile:Hide()
+  local function text(font, wrap)
+    local fs = profile:CreateFontString(nil, "OVERLAY", font)
+    fs:SetJustifyH("LEFT")
+    fs:SetWordWrap(wrap and true or false)
+    return fs
+  end
+  profile.title = text("GameFontNormalLarge")
+  profile.title:SetPoint("TOPLEFT", 0, 0)
+  profile.title:SetWidth(640)
+  profile.sub = text("GameFontHighlightSmall")
+  profile.sub:SetPoint("TOPLEFT", profile.title, "BOTTOMLEFT", 0, -4)
+  profile.sub:SetWidth(640)
+  profile.labels, profile.values = {}, {}
+  for i = 1, PROFILE_LINES do
+    local y = PROFILE_TOP - (i - 1) * 19
+    local label = text("GameFontNormalSmall")
+    label:SetPoint("TOPLEFT", 0, y)
+    label:SetWidth(100)
+    local value = text("GameFontHighlightSmall")
+    value:SetPoint("TOPLEFT", 104, y)
+    value:SetWidth(220)
+    profile.labels[i], profile.values[i] = label, value
+  end
+  profile.recentHeader = text("GameFontNormalSmall")
+  profile.recentHeader:SetPoint("TOPLEFT", 340, PROFILE_TOP)
+  profile.recent = {}
+  for i = 1, RECENT_LINES do
+    local fs = text("GameFontHighlightSmall")
+    fs:SetPoint("TOPLEFT", 340, PROFILE_TOP - i * 19)
+    fs:SetWidth(320)
+    profile.recent[i] = fs
+  end
+  profile.footnote = text("GameFontDisableSmall")
+  profile.footnote:SetPoint("TOPLEFT", 0, PROFILE_TOP - PROFILE_LINES * 19 - 6)
+  profile.footnote:SetWidth(320)
+  profile.footnote:SetWordWrap(true)
+  profile.empty = profile:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+  profile.empty:SetPoint("CENTER")
+  profile.empty:SetWidth(500)
+  profile.empty:SetText(L.PROFILE_EMPTY)
+
+  local c = CreateFrame("Frame", nil, profile)
+  c:SetPoint("BOTTOMLEFT", 0, 0)
+  c:SetPoint("BOTTOMRIGHT", 0, 0)
+  c:SetHeight(24)
+  c.action = button(c, 130, L.BTN_WANTED_SET, function() UI.ProfileAction() end)
+  c.action:SetPoint("BOTTOMRIGHT", 0, 0)
+  c.editLabel = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  c.editLabel:SetPoint("BOTTOMLEFT", 0, 4)
+  c.editLabel:SetText(L.NOTE)
+  c.edit = CreateFrame("EditBox", nil, c, "InputBoxTemplate")
+  c.edit:SetHeight(20)
+  c.edit:SetPoint("LEFT", c.editLabel, "RIGHT", 10, 0)
+  c.edit:SetAutoFocus(false)
+  c.edit:SetMaxLetters(200)
+  local function saveEdit()
+    c.edit:ClearFocus()
+    UI.ProfileSave(c.edit:GetText())
+  end
+  c.save = button(c, 60, L.SAVE, saveEdit)
+  c.save:SetPoint("RIGHT", c.action, "LEFT", -16, 0)
+  c.edit:SetPoint("RIGHT", c.save, "LEFT", -10, 0)
+  c.edit:SetScript("OnEnterPressed", saveEdit)
+  c.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  profile.controls = c
 
   -- keep the share queue counter live while the window is open
   C_Timer.NewTicker(1, function()
@@ -896,12 +1373,11 @@ local function groupCommand(arg)
   print("  " .. L.PICK_USAGE)
 end
 
--- tab: "hitlist" | "players" | "feed"; the old names "enemies"/"friends" pick the Players filter
+-- tab: "hitlist" | "board" | "enemies" | "friends" | "feed" | "profile" ("players" = enemies, as in 0.6)
 function UI.Show(tab)
   if not win then build() end
-  if tab == "enemies" or tab == "friends" then
-    playerFilter = tab
-    tab = "players"
+  if tab == "players" then
+    tab = "enemies"
   elseif tab == "settings" then
     UI.OpenSettings()
     return
@@ -918,7 +1394,20 @@ function UI.Toggle()
   if win and win:IsShown() then win:Hide() else UI.Show() end
 end
 
+function UI.ShowProfile(name)
+  -- "Rogz" -> "Rogz Fang" when that's the only one, so the page and its buttons use one key
+  local key = ns.Data.Resolve(R().players, name)
+  if not R().players[key] then key = ns.Data.Resolve(R().hitlist, name) end
+  profileName = key
+  UI.Show("profile")
+end
+
+-- the profile tab's player (for tests)
+function UI.ProfileName() return profileName end
+
+-- clicking a toast: that player's profile
 function UI.ShowPlayer(name)
+  if ns.Profile.KindOf(name) then return UI.ShowProfile(name) end
   local r = R()
   if r.hitlist[name] then
     selected = name
@@ -973,11 +1462,100 @@ ns.OnReady(function()
 end)
 
 SLASH_FRIENDSANDFOES1 = "/fnf"
+-- /fnf wanted [name | clear]: no name = your current target
+local function wantedCommand(arg)
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
+  if arg:lower() == "clear" then
+    ns.Profile.SetWanted(nil)
+    print(prefix .. L.WANTED_CLEARED)
+    return
+  end
+  local name = ns.CleanName(arg)
+  if not name then
+    local info = ns.PvP.ReadEnemy("target")
+    name = info and info.name
+  end
+  if not name then
+    print(prefix .. L.WANTED_USAGE)
+    return
+  end
+  -- a bare first name means the one enemy you know by it, if there's exactly one
+  local players = ns.Data.RealRealm().players
+  name = ns.Data.Resolve(players, name)
+  print(prefix .. L.WANTED_SET:format(ns.Profile.SetWanted(name)))
+  UI.Refresh()
+end
+
+-- "<group name> <rest>": the longest group name the text starts with
+local function splitGroup(text)
+  local best, rest
+  for _, g in ipairs(ns.Groups.Mine()) do
+    local n = ns.Groups.Label(g):lower()
+    local t = text:lower()
+    if (t == n or t:sub(1, #n + 1) == n .. " ") and (not best or #n > #best.name) then
+      best, rest = g, strtrim(text:sub(#n + 1))
+    end
+  end
+  return best, rest
+end
+
+-- /fnf groups [new <name> | invite <group> <friend> | join <group> | leave <group> | remove <group> <member>]
+local function groupsCommand(arg)
+  local sub, rest = arg:match("^(%S+)%s*(.*)$")
+  sub = sub and sub:lower()
+  if sub == "new" then
+    return UI.CreateGroup(rest)
+  end
+  if sub == "invite" or sub == "join" or sub == "leave" or sub == "decline" or sub == "remove" then
+    local g, more = splitGroup(rest)
+    if not g then return say(L.GROUP_UNKNOWN:format(rest)) end
+    boardView = g.id
+    if sub == "invite" then return UI.InviteToGroup(more) end
+    if sub == "join" then return UI.JoinGroup() end
+    if sub == "decline" then return UI.LeaveGroup(true) end
+    if sub == "leave" then
+      local ok, reason = ns.Groups.Leave(g)
+      if not ok then return why(reason) end
+      boardView = "friends"
+      return say(L.GROUP_LEFT:format(ns.Groups.Label(g)))
+    end
+    local key = ns.Groups.MemberByName(g, ns.CleanName(more) or more)
+    if not key then return why("GROUP_NOT_MEMBER") end
+    local ok, reason = ns.Groups.Remove(g, key)
+    if not ok then return why(reason) end
+    return say(L.GROUP_MEMBER_REMOVED:format(more, ns.Groups.Label(g)))
+  end
+  if not ns.Groups.MyKey() then return why("GROUP_NO_TAG") end
+  local mine = ns.Groups.Mine()
+  if #mine == 0 then say(L.GROUPS_NONE) end
+  for _, g in ipairs(mine) do
+    local names = {}
+    for _, m in ipairs(ns.Groups.Members(g)) do
+      names[#names + 1] = m.name .. (m.leader and (" " .. L.GROUP_LEADER_TAG) or "")
+        .. (m.state == "invited" and (" " .. L.GROUP_INVITED_TAG) or "")
+    end
+    local tag = ns.Groups.MyState(g) == "invited" and ("  " .. L.GROUP_INVITED_TAG) or ""
+    print("  " .. ns.Groups.Label(g) .. tag .. ": " .. table.concat(names, ", "))
+  end
+  print("  " .. L.GROUPS_USAGE)
+end
+
 SlashCmdList.FRIENDSANDFOES = function(msg)
-  msg = strtrim((msg or ""):lower())
+  local raw = strtrim(msg or "") -- names keep their capitals
+  msg = raw:lower()
   local prefix = "|cff33ff99" .. L.ADDON .. "|r "
   if msg == "" then
     UI.Toggle()
+  elseif msg == "board" or msg == "leaderboard" then
+    UI.Show("board")
+  elseif msg == "groups" or msg:find("^groups ") then
+    groupsCommand(strtrim(raw:sub(7)))
+    UI.Refresh()
+  elseif msg == "profile" or msg:find("^profile ") then
+    local who = strtrim(raw:sub(8))
+    UI.ShowProfile(who ~= "" and (ns.CleanName(who) or who) or ns.me)
+  elseif msg == "wanted" or msg:find("^wanted ") then
+    wantedCommand(strtrim(raw:sub(7)))
   elseif msg == "settings" or msg == "config" or msg == "options" then
     UI.OpenSettings()
   elseif msg == "unlock" then

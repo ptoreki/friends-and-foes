@@ -2,22 +2,29 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.6.3
+## Version: 0.7.0
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
+## OptionalDeps: ProfanityLib, ProfanityLibData
 ## IconTexture: Interface\Icons\Ability_DualWield
 ## AddonCompartmentFunc: FriendsAndFoes_OnAddonCompartmentClick
 ## AddonCompartmentFuncOnEnter: FriendsAndFoes_OnAddonCompartmentEnter
 ## AddonCompartmentFuncOnLeave: FriendsAndFoes_OnAddonCompartmentLeave
 ## X-Curse-Project-ID: 1804389
 ## X-Wago-ID: EGPapeN1
+## X-License: GPL-3.0-or-later
 
+# Language filter, bundled (GPLv3). A separately installed newer copy loads first and is used.
+Libs\ProfanityLib\ProfanityLib.xml
+Libs\ProfanityLibData\ProfanityLibData.xml
 Locale.lua
 Core.lua
 Data.lua
 Comm.lua
 Flavor.lua
 Events.lua
+Profile.lua
+Groups.lua
 Toast.lua
 Progress.lua
 PvP.lua

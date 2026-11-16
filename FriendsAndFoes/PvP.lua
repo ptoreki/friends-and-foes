@@ -27,6 +27,8 @@ local enc           -- current encounter where I'm the victim
 local lastScan = 0
 local recapMax = 0
 local sightCooldown = {}
+local engaged = {}  -- enemy name -> GetTime() when you started a fight with them
+local ENGAGE_COOLDOWN = 120
 
 ---------------------------------------------------------------------------
 -- context
@@ -185,7 +187,8 @@ local function onHit()
     return
   end
 
-  if not enc or now - enc.last > ENCOUNTER_GAP then
+  local started = not enc or now - enc.last > ENCOUNTER_GAP
+  if started then
     enc = { id = ns.NewId(), last = now, attackers = {}, lastHit = {} }
   end
   enc.last = now
@@ -195,9 +198,13 @@ local function onHit()
     enc.lastHit[name] = now
     if not enc.attackers[name] then
       enc.attackers[name] = info
-      added[#added + 1] = info
+      -- you started this fight (friends already got "X attacked Y"): them hitting back is no news
+      if not (engaged[name] and now - engaged[name] < ENGAGE_COOLDOWN) then
+        added[#added + 1] = info
+      end
     end
   end
+  if started then PvP.FightStarted() end
   -- small chunks keep each message under the 255-byte limit even with guild names
   local zone = PvP.ZoneText()
   for i = 1, #added, ATTACKERS_PER_MSG do
@@ -211,8 +218,22 @@ end
 -- you start a fight: auto-attack / auto-shot or a harmful spell on an enemy player you target.
 -- Not if they were already attacking you (that's "attacked"). Once per enemy every 2 minutes.
 ---------------------------------------------------------------------------
-local engaged = {}
-local ENGAGE_COOLDOWN = 120
+-- in a world PvP fight right now (attacked, or started one, in the last 30 seconds)
+function PvP.InFight()
+  local now = GetTime()
+  if enc and now - enc.last <= ENCOUNTER_GAP then return true end
+  for _, t in pairs(engaged) do
+    if now - t <= ENCOUNTER_GAP then return true end
+  end
+  return false
+end
+
+-- your profile status says "in a fight" to friends, and clears once it's over
+function PvP.FightStarted()
+  if not ns.Profile then return end
+  ns.Profile.Changed()
+  C_Timer.After(ENCOUNTER_GAP + 2, function() ns.Profile.Changed() end)
+end
 
 function PvP.CheckEngage()
   if not PvP.InWorldPvPContext() then return end
@@ -225,9 +246,11 @@ function PvP.CheckEngage()
   local now = GetTime()
   if enc and now - enc.last <= ENCOUNTER_GAP and enc.attackers[info.name] then return end -- they started it
   if engaged[info.name] and now - engaged[info.name] < ENGAGE_COOLDOWN then return end
+  local wasFighting = PvP.InFight()
   engaged[info.name] = now
   remember(info)
   ns.Events.Emit("ENG", { zone = PvP.ZoneText(), target = ns.EncodeUnit(info) })
+  if not wasFighting then PvP.FightStarted() end
 end
 
 ns.On("PLAYER_ENTER_COMBAT", function() PvP.CheckEngage() end)   -- auto-attack on

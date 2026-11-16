@@ -92,10 +92,20 @@ local SCHEMA = {
   SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
   ENG  = { "zone", "target", "ago" }, -- the sender started a fight with an enemy player
   REQ  = { "window" }, -- "I just came online: what happened in the last <window> seconds?"
+  -- the sender's profile (0.7): own all-time kills/deaths (empty if they don't share PvP),
+  -- most wanted enemy, zone, status ("" | "afk" | "pvp"). Older clients ignore unknown kinds.
+  -- t: when the K/D was last true, on the sender's clock (so relayed copies compare fairly)
+  PRO  = { "k", "d", "wanted", "zone", "status", "t" },
+  -- shared groups (0.7, Groups.lua): a group and some of its members ("First Last:a:j:r;...",
+  -- times in base 36 after `base`), and relayed stats ("First Last:k:d:time;...")
+  GRP  = { "gid", "name", "owner", "base", "members" },
+  GST  = { "stats" },
 }
 Comm.SCHEMA = SCHEMA
+-- group traffic also flows with friends you didn't pick for alerts
+local GROUP_KINDS = { GRP = true, GST = true }
 
-local PRIORITY_OF = { REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -225,6 +235,7 @@ function Comm.RebuildRoster()
       end
     end
   end
+  Comm.GreetNew()
   if not debugging then return end
   table.sort(report)
   local sig = table.concat(report, "; ")
@@ -233,6 +244,29 @@ function Comm.RebuildRoster()
     ns.Debug("ROSTER", "me=" .. tostring(ns.me) .. " server=" .. tostring(ns.realm) .. " project=" .. tostring(WOW_PROJECT_ID),
       "bnetFriends=" .. n, sig ~= "" and sig or "no WoW game accounts")
   end
+end
+
+-- Friends who just came online (or you just logged in) get your profile once, if they're in the
+-- roster, and the groups you share with them, even if you didn't pick them. Keyed by game
+-- account, so a friend re-keyed from "First" to "First Last" isn't greeted twice.
+local greeted = {} -- gameAccountID -> "roster" | "everyone"
+function Comm.GreetNew()
+  local profile, groups, present = {}, {}, {}
+  for name, e in pairs(everyone) do
+    if e.gid then
+      present[e.gid] = true
+      local level = roster[name] and "roster" or "everyone"
+      if not greeted[e.gid] then groups[#groups + 1] = name end
+      if level == "roster" and greeted[e.gid] ~= "roster" then profile[#profile + 1] = name end
+      greeted[e.gid] = level
+    end
+  end
+  for gid in pairs(greeted) do
+    if not present[gid] then greeted[gid] = nil end -- offline: greet again when back
+  end
+  if not ns.me then return end
+  if #profile > 0 and ns.Profile then ns.Profile.Greet(profile) end
+  if #groups > 0 and ns.Groups then ns.Groups.Greet(groups) end
 end
 
 function Comm.RosterNames()
@@ -402,19 +436,31 @@ Comm.PumpRunning = function() return ticker ~= nil end
 ---------------------------------------------------------------------------
 -- broadcast
 ---------------------------------------------------------------------------
-local function sendTo(name, payload, prio)
-  local r = roster[name]
+-- broadcasts go to the roster; group messages may go to any eligible friend.
+-- bnOnly: no whisper copy when Battle.net can carry it (group traffic isn't urgent, and every
+-- copy is load on the realm; the whisper route only exists as a backup for live alerts)
+local function sendTo(name, payload, prio, bnOnly)
+  local r = roster[name] or everyone[name]
   if not r then return end
-  if BNSendGameData and r.gid then
+  local viaBN = BNSendGameData and r.gid
+  if viaBN then
     enqueue("bn", prio, { target = r.gid, payload = payload })
   end
-  if r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
+  if (not bnOnly or not viaBN) and r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
     enqueue("whisper", prio, { target = name, payload = payload })
   end
 end
 
 function Comm.SendPayload(payload, prio)
   for name in pairs(roster) do sendTo(name, payload, prio) end
+end
+
+-- one message to one friend (group messages: Battle.net only)
+function Comm.SendTo(name, msg)
+  local payload = Comm.Fit(msg)
+  if not payload then return end
+  sendTo(name, payload, PRIORITY_OF[msg.kind] or "normal", GROUP_KINDS[msg.kind])
+  ns.Debug("SEND", msg.kind, msg.id, "to " .. tostring(name))
 end
 
 function Comm.Broadcast(msg)
@@ -663,7 +709,8 @@ ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   end
   local name = ns.CleanName(g.characterName)
   if not name then return end
-  if Comm.GroupActive() then
+  local kind = type(text) == "string" and not issecret(text) and text:match("^%d+\t(%u+)\t")
+  if Comm.GroupActive() and not GROUP_KINDS[kind] then
     if tagByGid[g.gameAccountID] == nil then Comm.RebuildRoster() end
     if not Comm.Allowed(tagByGid[g.gameAccountID]) then
       ns.Debug("BN-DROP", "not picked", name)

@@ -16,6 +16,13 @@ local EVENTS = {
   { "gear", L.OPT_GEAR }, { "share", L.OPT_SHARE },
 }
 
+-- what you share with friends: { key in settings.share, label, tooltip }
+Options.SHARE = {
+  { "level", L.OPT_LEVEL, L.TIP_SHARE_KIND }, { "loot", L.OPT_LOOT, L.TIP_SHARE_KIND },
+  { "gear", L.OPT_GEAR, L.TIP_SHARE_KIND }, { "pvp", L.OPT_PVP, L.TIP_SHARE_PVP },
+  { "where", L.OPT_SHARE_WHERE, L.TIP_SHARE_WHERE },
+}
+
 local function S() return ns.S() end
 
 local function text(parent, font, x, y, s, width)
@@ -70,12 +77,23 @@ local function cycler(parent, x, y, kind)
   return b
 end
 
+-- w is the minimum width: a button always grows to fit its label
 local function button(parent, w, label, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(w, 22)
   b:SetText(label)
+  local fs = b.GetFontString and b:GetFontString()
+  local tw = fs and fs.GetStringWidth and fs:GetStringWidth()
+  if type(tw) == "number" then w = math.max(w, math.ceil(tw) + 24) end
+  b:SetSize(w, 22)
   b:SetScript("OnClick", onClick)
   return b
+end
+
+-- how tall a wrapped text is (the game measures it); `guess` if it can't tell yet
+local function heightOf(fs, guess)
+  local h = fs.GetStringHeight and fs:GetStringHeight()
+  if type(h) ~= "number" or h < 10 then return guess end
+  return math.ceil(h)
 end
 
 local function build(p)
@@ -93,8 +111,9 @@ local function build(p)
     check(p, x + 214, y + 1, nil, toggle("sound", e[1]))
     y = y - 24
   end
-  text(p, "GameFontDisableSmall", x, y - 4, L.MILESTONE_NOTE, 280)
-  y = y - 40
+  -- the note wraps over several lines: the next row starts below its real height
+  local note = text(p, "GameFontDisableSmall", x, y - 4, L.MILESTONE_NOTE, 280)
+  y = y - 4 - heightOf(note, 64) - 10
   check(p, x, y, L.OPT_NEARBY_ONLY, function() return S().nearbyOnly end, function(v) S().nearbyOnly = v end)
   y = y - 22
   check(p, x, y, L.OPT_ALL_SOUNDS, toggle("sound", "enabled"))
@@ -102,14 +121,19 @@ local function build(p)
   check(p, x, y, L.OPT_FLAVOR, function() return S().flavor end, function(v) S().flavor = v end)
   y = y - 22
   check(p, x, y, L.OPT_MILESTONES, function() return S().milestones ~= false end, function(v) S().milestones = v end)
+  local leftBottom = y - 22
 
   -- right column
   x = 340
   y = -50
   text(p, "GameFontNormal", x, y, L.SHARE_HEADER)
   y = y - 20
-  for _, o in ipairs({ { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR }, { "pvp", L.OPT_PVP } }) do
-    check(p, x, y, o[2], toggle("share", o[1]))
+  for _, o in ipairs(Options.SHARE) do
+    local get, set = toggle("share", o[1])
+    check(p, x, y, o[2], get, function(v)
+      set(v)
+      ns.Profile.Changed()
+    end)
     y = y - 21
   end
   y = y - 10
@@ -157,10 +181,11 @@ local function build(p)
   end)
   cyclers[#cyclers + 1] = theme
   button(p, 80, L.BTN_PREVIEW, function() ns.Toast.Test() end):SetPoint("LEFT", theme, "RIGHT", 6, 0)
+  local rightBottom = y - 22
 
-  -- beta tools: only while debug logging is on
+  -- beta tools: only while debug logging is on; below whichever column ends lower
   beta = CreateFrame("Frame", nil, p)
-  beta:SetPoint("TOPLEFT", 16, -430)
+  beta:SetPoint("TOPLEFT", 16, math.min(leftBottom, rightBottom) - 20)
   beta:SetSize(600, 200)
   text(beta, "GameFontNormal", 0, 0, L.BETA_HEADER)
   local test = button(beta, 110, L.BTN_TEST, function() ns.Toast.Test() end)
@@ -410,8 +435,9 @@ function Options.BuildNative()
   -- Friends & sharing
   local friends, friendsLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_FRIENDS)
   header(friendsLayout, L.SHARE_HEADER, L.TIP_SHARE_HEADER)
-  for _, o in ipairs({ { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT }, { "gear", L.OPT_GEAR }, { "pvp", L.OPT_PVP } }) do
-    checkbox(friends, "share_" .. o[1], S().share, o[1], o[2], D.share[o[1]], L.TIP_SHARE_KIND)
+  for _, o in ipairs(Options.SHARE) do
+    -- your profile goes out again right away, so friends see the change
+    checkbox(friends, "share_" .. o[1], S().share, o[1], o[2], D.share[o[1]], o[3], function() ns.Profile.Changed() end)
   end
   header(friendsLayout, L.PICK_HEADER)
   button(friendsLayout, L.OPT_PICK, L.BTN_PICK, function()

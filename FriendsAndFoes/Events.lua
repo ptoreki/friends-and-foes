@@ -57,9 +57,17 @@ end
 ---------------------------------------------------------------------------
 local function who(p) return ns.ClassColored(p.name, p.class) end
 
-local function feed(p, kind, text)
+-- foes: enemy names the line is about (for their profile's recent PvP)
+local function feed(p, kind, text, foes)
   if p then p.lastText = text end
-  ns.Data.Feed(kind, text)
+  ns.Data.Feed(kind, text, p and p.name, foes)
+end
+
+-- names of decoded units, for feed()
+local function namesOf(units)
+  local out = {}
+  for _, u in ipairs(units) do if u and u.name then out[#out + 1] = u.name end end
+  return out
 end
 
 local function itemIcon(link)
@@ -279,7 +287,7 @@ H.ATK = function(msg, isSelf, p, f)
 
   local by = (#names > 0) and ns.JoinNames(names) or L.UNKNOWN_ENEMY
   local title, text, line = ns.Flavor.Attacked(p, who(p), by, attackers, f.zone)
-  feed(p, "attacked", line)
+  feed(p, "attacked", line, namesOf(attackers))
   if isSelf then return end
   if suppressAttackToast(msg.from) then
     ns.Debug("TOAST", "attacked", msg.from, "skipped: they're in your group and you're in combat")
@@ -301,7 +309,7 @@ H.ENG = function(msg, isSelf, p, f)
   enemyTouch(u, f.zone)
   local h = hitUpdate(u, f.zone) -- doesn't add them to the hitlist
   local title, text, line = ns.Flavor.Engage(p, who(p), ns.ClassColored(u.name, u.class), h, f.zone)
-  feed(p, "engage", line)
+  feed(p, "engage", line, { u.name })
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "engage", category = "pvp", icon = ICON.engage,
@@ -313,7 +321,10 @@ end
 H.DIE = function(msg, isSelf, p, f)
   p.d = p.d + 1
   local killer = ns.DecodeUnit(f.killer)
-  if isSelf and not msg.id:find("^S") then Events.WeeklyAdd("d", killer and killer.name) end
+  if isSelf and not msg.id:find("^S") then
+    Events.WeeklyAdd("d", killer and killer.name)
+    ns.Profile.Changed() -- friends' leaderboards
+  end
   local suspect = f.conf == "s"
   local by, h
   if killer and killer.name then
@@ -324,9 +335,10 @@ H.DIE = function(msg, isSelf, p, f)
     if suspect then h.suspect = h.suspect + 1 end
     by = ns.ClassColored(killer.name, killer.class) .. (suspect and "?" or "")
   end
-  local helpers = {}
+  local helpers, foes = {}, { killer and killer.name }
   for _, u in ipairs(ns.DecodeUnits(f.assists)) do
     if u.name then
+      foes[#foes + 1] = u.name
       helpers[#helpers + 1] = ns.ClassColored(u.name, u.class)
       local e = enemyTouch(u, f.zone)
       e.a = e.a + 1
@@ -335,7 +347,7 @@ H.DIE = function(msg, isSelf, p, f)
   end
 
   local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone, tonumber(f.ended), helpers)
-  feed(p, "died", line)
+  feed(p, "died", line, foes)
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "died", category = "pvp", icon = ICON.died,
@@ -345,7 +357,10 @@ H.DIE = function(msg, isSelf, p, f)
 end
 
 H.KILL = function(msg, isSelf, p, f)
-  if isSelf and not msg.id:find("^S") then Events.WeeklyAdd("k") end
+  if isSelf and not msg.id:find("^S") then
+    Events.WeeklyAdd("k")
+    ns.Profile.Changed()
+  end
   local name = ns.CleanName(f.victim)
   p.k = p.k + 1
   local streak = tonumber(f.streak)
@@ -374,7 +389,7 @@ H.KILL = function(msg, isSelf, p, f)
 
   local v = ns.ClassColored(name, victim.class)
   local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone, streak)
-  feed(p, "kill", line)
+  feed(p, "kill", line, { name })
   if isSelf then return end
   ns.Toast.Push({
     header = (revenge and L.HEADER_REVENGE) or (ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK) or nil,
@@ -421,7 +436,24 @@ H.SIGHT = function(msg, isSelf, p, f)
     return
   end
   local line = ns.Toast.Sighting(name, u.class, f.zone, h, who(p))
-  feed(p, "sighting", line)
+  feed(p, "sighting", line, { name })
+end
+
+-- a friend's profile: their own all-time K/D, most wanted, zone and status
+H.PRO = function(_, isSelf, p, f)
+  if isSelf then return end
+  ns.Profile.Apply(p, f)
+end
+
+-- shared groups: membership, and stats passed along by members
+H.GRP = function(msg, isSelf, _, f)
+  if isSelf then return end
+  ns.Groups.OnGroup(msg.from, f)
+end
+
+H.GST = function(msg, isSelf, _, f)
+  if isSelf then return end
+  ns.Groups.OnStats(msg.from, f)
 end
 
 -- weekly summary: your own takedowns and deaths, and who killed you most

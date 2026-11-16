@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.6.3"
+ns.VERSION = "0.7.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -12,7 +12,7 @@ ns.issecret = issecret
 -- defaults
 ---------------------------------------------------------------------------
 local DEFAULTS = {
-  share = { level = true, loot = true, gear = true, pvp = true },
+  share = { level = true, loot = true, gear = true, pvp = true, where = true }, -- where: zone, AFK, in a fight
   -- how each kind shows: "toast" | "chat" | "off"
   show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", share = "chat" },
   milestones = true, -- level 60, looted epic BoE, revenge and kill streaks always pop up as a toast
@@ -460,5 +460,6 @@ function ns.PrintStatus()
     .. ", messages queued: " .. ns.Comm.QueuedCount())
   print("  alerts: " .. (ns.Comm.GroupActive() and "picked friends only (/fnf group)" or "every friend (/fnf group to pick)"))
   for k, v in pairs(ns.caps) do print("  " .. k .. ": " .. v) end
+  print("  " .. (ns.Profile.FilterReady() and ns.L.FILTER_STATUS_ON or ns.L.FILTER_STATUS_OFF))
   print("  errors caught: " .. ns.errors .. (ns.lastError and (" (last: " .. ns.lastError .. ")") or ""))
 end

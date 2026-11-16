@@ -30,7 +30,7 @@ do
   check(okShow and okSound and okPick, "default alerts and sounds")
   check(s.nearbyOnly == false and s.dnd.combat == false and s.toastDuration == 5 and s.theme == "minimal" and s.toastScale == 1
     and s.flavor and s.weekly and s.mark and s.markTooltip and s.milestones and s.levelEvery == 1 and s.gearMin == 3
-    and s.toastGrow == "down" and s.toastMax == 2 and s.share.pvp and s.chatFrame == 1, "default appearance, sharing and behaviour")
+    and s.toastGrow == "down" and s.toastMax == 2 and s.share.pvp and s.share.where and s.chatFrame == 1, "default appearance, sharing and behaviour")
   -- the rest of these tests were written against the earlier, quieter defaults
   s.show.level, s.show.loot, s.show.gear, s.show.sighting = "chat", "chat", "chat", "chat"
   s.sound.kill, s.sound.gear = false, false
@@ -67,6 +67,7 @@ check(ns.viewSim == true, "window switches to sim view")
 check(ns.errors == 0, "no errors after sim (" .. tostring(ns.lastError) .. ")")
 
 -- self sim broadcasts with S-id
+RUN_TICKERS(8) -- drain the profile greeting sent at login
 SENT = {}
 ns.Sim.Run("kill", true)
 RUN_TICKERS(2)
@@ -131,6 +132,7 @@ local feedBefore = #real.feed
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 40 }, "pick1"), "WHISPER", 77)
 FIRE("CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 40 }, "pick2"), "WHISPER", "Buddy Pal")
 check(#real.feed == feedBefore and real.players["Buddy Pal"].level == 32, "unpicked friend's events ignored on both routes")
+RUN_TICKERS(8) -- drain the greeting from when he came back into the roster
 SENT = {}
 ns.Comm.SendPayload("ping", "high")
 RUN_TICKERS(2)
@@ -223,6 +225,7 @@ check(ns.PvP.FindByName(tbl, "Kragg") == 1 and ns.PvP.FindByName(tbl, "Ash") == 
   and ns.PvP.FindByName(tbl, "Solo Wolf") == 4 and ns.PvP.FindByName(tbl, "Kragg Fox") == nil, "FindByName rules")
 
 -- own loot: epic BoE emits + queues broadcast
+RUN_TICKERS(8)
 SENT = {}
 FIRE("CHAT_MSG_LOOT", "You receive loot: |cffa335ee|Hitem:12584::::::::60:::::::|h[Sword]|h|r.")
 RUN_TICKERS(2)
@@ -653,6 +656,27 @@ do
   check(opened == "Friends & Foes", "Options opens the native category")
   Settings, CreateSettingsListSectionHeaderInitializer, CreateSettingsButtonInitializer = nil, nil, nil
   check(ns.errors == 0, "no errors in native options (" .. tostring(ns.lastError) .. ")")
+end
+
+-- layout: every tab's columns fit inside the list (nothing runs past the window edge)
+for _, key in ipairs({ "hitlist", "board", "enemies", "friends", "feed" }) do
+  local total = 0
+  for _, col in ipairs(ns.UI.TabColumns(key)) do total = total + col[2] end
+  check(total > 0 and total <= ns.UI.LIST_WIDTH, "columns of the " .. key .. " tab fit: " .. total .. " of " .. ns.UI.LIST_WIDTH)
+end
+-- a button whose label changes is resized to fit the new label, never below its minimum
+do
+  local b = CreateFrame()
+  b.minWidth = 60
+  local fs = { GetStringWidth = function() return 140 end }
+  b.GetFontString = function() return fs end
+  local w
+  b.SetSize = function(_, width) w = width end
+  ns.UI.SetButtonText(b, "A much longer label")
+  check(w == 164, "a longer label widens the button: " .. tostring(w))
+  fs.GetStringWidth = function() return 10 end
+  ns.UI.SetButtonText(b, "x")
+  check(w == 60, "a short label keeps the minimum width")
 end
 
 -- window: click-to-sort columns, page arrows, Players dropdown
@@ -1322,6 +1346,604 @@ do
   local n = #rr.feed
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Old News:ROGUE:60:", conf = "c", assists = "", ago = 600 }, "old1"), "WHISPER", 77)
   check(#rr.feed == n and rr.hitlist["Old News"] == nil, "replay of an event seen live is ignored")
+end
+
+-- 0.7: you start a fight, the enemy hits back: friends get "you attacked X", not also "X attacked you"
+do
+  local errs = ns.errors
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName, UnitIsUnit = UnitIsUnit }
+  local who = { "Duel", "Starter" }
+  UnitExists = function(u) if u == "target" then return true end return o.UnitExists(u) end
+  UnitIsPlayer = function(u) if u == "target" then return true end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if u == "target" then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) if u == "target" then return who[1], who[2] end return o.UnitName(u) end
+  UnitIsUnit = function(a) return a == "targettarget" end -- the enemy targets you
+  ADVANCE(60)
+  local function kinds()
+    local out = {}
+    for _, e in ipairs(real.feed) do out[#out + 1] = e.kind end
+    return table.concat(out, ",")
+  end
+  local before = #real.feed
+  FIRE("PLAYER_ENTER_COMBAT")
+  check(#real.feed == before + 1 and real.feed[#real.feed].kind == "engage", "you start a fight: one engage")
+  check(ns.PvP.InFight() and ns.Profile.MyStatus() == "pvp", "in a fight now")
+  ADVANCE(1)
+  FIRE("UNIT_COMBAT", "player", "WOUND")
+  check(#real.feed == before + 1, "they hit back: no 'attacked' on top (" .. kinds() .. ")")
+  -- someone else joins in: that is news
+  who = { "Third", "Party" }
+  ADVANCE(1)
+  FIRE("UNIT_COMBAT", "player", "WOUND")
+  check(#real.feed == before + 2 and real.feed[#real.feed].kind == "attacked", "a new attacker is still reported")
+  for k, v in pairs(o) do _G[k] = v end
+  ADVANCE(40)
+  check(not ns.PvP.InFight() and ns.Profile.MyStatus() == "", "the fight is over 30 seconds later")
+  RUN_TIMERS()
+  RUN_TICKERS(8)
+  check(ns.errors == errs, "no errors in engage/attack dedupe (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7: profiles, the leaderboard and their messages
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  ns.viewSim = false
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  -- your own message: your own all-time K/D from your record
+  local me = rr.players[ns.me]
+  me.k, me.d = 12, 4
+  local f = ns.Profile.Fields()
+  check(f.k == 12 and f.d == 4 and f.zone == "Hillsbrad Foothills" and f.status == "", "own profile fields: " .. tostring(f.k) .. "/" .. tostring(f.d))
+  ns.S().share.pvp = false
+  f = ns.Profile.Fields()
+  check(f.k == "" and f.d == "", "not sharing PvP: no K/D in the profile")
+  ns.S().share.where = false
+  f = ns.Profile.Fields()
+  check(f.zone == "" and f.status == "", "'Where I am' off: no zone or status in the profile")
+  ns.S().share.where = true
+  check(ns.Profile.Fields().zone == "Hillsbrad Foothills", "'Where I am' on: zone shared")
+  check(#ns.Options.SHARE == 5 and ns.Options.SHARE[5][1] == "where", "Options list the 'Where I am' switch")
+  ns.S().share.pvp = true
+
+  -- typed text: one plain line, counted and cut in characters, never half of one
+  local P = ns.Profile
+  check(P.CleanText("  |cffff0000Red|r\tline  ") == "cffff0000Redr line", "text loses colour codes and tabs")
+  check(P.Length("\195\134r\195\184") == 3, "length counts characters, not bytes")
+  check(P.CleanText(string.rep("a", 23) .. "\195\169\195\169", 24) == string.rep("a", 23) .. "\195\169", "cut at 24 characters, whole characters only")
+  check(P.CleanText("   ") == nil, "blank text is nothing")
+
+  -- changes are sent once, after a short wait; unchanged = not sent again
+  RUN_TIMERS(); RUN_TICKERS(8); SENT = {}
+  ns.Profile.SetWanted("Rogz Fang")
+  RUN_TIMERS()
+  RUN_TICKERS(8)
+  local pro = {}
+  for _, s in ipairs(SENT) do if s.payload:find("\tPRO\t", 1, true) then pro[#pro + 1] = s.payload end end
+  check(#pro == 2, "one profile update (both routes): " .. #pro)
+  local decoded = pro[1] and ns.Comm.Decode(pro[1])
+  check(decoded and decoded.f.k == "12" and decoded.f.d == "4" and decoded.f.wanted == "Rogz Fang" and decoded.f.motto == nil,
+    "profile message carries K/D and most wanted (no free text)")
+  check(pro[1] and #pro[1] <= 255, "profile fits one message")
+  SENT = {}
+  ns.Profile.Changed()
+  RUN_TIMERS(); RUN_TICKERS(8)
+  check(#SENT == 0, "nothing changed: nothing sent")
+
+  -- a friend coming online gets your profile right away
+  FRIENDS_ONLINE = 0
+  ns.Comm.RebuildRoster()
+  FRIENDS_ONLINE = 1
+  ns.Comm.RebuildRoster()
+  ns.Comm.RebuildRoster() -- no second greeting
+  RUN_TICKERS(8)
+  local greet = 0
+  for _, s in ipairs(SENT) do if s.payload:find("\tPRO\t", 1, true) then greet = greet + 1 end end
+  check(greet == 2, "friend back online: greeted once on both routes: " .. greet)
+
+  -- receiving a friend's profile
+  local buddy = rr.players["Buddy Pal"]
+  buddy.k, buddy.d, buddy.sk, buddy.sd = 1, 1, nil, nil
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = 20, d = 5, wanted = "Rogz-Fang", zone = "Duskwood", status = "pvp" }, "pro1"), "WHISPER", 77)
+  check(buddy.sk == 20 and buddy.sd == 5, "friend's own K/D stored")
+  check(buddy.wanted == "Rogz Fang" and buddy.zone == "Duskwood" and buddy.status == "pvp", "friend's most wanted, zone, status")
+  check(ns.Profile.NowText(buddy) == "online \194\183 Duskwood \194\183 in a fight", "now: " .. tostring(ns.Profile.NowText(buddy)))
+  buddy.statusAt = time() - 600
+  check(ns.Profile.NowText(buddy) == "online \194\183 Duskwood", "an old 'in a fight' is dropped")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = "", d = "", wanted = "", zone = "", status = "weird" }, "pro2"), "WHISPER", 77)
+  check(buddy.sk == nil and buddy.wanted == nil and buddy.status == nil, "friend stopped sharing: their numbers fall back")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = 20, d = 5, wanted = "Rogz Fang", zone = "", status = "" }, "pro3"), "WHISPER", 77)
+
+  -- leaderboard: you + friends, most kills first, reported numbers win
+  local quiet = { name = "Quiet Friend", friend = true, k = 3, d = 0, a = 0, lastSeen = time(), class = "MAGE" }
+  rr.players["Quiet Friend"] = quiet
+  rr.players["Old Friend"] = { name = "Old Friend", friend = true, k = 50, d = 1, a = 0, lastSeen = time() - 400 * 86400 }
+  local board = ns.Profile.Board()
+  local names = {}
+  for _, r in ipairs(board) do names[#names + 1] = r.name .. "=" .. r.k .. "/" .. r.d .. "#" .. r.rank end
+  check(table.concat(names, ",") == "Buddy Pal=20/5#1,Testme Tester=12/4#2,Quiet Friend=3/0#3", "board order: " .. table.concat(names, ","))
+  check(board[3].estimated and not board[1].estimated and board[2].me, "friend without a report is marked estimated")
+  check(ns.Profile.KD(3, 0) == 3 and ns.Profile.KD(20, 5) == 4 and ns.Profile.KD(10, 3) == 3.33, "K/D: no deaths = kills, else 2 decimals")
+  quiet.k, quiet.d = 12, 4
+  board = ns.Profile.Board()
+  check(board[2].rank == 2 and board[3].rank == 2, "same K and D: same rank")
+  FriendsAndFoesDB.group = { ["Someone#9"] = true }
+  board = ns.Profile.Board()
+  check(#board == 1 and board[1].me, "picks active: only picked friends (and you) on the board")
+  ns.Comm.ClearPicks()
+
+  -- the feed knows who each PvP line is about
+  local nFeed = #rr.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Rogz Fang:ROGUE:60:Gank Squad", conf = "c", assists = "Helper Guy:MAGE:60:" }, "pd1"), "WHISPER", 77)
+  local e = rr.feed[#rr.feed]
+  check(#rr.feed == nFeed + 1 and e.who == "Buddy Pal" and e.foes[1] == "Rogz Fang" and e.foes[2] == "Helper Guy", "feed entry has who and foes")
+  local recent = ns.Profile.Recent("Buddy Pal")
+  check(#recent >= 1 and recent[1] == e, "friend's recent PvP, newest first")
+  check(ns.Profile.Recent("Helper Guy", true)[1] == e, "enemy's recent PvP")
+  local nem, times = ns.Profile.Nemesis("Buddy Pal")
+  local most, mostName = 0, nil
+  for _, h in pairs(rr.hitlist) do
+    local n = h.kv and h.kv["Buddy Pal"] or 0
+    if n > most or (n == most and mostName and h.name < mostName) then most, mostName = n, h.name end
+  end
+  check(nem and nem.name == mostName and times == most, "nemesis = the enemy with most kills on them: " .. tostring(nem and nem.name))
+  local by = ns.Profile.WantedBy("Rogz Fang")
+  check(#by == 2 and by[1] == "Buddy Pal" and by[2] == ns.me, "most wanted by you and Buddy")
+
+  -- Enemies and Friends are their own tabs; the 0.6 names still work
+  ns.UI.Show("enemies")
+  local allEnemies = true
+  for _, row in ipairs(ns.UI.Rows()) do if not row.enemy then allEnemies = false end end
+  check(#ns.UI.Rows() > 0 and allEnemies, "Enemies tab lists enemies")
+  ns.UI.Show("friends")
+  local hasBuddy = false
+  for _, row in ipairs(ns.UI.Rows()) do if row.name == "Buddy Pal" then hasBuddy = true end end
+  check(hasBuddy, "Friends tab lists friends")
+  ns.UI.Show("players")
+  check(#ns.UI.Rows() > 0 and ns.UI.Rows()[1].enemy, "old 'players' name opens Enemies")
+  ns.UI.SetPlayerFilter("friends")
+  ns.UI.SetPlayerFilter("enemies")
+
+  -- the window: Leaderboard tab, profiles for you, a friend and an enemy
+  ns.UI.Show("board")
+  check(#ns.UI.Rows() == 3 and ns.UI.Rows()[1].name == "Buddy Pal", "Leaderboard tab lists the board, most kills first")
+  check(ns.Profile.KindOf(ns.me) == "me" and ns.Profile.KindOf("Buddy Pal") == "friend" and ns.Profile.KindOf("Rogz") == "enemy"
+    and ns.Profile.KindOf("Nobody Atall") == nil, "profile kinds")
+  local v = ns.UI.ProfileView("Buddy Pal")
+  local function lineOf(view, label)
+    for _, l in ipairs(view.lines) do if l[1] == label then return ns.Plain(tostring(l[2])) end end
+  end
+  check(v and lineOf(v, "Kills") == "20" and lineOf(v, "Rank") == "#1 of 3" and lineOf(v, "Most wanted") == "Rogz Fang"
+    and lineOf(v, "Nemesis"):find(nem.name, 1, true) ~= nil, "friend profile: kills, rank, most wanted, nemesis")
+  buddy.version = "0.6.3"
+  check(ns.UI.ProfileView("Buddy Pal") and lineOf(ns.UI.ProfileView("Buddy Pal"), "Addon"):find("older", 1, true) ~= nil, "outdated addon hinted")
+  v = ns.UI.ProfileView("Quiet Friend")
+  check(v.estimated and lineOf(v, "Kills") == "~12", "estimated numbers marked ~")
+  v = ns.UI.ProfileView(ns.me)
+  check(v and v.isMe and lineOf(v, "Kills") == "12", "your own profile")
+  v = ns.UI.ProfileView("Rogz Fang")
+  check(v and v.kind == "enemy" and v.onHitlist and lineOf(v, "Most wanted by"):find("Buddy Pal", 1, true) ~= nil, "enemy profile")
+
+  ns.UI.ShowProfile("Rogz")
+  check(ns.UI.ProfileName() == "Rogz Fang", "bare first name opens the full name's profile")
+  ns.UI.ProfileSave("camps the flight path")
+  check(rr.hitlist["Rogz Fang"].note == "camps the flight path", "note saved from the enemy profile")
+  ns.Profile.SetWanted(nil)
+  ns.UI.ProfileAction()
+  check(ns.Profile.Wanted() == "Rogz Fang", "enemy profile button makes them most wanted")
+  ns.UI.ProfileAction()
+  check(ns.Profile.Wanted() == nil, "and clears it again")
+  ns.UI.ShowProfile(ns.me)
+  ns.UI.ProfileSave("anything")
+  check(FriendsAndFoesDB.profile.motto == nil, "your own profile has no free text to save")
+  ns.UI.ShowProfile("Buddy Pal")
+  ns.UI.ProfileAction()
+  check(ns.Comm.IsPicked("Buddy#1234"), "friend profile button picks them")
+  ns.UI.ProfileAction()
+  ns.Comm.ClearPicks()
+  ns.UI.ShowPlayer("Rogz Fang")
+  check(ns.UI.ProfileName() == "Rogz Fang", "clicking a toast opens the profile")
+  ns.UI.SelectTab("profile")
+
+  -- slash commands
+  SlashCmdList.FRIENDSANDFOES("wanted Rogz")
+  check(ns.Profile.Wanted() == "Rogz Fang", "/fnf wanted resolves a first name")
+  SlashCmdList.FRIENDSANDFOES("wanted clear")
+  check(ns.Profile.Wanted() == nil, "/fnf wanted clear")
+  local printed = #PRINTED
+  SlashCmdList.FRIENDSANDFOES("motto Hello")
+  check(PRINTED[#PRINTED] and PRINTED[#PRINTED]:find("/fnf", 1, true) and #PRINTED > printed, "/fnf motto is gone: just the help line")
+  SlashCmdList.FRIENDSANDFOES("profile buddy pal")
+  SlashCmdList.FRIENDSANDFOES("profile")
+  check(ns.UI.ProfileName() == ns.me, "/fnf profile = your own")
+  SlashCmdList.FRIENDSANDFOES("board")
+  -- simulation view: the board shows the simulated friend, no errors
+  ns.Sim.Run("kill", false)
+  ns.UI.Show("board")
+  ns.Sim.Clear()
+  rr.players["Quiet Friend"], rr.players["Old Friend"] = nil, nil
+  RUN_TIMERS(); RUN_TICKERS(8)
+  check(ns.errors == errs, "no errors in profiles / leaderboard (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7: shared groups with relaying. Members are Battle.net accounts. You're friends with Buddy and
+-- Alice; Carol is only Alice's friend, so her numbers reach you (and Buddy) through Alice and you.
+do
+  local errs = ns.errors
+  local G = ns.Groups
+  local F = { { gid = 77, name = "Buddy", tag = "Buddy#1234" }, { gid = 78, name = "Alice Wonder", tag = "Alice#5678" } }
+  local o = { num = BNGetNumFriends, info = C_BattleNet.GetFriendGameAccountInfo, acct = C_BattleNet.GetFriendAccountInfo,
+    byId = C_BattleNet.GetGameAccountInfoByID, bninfo = BNGetInfo }
+  BNGetNumFriends = function() return #F, #F end
+  C_BattleNet.GetFriendGameAccountInfo = function(i)
+    local f = F[i]
+    return f and { isOnline = true, clientProgram = "WoW", characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = f.gid }
+  end
+  C_BattleNet.GetFriendAccountInfo = function(i) return { battleTag = F[i] and F[i].tag } end
+  C_BattleNet.GetGameAccountInfoByID = function(id)
+    for _, f in ipairs(F) do
+      if f.gid == id then return { characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = id } end
+    end
+  end
+  check(G.MyKey() == nil and select(2, G.Create("No Tag")) == "GROUP_NO_TAG", "no BattleTag from Battle.net: no groups (and no error)")
+  BNGetInfo = function() return 1, "Testme#1111" end
+  local KME, KB, KA, KC = G.MyKey(), G.KeyOf("Buddy#1234"), G.KeyOf("Alice#5678"), G.KeyOf("Carol#4242")
+  check(KME and KB and KA and KC and KB ~= KA and G.KeyOf("BUDDY#1234") == KB and not KB:find("buddy", 1, true),
+    "account keys: stable, case-insensitive, not the BattleTag itself")
+
+  local function from(name, gid, kind, fields)
+    local p = ns.Comm.Encode({ kind = kind, id = ns.NewId(), name = name, class = "PRIEST", level = 40, f = fields })
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", p, "WHISPER", gid)
+  end
+  local function sentTo(gid, kind)
+    local out = {}
+    for _, s in ipairs(SENT) do
+      if s.route == "bn" and s.target == gid then
+        local m = ns.Comm.Decode(s.payload)
+        if m and m.kind == kind then out[#out + 1] = m end
+      end
+    end
+    return out
+  end
+  local function drain() RUN_TIMERS(); RUN_TICKERS(60) end
+  local function copy(g)
+    local c = { id = g.id, name = g.name, owner = g.owner, members = {} }
+    for k, m in pairs(g.members) do c.members[k] = { a = m.a, j = m.j, r = m.r, name = m.name } end
+    return c
+  end
+  -- a member's copy of a group, sent to you by them
+  local function sendGroup(c, name, gid)
+    for _, m in ipairs(G.GroupMessages(c, KME)) do from(name, gid, "GRP", m.f) end
+  end
+  local function st(g, key) return G.StateOf(g, key) end
+
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  check(ns.Comm.everyone["Alice Wonder"] ~= nil and ns.Comm.everyone["Buddy Pal"] ~= nil, "two friends online")
+  check(G.FriendKey("Buddy Pal") == KB, "a friend's account key from their character")
+  drain(); SENT = {}
+
+  check(G.UnB36(G.B36(1763290000)) == 1763290000 and G.B36(0) == "0", "base 36 round trip")
+  check(select(2, G.Create("  ")) == "GROUP_BAD_NAME", "a group needs a name")
+  local g = G.Create("Gank Squad")
+  check(g and g.owner == ns.me and G.MyState(g) == "in" and G.Leader(g) == KME, "create: you're in it and lead it")
+  check(select(2, G.Create("gank squad")) == "GROUP_EXISTS", "no two groups with the same name")
+  check(select(2, G.Invite(g, "Nobody Known")) == "GROUP_NOT_FRIEND", "only your friends can be invited")
+
+  -- friends on 0.6 can't be invited; then Buddy (on 0.7) is
+  local buddyRec = ns.Data.RealRealm().players["Buddy Pal"]
+  buddyRec.version = "0.6.3"
+  check(select(2, G.Invite(g, "Buddy Pal")) == "GROUP_OLD_VERSION" and not table.concat(G.Invitable(g), ","):find("Buddy", 1, true),
+    "friends on 0.6 can't be invited (they'd never see it)")
+  buddyRec.version = ns.VERSION
+  check(G.Invite(g, "Buddy Pal") == "Buddy Pal" and st(g, KB) == "invited" and g.members[KB].name == "Buddy Pal", "Buddy invited (by account)")
+  drain()
+  local toBuddy = sentTo(77, "GRP")
+  check(#toBuddy >= 1 and toBuddy[1].f.members:find("^" .. KB .. ":") ~= nil and toBuddy[1].f.name == "Gank Squad", "invite sent to Buddy, his entry first")
+  check(toBuddy[1] and not toBuddy[1].f.members:find("#", 1, true), "no BattleTags in group messages")
+  check(#sentTo(78, "GRP") == 0, "non-members hear nothing")
+  check(select(2, G.Invite(g, "Buddy Pal")) == "GROUP_ALREADY", "can't invite twice")
+
+  -- Buddy joins on his side
+  local bc = copy(g)
+  bc.members[KB].j = bc.members[KB].a
+  sendGroup(bc, "Buddy Pal", 77)
+  check(st(g, KB) == "in", "Buddy's join reaches you")
+
+  -- invite Alice; she joins; you pass her join on to Buddy (not back to her)
+  G.Invite(g, "Alice Wonder")
+  drain(); SENT = {}
+  local ac = copy(g)
+  ac.members[KA].j = ac.members[KA].a
+  sendGroup(ac, "Alice Wonder", 78)
+  drain()
+  check(st(g, KA) == "in", "Alice joined")
+  check(#sentTo(77, "GRP") >= 1 and #sentTo(78, "GRP") == 0, "her join is passed on to Buddy only")
+
+  -- your own numbers: all your characters added up, sent to the members
+  local rr = ns.Data.RealRealm()
+  rr.players["Testme Alt"] = { name = "Testme Alt", self = true, friend = true, k = 5, d = 1, a = 0 }
+  local myRec = rr.players[ns.me]
+  local tot = G.MyTotals()
+  check(tot.k == ns.Count(myRec.k) + 5 and tot.d == ns.Count(myRec.d) + 1, "your group numbers count every character on the account")
+  SENT = {}
+  G.MyStatsChanged()
+  drain()
+  local mine1 = sentTo(77, "GST")
+  check(#mine1 >= 1 and mine1[1].f.stats:find("^" .. KME .. ":" .. tot.k .. ":" .. tot.d .. ":") ~= nil, "your totals go to Buddy")
+  local whispered = false
+  for _, s in ipairs(SENT) do
+    if s.route == "whisper" and (s.payload:find("\tGST\t", 1, true) or s.payload:find("\tGRP\t", 1, true)) then whispered = true end
+  end
+  check(not whispered, "group messages go over Battle.net only (no duplicate whisper)")
+
+  -- Buddy's numbers (from Buddy himself) are relayed to Alice, who isn't his friend
+  SENT = {}
+  local T = time() - 30
+  from("Buddy Pal", 77, "GST", { stats = KB .. ":21:5:" .. G.B36(T) .. ":Buddy Pal" })
+  drain()
+  local gst = sentTo(78, "GST")
+  check(G.StatsOf(KB).k == 21 and G.StatsOf(KB).direct and not G.StatsOf(KB).via, "Buddy's own numbers: direct")
+  check(#gst >= 1 and gst[1].f.stats:find(KB .. ":21:5:", 1, true) ~= nil, "relayed to Alice")
+  check(#sentTo(77, "GST") == 0, "not echoed back to Buddy")
+  -- the same numbers coming back via Alice don't replace his own word
+  from("Alice Wonder", 78, "GST", { stats = KB .. ":21:5:" .. G.B36(T) .. ":Buddy Pal" })
+  check(G.StatsOf(KB).direct, "same age: the member's own word wins over a relayed copy")
+
+  -- Alice invites her friend Carol, Carol joins; Carol's numbers come via Alice and go on to Buddy
+  ac = copy(g)
+  ac.members[KC] = { a = time(), name = "Carol Far" }
+  sendGroup(ac, "Alice Wonder", 78)
+  check(st(g, KC) == "invited" and g.members[KC].name == "Carol Far", "a member's invite of their own friend is merged")
+  ac.members[KC].j = time()
+  sendGroup(ac, "Alice Wonder", 78)
+  check(st(g, KC) == "in", "Carol joined (through Alice)")
+  drain(); SENT = {}
+  local t = time() - 60
+  from("Alice Wonder", 78, "GST", { stats = KC .. ":7:2:" .. G.B36(t) .. ":Carol Far" })
+  drain()
+  local carol = G.StatsOf(KC)
+  check(carol and carol.k == 7 and carol.d == 2 and carol.via == "Alice Wonder" and carol.name == "Carol Far", "Carol's stats stored, via Alice")
+  local toB = sentTo(77, "GST")
+  check(#toB >= 1 and toB[1].f.stats:find(KC .. ":7:2:", 1, true) ~= nil, "and passed on to Buddy")
+  SENT = {}
+  from("Buddy Pal", 77, "GST", { stats = KC .. ":5:2:" .. G.B36(t - 100) .. ":Carol Far;" .. G.KeyOf("Random#1") .. ":9:9:" .. G.B36(t) .. ":Random Guy" })
+  drain()
+  check(G.StatsOf(KC).k == 7 and G.Relayed()[G.KeyOf("Random#1")] == nil, "older and non-member stats ignored")
+  check(#SENT == 0, "nothing new: nothing passed on")
+  -- a member whose clock runs fast: taken as "now", so later news still wins
+  from("Alice Wonder", 78, "GST", { stats = KC .. ":8:2:" .. G.B36(time() + 10000) .. ":Carol Far" })
+  check(G.StatsOf(KC).k == 8 and G.StatsOf(KC).t <= time(), "fast clock: accepted, stamped now")
+  local later, realTime = time() + 1, time
+  time = function(x) if x then return realTime(x) end return later end
+  from("Alice Wonder", 78, "GST", { stats = KC .. ":9:2:" .. G.B36(later) .. ":Carol Far" })
+  check(G.StatsOf(KC).k == 9, "the next real update replaces it")
+  time = realTime
+  drain(); SENT = {}
+
+  -- the group board: one row per account
+  local rows = ns.Profile.Board(g.id)
+  local byName = {}
+  for _, r in ipairs(rows) do byName[r.name] = r end
+  check(#rows == 4 and byName[ns.me] and byName[ns.me].leader and byName[ns.me].k == tot.k and byName["Buddy Pal"].k == 21
+    and byName["Carol Far"].k == 9 and byName["Carol Far"].via == "Alice Wonder", "group board: you (leader, all characters), Buddy, Alice, Carol (via Alice)")
+  local _, _, n = G.Totals(g)
+  check(n == 4, "totals count 4 members")
+
+  -- someone invites you to their group; you join; then leave; an old copy can't pull you back in
+  local shown = ns.Toast.shown or 0
+  local nw = { id = "nightw1", name = "Night Watch", owner = "Buddy Pal", members = {
+    [KB] = { a = time() - 50, j = time() - 50, name = "Buddy Pal" }, [KME] = { a = time() - 10, name = ns.me } } }
+  sendGroup(nw, "Buddy Pal", 77)
+  drainToasts()
+  local mine = G.Get("nightw1")
+  check(mine and G.MyState(mine) == "invited" and (ns.Toast.shown or 0) > shown, "invite received, with a toast")
+  check(G.Leader(mine) == KB, "Buddy leads his group")
+  SENT = {}
+  check(G.Join(mine), "join")
+  drain()
+  local back = sentTo(77, "GRP")
+  check(G.MyState(mine) == "in" and #back >= 1 and back[1].f.members:find("^" .. KB .. ":") ~= nil, "your join goes back to Buddy")
+  check(select(2, G.Remove(mine, KB)) == "GROUP_NOT_LEADER", "only the leader removes")
+  -- the leader leaves: whoever has been in longest after them leads now
+  local ld = copy(mine)
+  ld.members[KB].r = time()
+  sendGroup(ld, "Buddy Pal", 77)
+  check(st(mine, KB) == "out" and G.Leader(mine) == KME, "leader left: the next-oldest member leads")
+  check(G.Leave(mine) and G.MyState(mine) == "out", "leave")
+  sendGroup(nw, "Buddy Pal", 77)
+  check(G.MyState(mine) == "out", "an old copy of the group doesn't bring you back")
+  local count = #G.Mine()
+  sendGroup({ id = "other1", name = "Not Mine", owner = "Buddy Pal", members = { [KB] = { a = time(), j = time(), name = "Buddy Pal" } } }, "Buddy Pal", 77)
+  check(G.Get("other1") == nil and #G.Mine() == count, "groups you're not in aren't kept")
+
+  -- leadership is by join time, so it's the same on every client: the second-oldest takes over
+  local lg = { id = "leadtest", name = "Lead Test", owner = "Someone", members = {
+    a1 = { a = 100, j = 100 }, a2 = { a = 150, j = 200 }, a3 = { a = 120, j = 300 } } }
+  check(G.Leader(lg) == "a1", "the creator leads")
+  lg.members.a1.r = 400
+  check(G.Leader(lg) == "a2", "creator gone: the member who joined next leads")
+
+  -- the 10-member cap holds even when invites made offline collide
+  local cap = { id = "captest", name = "Cap Test", owner = "x", members = {} }
+  for i = 1, 8 do cap.members["m" .. i] = { a = 100 + i, j = 200 + i } end
+  cap.members.late = { a = 500, j = 600 } -- joined last
+  cap.members.inv1 = { a = 300 }            -- invited, earlier
+  cap.members.inv2 = { a = 400 }            -- invited, later: the 11th
+  local states = G.States(cap)
+  local n2 = 0
+  for _ in pairs(states) do n2 = n2 + 1 end
+  check(n2 == 10 and states.late == "in" and states.inv1 == "invited" and states.inv2 == nil, "over 10: the latest invite doesn't count; joined members keep their place")
+  cap.members.inv1.j = 700
+  cap.members.inv2.j = 800
+  states = G.States(cap)
+  check(states.inv2 == nil and states.inv1 == "in", "both join: the later joiner past 10 is out")
+
+  -- group messages still flow with friends you didn't pick for alerts
+  FriendsAndFoesDB.group = { ["Alice#5678"] = true }
+  ns.Comm.RebuildRoster()
+  local KQ = G.KeyOf("Quiet#7")
+  bc = copy(g)
+  bc.members[KQ] = { a = time(), name = "Quiet Member" }
+  sendGroup(bc, "Buddy Pal", 77)
+  check(st(g, KQ) == "invited", "unpicked friend's group update accepted")
+  ns.Comm.ClearPicks()
+
+  -- the leader removes someone
+  check(G.Remove(g, KQ) and st(g, KQ) == "out", "leader removes a member")
+  check(G.MemberByName(g, "carol") == KC and G.MemberByName(g, "Carol Far") == KC, "members found by name")
+
+  -- full at 10 (invites count)
+  local g2 = G.Create("Big Crew")
+  for i = 1, 9 do g2.members["fill" .. i] = { a = time(), name = "Filler" .. i .. " X" } end
+  check(select(2, G.Invite(g2, "Alice Wonder")) == "GROUP_FULL", "10 members max")
+  G.Leave(g2)
+
+  -- every message fits, and a big group decodes back to the same entries
+  local fits = true
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  local big = { id = "bigone", name = string.rep("N", 24), owner = "Longfirstname Longsurname", members = {} }
+  for i = 1, 12 do
+    big.members[G.KeyOf("Long" .. i .. "#12345")] = { a = time() - i * 1000, j = time() - i * 500, r = 0, name = "Longfirstname" .. i .. " Longsurname" }
+  end
+  local parts = G.GroupMessages(big, "x")
+  for _, m in ipairs(parts) do if #ns.Comm.Encode(m) > 255 then fits = false end end
+  check(fits and #parts >= 3, "group messages are split to fit 255 bytes: " .. #parts)
+  local back2 = { id = "bigone", members = {} }
+  for _, m in ipairs(parts) do
+    local entries = {}
+    for _, part in ipairs(ns.Split(m.f.members, ";")) do
+      local p = ns.Split(part, ":")
+      local function abs(v) local x = G.UnB36(v); return x and (m.f.base + x - 1) or 0 end
+      entries[p[1]] = { a = abs(p[2]), j = abs(p[3]), r = abs(p[4]), name = p[5] }
+    end
+    G.Merge(back2, entries)
+  end
+  local same = true
+  for k, mm in pairs(big.members) do
+    local b = back2.members[k]
+    if not b or b.a ~= mm.a or b.j ~= mm.j or b.name ~= mm.name then same = false end
+  end
+  check(same, "members survive encoding")
+
+  -- the window: group board, buttons, slash commands
+  ns.UI.Show("board")
+  ns.UI.SetBoardView(g.id)
+  check(ns.UI.BoardView() == g.id and #ns.UI.Rows() == 4, "Leaderboard shows the group")
+  ns.UI.SetBoardView("friends")
+  SlashCmdList.FRIENDSANDFOES("groups")
+  SlashCmdList.FRIENDSANDFOES("groups new Test Crew")
+  local tc = G.FindByName("Test Crew")
+  check(tc and ns.UI.BoardView() == tc.id, "/fnf groups new")
+  SlashCmdList.FRIENDSANDFOES("groups invite Test Crew Buddy Pal")
+  check(st(tc, KB) == "invited", "/fnf groups invite <group> <friend>")
+  SlashCmdList.FRIENDSANDFOES("groups remove Test Crew Buddy")
+  check(st(tc, KB) == "out", "/fnf groups remove (first name works)")
+  SlashCmdList.FRIENDSANDFOES("groups leave Test Crew")
+  check(G.MyState(tc) == "out", "/fnf groups leave")
+  ns.UI.SetBoardView(tc.id)
+  check(ns.UI.BoardView() == "friends", "a group you left falls back to your friends")
+
+  -- you leave while every other member is offline: they hear it when they come back
+  local g3 = G.Create("Late Crew")
+  g3.members[KB] = { a = time() - 100, j = time() - 90, name = "Buddy Pal" }
+  F = { F[2] } -- Buddy logs off
+  ns.Comm.RebuildRoster()
+  drain(); SENT = {}
+  G.Leave(g3)
+  drain()
+  check(#sentTo(77, "GRP") == 0, "nobody online to tell")
+  F = { { gid = 77, name = "Buddy", tag = "Buddy#1234" }, F[1] } -- Buddy back
+  ns.Comm.RebuildRoster()
+  drain()
+  local told = false
+  for _, m in ipairs(sentTo(77, "GRP")) do
+    if m.f.gid == g3.id and m.f.members:find(KME .. ":[^:;]*:[^:;]*:%w+") then told = true end
+  end
+  check(told, "you left while they were offline: told when they log in")
+
+  -- removed while offline for days: their stale copy gets an answer, so they find out
+  G.Remove(g, KA)
+  local am = g.members[KA]
+  am.r, am.a, am.j = time() - 3 * 86400, time() - 5 * 86400, time() - 4 * 86400
+  local stale = copy(g)
+  stale.members[KA].r = nil
+  drain(); SENT = {}
+  sendGroup(stale, "Alice Wonder", 78)
+  drain()
+  check(st(g, KA) == "out" and #sentTo(78, "GRP") >= 1, "stale copy from a removed member: still out, and told")
+  SENT = {}
+  sendGroup(copy(g), "Alice Wonder", 78)
+  drain()
+  check(#sentTo(78, "GRP") == 0, "a copy that already knows gets no answer")
+
+  -- cleanup never forgets removals, so an ancient copy can't bring anyone back
+  G.Tidy()
+  check(g.members[KQ] and st(g, KQ) == "out", "removal record kept after cleanup")
+  local ancient = copy(g)
+  ancient.members[KQ] = { a = g.members[KQ].a, name = "Quiet Member" }
+  sendGroup(ancient, "Buddy Pal", 77)
+  check(st(g, KQ) == "out", "an ancient copy doesn't bring them back")
+
+  -- upkeep: relayed stats about accounts in none of your groups are dropped
+  G.Relayed()["gone_1"] = { k = 1, d = 1, t = time() }
+  G.Tidy()
+  check(G.Relayed()["gone_1"] == nil and G.Relayed()[KC] ~= nil, "tidy drops stats you no longer need")
+
+  -- language filter (ProfanityLib + its word list). Without them, others' words stay hidden.
+  local P, L = ns.Profile, ns.L
+  -- the bundled filter is there from the start, with the real word list
+  local realLib, realData = ProfanityLib, ProfanityLibData
+  check(P.FilterReady() and realLib.VERSION == 4 and realData.VERSION == 4, "bundled ProfanityLib and its word list are loaded")
+  check(P.Check("Gank Squad") == "ok" and P.Check("Night Watch") == "ok" and P.Check("Tarren Mill Defenders") == "ok",
+    "ordinary group names pass the real word list")
+  check(P.Check("Hitler Fans") == "offensive" and P.Check("H1tl3r") == "offensive", "the real word list catches hate terms, also in l33t")
+  check(select(2, G.Create("Hitler Fans")) == "TEXT_OFFENSIVE", "such a name can't be used for a group")
+  -- if it were ever missing (or a broken copy), others' words stay hidden
+  ProfanityLib, ProfanityLibData = nil, nil
+  check(not P.FilterReady() and P.Check("Hello there") == "unchecked", "no filter installed: nothing from others counts as checked")
+  local foreign = G.Create("Temp Crew")
+  check(G.Label(foreign) == "Temp Crew", "your own group names always show")
+  local nwg = G.Get("nightw1")
+  check(G.Label(nwg) == L.GROUP_UNNAMED, "no filter: someone else's group name is hidden")
+  -- a stand-in ProfanityLib that flags one made-up word
+  ProfanityLib = { IsProfane = function(_, s)
+    local f = s:lower():gsub("[^a-z]", "")
+    if f:find("zzbad", 1, true) then return true, "zzbad" end
+    return false, nil
+  end }
+  check(not P.FilterReady(), "the matcher without its word list doesn't count")
+  ProfanityLibData = { VERSION = 4 }
+  check(P.FilterReady() and P.Check("Hello there") == "ok" and P.Check("zz-BAD!") == "offensive", "filter installed: checks text")
+  check(select(2, G.Create("zzbad crew")) == "TEXT_OFFENSIVE", "an offensive group name can't be created")
+  check(G.Label(nwg) == "Night Watch", "a clean group name from someone else shows once checked")
+  nwg.name = "Zzbad Watch"
+  check(G.Label(nwg) == L.GROUP_UNNAMED and G.FindByName("Zzbad Watch") == nil, "an offensive group name is hidden and can't be typed to reach it")
+  g.members[KC].name = "Zzbad Person"
+  check(G.DisplayName(g, KC) == "?", "an offensive member name is hidden")
+  ProfanityLib.IsProfane = function() error("broken") end
+  check(P.Check("anything") == "unchecked", "a broken filter counts as not checked (hidden), not as clean")
+  ProfanityLib, ProfanityLibData = realLib, realData -- back to the bundled filter
+  nwg.name, g.members[KC].name = "Night Watch", "Carol Far"
+  G.Leave(foreign)
+
+  -- group names: 2-24 characters, like guild names; too long is refused, not cut
+  check(select(2, G.Create("X")) == "GROUP_BAD_NAME", "one character is too short")
+  check(select(2, G.Create(string.rep("a", 25))) == "GROUP_NAME_TOO_LONG", "25 characters is too long")
+  local accented = string.rep("\195\134", 24) -- 24 x "Æ": 48 bytes, 24 characters
+  local okName = G.Create(accented)
+  check(okName and okName.name == accented, "24 accented characters fit (counted as characters, not bytes)")
+  G.Leave(okName)
+  check(G.CleanName(string.rep("b", 40)) == string.rep("b", 24), "a longer name from someone else is cut to 24")
+  check(G.CleanName("Gank:Squad;x") == "Gank Squad x", "separators can't sneak into a name")
+
+  rr.players["Testme Alt"] = nil
+  BNGetNumFriends, C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetFriendAccountInfo, C_BattleNet.GetGameAccountInfoByID, BNGetInfo =
+    o.num, o.info, o.acct, o.byId, o.bninfo
+  ns.Comm.RebuildRoster()
+  drain()
+  check(ns.errors == errs, "no errors in shared groups (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

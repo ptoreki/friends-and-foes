@@ -15,6 +15,13 @@ epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks 
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
   - Entries fade after 90 days unseen.
+- **Leaderboard:** world PvP kills, deaths and K/D for you and your friends, all-time. Each player
+  reports their own numbers.
+- **Shared groups:** named groups whose stats you follow together, with group totals. Members
+  pass each other's numbers along, so not everyone needs to be friends with everyone.
+- **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted,
+  where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy
+  for your friends to see.
 - **Tracking:** kills, deaths and takedowns per player, and a weekly summary with your nemesis.
 - **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short
   (*"Bob killed by Rogz · Duskwood"*).
@@ -43,7 +50,10 @@ on your faction. You don't need to group, share a server, or be in the same zone
 ## Commands
 | Command | What it does |
 |---|---|
-| `/fnf` | Open or close the window (Hitlist, Players, Feed) |
+| `/fnf` | Open or close the window (Hitlist, Leaderboard, Enemies, Friends, Feed, Profile) |
+| `/fnf board` | Open the Leaderboard |
+| `/fnf groups [new\|invite\|join\|decline\|leave\|remove ...]` | List your shared groups, or manage one (see `/fnf groups`) |
+| `/fnf profile [name]` | Open a profile (yours if no name) |
 | `/fnf options` | Open the options |
 | `/fnf group [name\|all]` | List friends, pick who you exchange alerts with, or go back to everyone |
 | `/fnf unlock` / `/fnf lock` | Move the toasts |
@@ -78,3 +88,15 @@ Debug logging turns itself off after 7 days.
 - Releases are automatic: push a `vX.Y.Z` or `vX.Y.Z-beta` tag. A GitHub Action then runs the tests
   and uploads the zip to CurseForge, Wago and GitHub Releases. See [PUBLISHING.md](PUBLISHING.md).
 - Design notes are in [SPEC.md](SPEC.md), and version history is in [CHANGELOG.md](CHANGELOG.md).
+
+## License
+Copyright (C) 2026 ptoreki.
+
+Friends & Foes is free software: you can redistribute it and/or modify it under the terms of the
+[GNU General Public License](LICENSE) as published by the Free Software Foundation, either
+version 3 of the License, or (at your option) any later version. It is distributed in the hope
+that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the license for details.
+
+The language filter is [ProfanityLib](https://github.com/Deathwing/ProfanityLib) by Deathwing
+(GPLv3), bundled unchanged in `FriendsAndFoes/Libs/` (see `SOURCE.txt` there for the exact version).

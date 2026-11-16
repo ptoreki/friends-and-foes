@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.7.0
+Compatible with 0.3.x to 0.6.3. Friends on older versions just don't send profiles yet.
+- **Leaderboard tab:** world PvP kills, deaths and K/D for you and your friends, all-time, most
+  kills first. Click a column to sort.
+  - Each player reports their own numbers, so everyone sees the same board. Your count starts
+    from what the addon has already recorded for you.
+  - A friend on an older version shows what you counted from their alerts, marked with ~.
+  - Only your picked friends are listed if you picked any.
+- **Shared groups:** named groups whose PvP stats you follow together, shown on the Leaderboard
+  (pick the group at the top left) with the group's total takedowns, deaths and K/D.
+  - Not everyone in a group has to be Battle.net friends with everyone else. Members pass each
+    other's numbers along, so you see everyone. A member you're not friends with shows how old
+    their numbers are and who passed them on ("as of 2h ago, via Alice").
+  - Members are Battle.net accounts, not characters: your alts are in too, and your numbers in a
+    group are all your characters added up. Each row shows the character the member last played.
+    BattleTags are never sent; members are known by a scrambled code made from them.
+  - Group names are 2 to 24 characters, like guild names.
+  - Any member can invite their own friends (New group, Invite). An invite has to be accepted
+    (Join / Decline) before someone counts. Anyone can leave.
+  - The leader is the member who has been in the group longest: the creator, and if they leave,
+    the next-oldest member. The leader can remove members (right-click).
+  - Up to 10 members per group (invites count), and up to 5 groups. If invites made at the same
+    time push a group past 10, the latest ones don't count; members who already joined keep
+    their place.
+  - Everyone in a group needs 0.7 or newer; friends on older versions can't be invited.
+  - Only stats are passed along. Live alerts still come only from your own friends.
+  - Group messages flow even with friends you didn't pick for alerts.
+  - Also `/fnf groups` (list), `/fnf groups new <name>`, `invite <group> <friend>`,
+    `join <group>`, `decline <group>`, `leave <group>`, `remove <group> <member>`.
+- **Language filter:** group names go through a word filter (ProfanityLib by Deathwing, bundled
+  in the add-on; nothing extra to install). An offensive name can't be used, and from others
+  it's shown as "Unnamed group". Blizzard's own filter isn't available to add-ons.
+  `/fnf status` shows whether the filter is on.
+- **New option "Where I am"** (Options → Friends & sharing): turn off sharing your zone and
+  AFK / in-a-fight status. Your kill/death numbers on leaderboards and in groups follow the
+  existing "World PvP" switch.
+- **Enemies and Friends are tabs now**, not a dropdown on a Players tab.
+- **Profiles:** click a name on the Leaderboard, Enemies or Friends tab (double-click on the
+  Hitlist), or click a toast, to open a Profile tab.
+  - Friends: kills, deaths, K/D, rank, nemesis (the enemy who killed them most), most wanted,
+    where they are now ("online · Duskwood · in a fight" or AFK), addon version (flagged when
+    out of date) and their recent PvP.
+  - Enemies: kills on your group, deaths to your group, who of your friends they killed,
+    revenge taken, who has them as most wanted, last seen, recent PvP and your note.
+- **Most wanted:** make an enemy your most wanted from their profile; friends see it on yours.
+  Also `/fnf wanted <name>` (or target them and type `/fnf wanted`).
+- **Picking friends** moved into their profile (Pick for alerts / Unpick). Friends the addon sees
+  but hasn't heard from yet can still be picked with a click in the Friends list, and
+  `/fnf group` works as before.
+- **Fix:** when a friend started a fight, you got "Bob attacked Rogz" and then, a few seconds
+  later, "Bob attacked by Rogz" for the same fight. Now only the first one comes. A second enemy
+  joining in is still reported.
+- **Layout fixes:** buttons whose label changes (Pick / Unpick, Make / Clear most wanted) now
+  resize to fit. The Profile page starts below the search bar. The hint line under lists is
+  capped at two lines so it can't reach the list. In the fallback Options panel (used only when
+  the game's settings screen isn't available), the milestone note no longer overlaps the
+  options below it, and its buttons fit their labels.
+- **License:** Friends & Foes is now free software under the GNU GPL v3 or later (LICENSE in the
+  repo, LICENSE.txt in the add-on folder). GPLv3 because it includes ProfanityLib, which is GPLv3.
+- New commands: `/fnf board`, `/fnf groups`, `/fnf profile [name]`, `/fnf wanted`.
+
 ## 0.6.3
 Compatible with 0.3.x to 0.6.2.
 - **Catch-up after being offline:** when you log in, friends who are online send what happened to

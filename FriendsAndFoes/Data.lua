@@ -179,9 +179,11 @@ function Data.KillsOn(h)
   return out
 end
 
-function Data.Feed(kind, text)
+-- who: the friend it's about; foes: enemy names in it (both optional, used by profiles)
+function Data.Feed(kind, text, who, foes)
   local feed = Data.Realm().feed
-  local entry = { t = ns.Now(), kind = kind, text = text }
+  local entry = { t = ns.Now(), kind = kind, text = text, who = who }
+  if foes and #foes > 0 then entry.foes = foes end
   -- kept in time order: something from while you were offline goes in at the time it happened
   local i = #feed + 1
   while i > 1 and (feed[i - 1].t or 0) > entry.t do i = i - 1 end

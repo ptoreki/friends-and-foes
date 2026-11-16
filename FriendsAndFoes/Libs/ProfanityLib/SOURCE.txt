@@ -1,0 +1,4 @@
+Bundled, unchanged, from https://github.com/Deathwing/ProfanityLib
+Commit 8cd664032b5149de2c53a6a953f4b2598a38e9ad ("V4", 2026-11-10), version 4.
+License: GNU GPL v3 (LICENSE.txt). Author: Deathwing.
+To update: copy the same files from a newer, reviewed commit and change this note.

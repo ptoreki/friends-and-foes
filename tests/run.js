@@ -4,7 +4,19 @@ const { lua, lauxlib, lualib, to_luastring } = require('fengari');
 const addonDir = process.argv[2];
 const here = __dirname;
 const toc = fs.readFileSync(path.join(addonDir, 'FriendsAndFoes.toc'), 'utf8');
-const files = toc.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+// toc entries in load order; an .xml entry loads its <Script file="..."/> files, like the game
+const files = [];
+for (const entry of toc.split(/\r?\n/).map(s => s.trim()).filter(s => s && !s.startsWith('#'))) {
+  const rel = entry.replace(/\\/g, '/');
+  if (rel.endsWith('.xml')) {
+    const xml = fs.readFileSync(path.join(addonDir, rel), 'utf8');
+    for (const m of xml.matchAll(/<Script\s+file="([^"]+)"/g)) {
+      files.push(path.posix.join(path.posix.dirname(rel), m[1].replace(/\\/g, '/')));
+    }
+  } else {
+    files.push(rel);
+  }
+}
 
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
