@@ -97,7 +97,7 @@ local SCHEMA = {
   -- the sender's profile (0.7): own all-time kills/deaths (empty if they don't share PvP),
   -- most wanted enemy, zone, status ("" | "afk" | "pvp"). Older clients ignore unknown kinds.
   -- t: when the K/D was last true, on the sender's clock (so relayed copies compare fairly)
-  PRO  = { "k", "d", "wanted", "zone", "status", "t" },
+  PRO  = { "k", "d", "wanted", "zone", "status", "t", "bt" }, -- bt (0.9): bounties collected, gold
   -- shared groups (0.7, Groups.lua): a group and some of its members ("First Last:a:j:r;...",
   -- times in base 36 after `base`), and relayed stats ("First Last:k:d:time;...")
   GRP  = { "gid", "name", "owner", "base", "members" },
@@ -113,6 +113,36 @@ local SCHEMA = {
   RLY  = { "origin", "oclass", "olevel", "okind", "oid", "ago", "data" },
 }
 Comm.SCHEMA = SCHEMA
+
+-- What each message kind is: the version it first appeared in, and whether friends may pass it
+-- on to their other friends (relay, catch-up). One place to check before changing a message:
+-- new fields only ever go on the end (older clients ignore them), kinds are never reused.
+Comm.KINDS = {
+  LVL = { since = "0.1.0", relay = true }, LOOT = { since = "0.1.0", relay = true },
+  GEAR = { since = "0.1.0", relay = true }, ATK = { since = "0.1.0", relay = true },
+  DIE = { since = "0.1.0", relay = true }, KILL = { since = "0.1.0", relay = true },
+  HIT = { since = "0.2.0" }, SIGHT = { since = "0.6.0" }, ENG = { since = "0.6.1", relay = true },
+  REQ = { since = "0.6.3" }, PRO = { since = "0.7.0" }, GRP = { since = "0.7.0" }, GST = { since = "0.7.0" },
+  KLQ = { since = "0.7.1" }, KLA = { since = "0.7.1" }, RLQ = { since = "0.7.1" }, RLY = { since = "0.7.1" },
+}
+
+-- Features and the first version that has them, for "does this friend's add-on do X?"
+Comm.FEATURES = {
+  profiles = "0.7.0", groups = "0.7.0", killLists = "0.7.1", relay = "0.7.1", bounties = "0.9.0",
+}
+
+-- true if this version of the add-on has the feature (nil version: unknown, so no)
+function Comm.VersionSupports(version, feature)
+  local since = Comm.FEATURES[feature]
+  if not since or type(version) ~= "string" then return false end
+  return not ns.VersionNewer(since, version)
+end
+
+-- does this friend's add-on (the version they last sent) have the feature?
+function Comm.Supports(name, feature)
+  local p = name and ns.Data.FindPlayer(name)
+  return Comm.VersionSupports(p and p.version, feature)
+end
 -- asked for, not broadcast: group traffic and kill lists also flow with friends you didn't
 -- pick for alerts, and only over Battle.net (no whisper copy)
 local GROUP_KINDS = { GRP = true, GST = true, KLQ = true, KLA = true }
@@ -156,9 +186,24 @@ function Comm.Decode(text)
 end
 
 -- Encodes, dropping guild names if needed to fit the 255-byte limit. nil if it still doesn't fit.
+-- Still too long (long names, a long zone): helpers are dropped one at a time, last first - the
+-- killer and the rest of the message always go (a death with 3 helpers could otherwise be lost).
+local TRIM_LISTS = { "assists" }
 function Comm.Fit(msg)
   local payload = Comm.Encode(msg)
   if #payload > MAX_PAYLOAD then payload = Comm.Encode(msg, true) end
+  if #payload > MAX_PAYLOAD then
+    -- trim a copy: your own copy of the event keeps everyone
+    local sent = setmetatable({ f = setmetatable({}, { __index = msg.f }) }, { __index = msg })
+    for _, field in ipairs(TRIM_LISTS) do
+      local list = msg.f[field]
+      while #payload > MAX_PAYLOAD and type(list) == "string" and list ~= "" do
+        list = list:match("^(.*);[^;]*$") or "" -- drop the last one
+        sent.f[field] = list
+        payload = Comm.Encode(sent, true)
+      end
+    end
+  end
   if #payload > MAX_PAYLOAD then
     ns.Debug("TOO-LONG", msg.kind, #payload)
     return nil

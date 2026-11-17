@@ -1,5 +1,68 @@
 # Changelog
 
+## 0.9.0
+- **Bounties.** Every enemy's Wanted poster shows their open bounty in gold (just for fun, not
+  real gold): 100 for every murder and 25 for every attack on you and your friends since someone
+  last collected it, plus 250 for every friend who has them as most wanted. **Kill them to
+  collect it:** everyone who gets the kill within a minute shares it equally, and their bounty
+  starts again from the minimum. A chat line tells you what you collected.
+- **Bounties collected** is your all-time total (account-wide), sent to friends with your profile
+  like your K/D: a new **Bounties** column on the Leaderboard, and a line on profiles (yours also
+  says how many you've collected). Friends on older versions show an empty cell until they update.
+- Profiles have room for one more line.
+- **Bounties pass through groups:** a group member's bounties reach you even if you aren't
+  Battle.net friends, on the same relayed card as their kills and deaths.
+- **The Wanted poster has its own window**, tall like a real poster, docked beside the main
+  window: a bigger face, bigger WANTED and bounty. The enemy's profile page keeps their facts and
+  recent PvP at full width. Close the poster and it stays closed for that enemy; the *Wanted
+  poster* button on their profile brings it back. Drag it anywhere; it goes when you leave the
+  profile.
+- **The group window:** the Leaderboard's *Group* button (*Invitation* while you're invited) opens
+  everything about the group in one place, beside the main window: its name and leader, the
+  members (joined or invited), its totals, and the buttons that apply to you - Invite and Leave,
+  Join and Decline, and Remove beside each member when you lead. The Leaderboard just shows the
+  board now.
+- **First-run tour:** three short pages the first time you open the window (everyone sees it once
+  after updating). `/fnf tour` shows it again.
+- **Hover to explain:** column headers and profile labels explain their numbers (K/D, rank,
+  bounties, the * on the Hitlist, murders, revenge...).
+- **Debug report:** `/fnf report` (or *Copy debug report* in Options) puts everything a bug report
+  needs in one box to copy and paste: version, what works on your client, friends' versions,
+  errors and the debug log. No more digging in the WTF folder.
+- **Friends on older versions:** one chat line per session names them, so you know why some
+  things don't sync with them.
+- **Fix: a death could go unreported.** With long names, a long zone name and three helpers, the
+  death message was over the game's 255-byte limit and was never sent. Helpers are now dropped
+  from the end until it fits (your own record keeps them all).
+- Under the hood, for a dependable 1.0:
+  - The window is split into parts with one job each (lists and tabs, profiles and posters,
+    building blocks, commands), with a small layout helper instead of hand-counted positions:
+    every row of buttons (top bar, Leaderboard group buttons, page arrows, Hitlist and profile
+    buttons, the Wanted poster) lines itself up, and buttons that hide leave no gap.
+  - Every message type is listed with the version it came in; tests check each one reads back
+    the same and fits the 255-byte limit at its longest.
+  - Saved data has a version and numbered upgrade steps, and everything that grows has a limit
+    (kill lists 250 victims each, 3000 enemy records; the oldest harmless ones go first).
+  - A test checks every text the add-on shows exists, and translations can be added as one file
+    per language.
+
+### Also in 0.9.0 (from the unreleased 0.8.1)
+- **A real Wanted poster.** An enemy's profile is now a poster-shaped sheet of light, worn paper,
+  everything centred: big **WANTED**, a framed portrait, **DEAD OR ALIVE**, their name, level,
+  race and class, guild, and their **bounty** in gold (just for fun: 100 per murder, 25 per
+  attack, 250 per friend who has them as most wanted; hover it to see). Their facts ("Murders",
+  "Died to us", ...) and recent PvP sit in the column beside it. Their faction is a small crest
+  in the corner (it's always the other one).
+- **The portrait:** the game's own painted face for their race and sex, with their class crest
+  on its corner (their race symbol if the face isn't there; their class crest alone if you
+  haven't seen their race). Race is only known once you've seen them yourself (target,
+  mouseover, nameplate); it isn't sent between friends.
+- **Parchment only on Wanted posters.** The Hitlist is back to its plain striped rows.
+- **The Profile tab is always your own profile.** Clicking someone's name opens their profile
+  inside the tab you're on (that tab stays lit), with a Back button. The same goes for kill lists.
+- **Fix: Leaderboard ranks out of order.** Sorted by kills, players with the same kills could
+  show in the wrong order (rank 8 above rank 5). Ties now follow the rank.
+
 ## 0.8.0
 A look pass: the window feels more like part of the game. Everything uses only the game's own
 fonts, art and sounds, and falls back to the plain look if any of it is missing.

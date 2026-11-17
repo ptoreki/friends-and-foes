@@ -370,6 +370,7 @@ check(ns.errors == 0, "no errors in routing/marks (" .. tostring(ns.lastError) .
 -- a friend's kill defaults to a toast; an old saved "chat" switches once
 check(ns.S().show.kill == "toast", "friend's kill defaults to toast")
 ns.S().show.kill, ns.S().killToast = "chat", nil
+FriendsAndFoesDB.dataVersion = nil -- (saved data from before the upgrade steps)
 FIRE("ADDON_LOADED", "FriendsAndFoes")
 check(ns.S().show.kill == "toast" and ns.S().killToast, "old 'chat' default switched to toast once")
 ns.S().show.kill = "chat"
@@ -812,7 +813,8 @@ do
   ns.S().track.world = true
   -- old "hold in instances" switch turned off = show everywhere
   ns.S().dnd.instance = false
-  FIRE("ADDON_LOADED", "FriendsAndFoes")
+  FriendsAndFoesDB.dataVersion = nil -- (saved data from before the upgrade steps)
+FIRE("ADDON_LOADED", "FriendsAndFoes")
   check(ns.S().dnd.instance == nil and ns.S().where.party == "show" and ns.S().where.pvp == "show", "old instance switch migrated")
   for k in pairs(ns.S().where) do ns.S().where[k] = "hold" end
   IsInInstance = origII
@@ -1227,7 +1229,8 @@ do
   real.hitlist["Ancient One"] = nil
   -- #4 the old "mark" choice carries over to the new tooltip switch
   ns.S().mark, ns.S().markTooltip, ns.S().markSplit = false, true, nil
-  FIRE("ADDON_LOADED", "FriendsAndFoes")
+  FriendsAndFoesDB.dataVersion = nil -- (saved data from before the upgrade steps)
+FIRE("ADDON_LOADED", "FriendsAndFoes")
   check(ns.S().markTooltip == false and ns.S().markSplit, "mark off before the split: tooltip stays off")
   ns.S().mark, ns.S().markTooltip = true, true
   -- #5 a fresh entry without "last seen" isn't shown as an old level
@@ -1283,6 +1286,7 @@ ns.Toast.Push({ kind = "level", category = "progress", title = "x", milestone = 
 check((SOUNDS_PLAYED or 0) == s0 + 1, "milestone chimes even with its sound off")
 -- 0.4.2 sound settings (per category) migrate to per event
 snd.pvp, snd.progress = false, true
+FriendsAndFoesDB.dataVersion = nil -- (saved data from before the upgrade steps)
 FIRE("ADDON_LOADED", "FriendsAndFoes")
 check(snd.pvp == nil and snd.progress == nil and snd.attacked == false and snd.died == false and snd.kill == false and snd.loot == true,
   "old per-category sound settings migrated")
@@ -1717,6 +1721,14 @@ do
   check(carol and carol.k == 7 and carol.d == 2 and carol.via == "Alice Wonder" and carol.name == "Carol Far", "Carol's stats stored, via Alice")
   local toB = sentTo(77, "GST")
   check(#toB >= 1 and toB[1].f.stats:find(KC .. ":7:2:", 1, true) ~= nil, "and passed on to Buddy")
+  check(carol.bt == nil, "a card from before 0.9: no bounty total (unknown, not 0)")
+  -- 0.9: the card carries bounties collected too, on the end (older versions read the first five)
+  SENT = {}
+  from("Alice Wonder", 78, "GST", { stats = KC .. ":7:2:" .. G.B36(t + 1) .. ":Carol Far:" .. G.B36(1300) })
+  drain()
+  check(G.StatsOf(KC).bt == 1300, "Carol's bounties arrive on her card")
+  toB = sentTo(77, "GST")
+  check(#toB >= 1 and toB[1].f.stats:find(":Carol Far:" .. G.B36(1300), 1, true) ~= nil, "and are passed on with it")
   SENT = {}
   from("Buddy Pal", 77, "GST", { stats = KC .. ":5:2:" .. G.B36(t - 100) .. ":Carol Far;" .. G.KeyOf("Random#1") .. ":9:9:" .. G.B36(t) .. ":Random Guy" })
   drain()
@@ -1869,10 +1881,27 @@ do
   ns.UI.ShowPlayer("Rogz Fang") -- like clicking a toast
   ns.UI.Back()
   check(ns.UI.CurrentTab() == "hitlist", "profile from a toast: Back to the tab you had open")
+  -- the Profile tab is always your own profile; someone else's opens inside the tab you're on
   ns.UI.SelectTab("feed")
+  ns.UI.ShowProfile("Buddy Pal")
+  check(ns.UI.HomeTab() == "feed" and ns.UI.CurrentTab() == "profile", "a friend's profile opens inside the Feed tab (Feed stays lit)")
+  check(ns.UI.BackLabel() == ns.L.TAB_FEED, "with Back to the Feed")
   ns.UI.SelectTab("profile")
-  check(ns.UI.BackLabel() == ns.L.TAB_FEED, "Profile tab clicked directly: Back to where you were")
+  check(ns.UI.ProfileName() == ns.me and ns.UI.HomeTab() == "profile", "the Profile tab: your own profile, even right after someone else's")
+  check(ns.UI.BackLabel() == nil, "your profile from its tab: no Back")
+  ns.UI.ShowProfile("Rogz Fang")
+  check(ns.UI.HomeTab() == "profile" and ns.UI.BackLabel() == ns.me, "someone's profile from yours: Back to you")
   ns.UI.Back()
+  check(ns.UI.ProfileName() == ns.me, "Back: your profile again")
+  ns.UI.Show("hitlist")
+  ns.UI.ShowProfile("Rogz Fang")
+  ns.UI.ShowKills("Rogz Fang")
+  check(ns.UI.HomeTab() == "hitlist" and ns.UI.CurrentTab() == "kills", "a kill list opens inside the tab too")
+  ns.UI.Back()
+  ns.UI.Back()
+  check(ns.UI.CurrentTab() == "hitlist", "Back, Back: the Hitlist")
+  SlashCmdList.FRIENDSANDFOES("profile")
+  check(ns.UI.ProfileName() == ns.me, "/fnf profile: your own")
   ns.UI.SetBoardView("friends")
 
   -- you leave while every other member is offline: they hear it when they come back
@@ -2391,7 +2420,7 @@ do
   local function lineOf(label) for _, l in ipairs(v.lines) do if l[1] == label then return ns.Plain(tostring(l[2])) end end end
   check(lineOf(ns.L.PROF_LAST_SEEN) == "1m ago" and lineOf(ns.L.PROF_LAST_PLACE):find("Wetlands  3h ago", 1, true),
     "offline: 'Last seen 1m ago' and 'Last place Wetlands, 3h ago' - each with its own time")
-  check(#v.lines <= 9, "the profile still fits: " .. #v.lines .. " lines")
+  check(#v.lines <= 10, "the profile still fits: " .. #v.lines .. " lines")
   FRIENDS_ONLINE = 1
   ns.Comm.RebuildRoster()
 
@@ -2763,23 +2792,442 @@ do
   ns.UI.SelectTab("hitlist")
   check((SOUNDS_PLAYED or 0) == before + 1, "a client without the sound list: silent, no error")
 
-  -- the Hitlist is a ledger; other tabs aren't
+  -- parchment is only for Wanted posters: the lists keep their plain look
   local fr = ns.UI.Frames()
-  check(fr.rows.ledger:IsShown(), "Hitlist: parchment ledger")
-  ns.UI.SelectTab("enemies")
-  check(not fr.rows.ledger:IsShown(), "Enemies: no parchment")
+  check(fr.rows.ledger == nil, "the Hitlist has no parchment")
 
   -- an enemy's profile is a Wanted poster; a friend's and yours aren't
   ns.UI.ShowPlayer("Rogz Fang")
-  check(ns.UI.CurrentTab() == "profile" and fr.profile.poster:IsShown(), "an enemy's profile: Wanted poster")
-  check(ns.Plain(fr.profile.title:GetText()) == "Rogz Fang", "the poster's name has no small icon (the crest is on the poster)")
-  -- numbers show their real value straight away (the count-up only animates on screen)
+  local P = fr.profile
+  check(ns.UI.CurrentTab() == "profile" and P.poster:IsShown(), "an enemy's profile: Wanted poster")
+  check(P.wanted:GetText() == "WANTED" and P.deadOrAlive:GetText() == "DEAD OR ALIVE", "WANTED ... DEAD OR ALIVE")
+  check(P.posterName:GetText() == "Rogz Fang", "their name on the poster, in plain ink")
+  check(ns.Plain(P.sub:GetText() or ""):find("Level", 1, true) ~= nil, "their level, race, class and guild under their name on the profile: " .. ns.Plain(P.sub:GetText() or ""))
+  check(P.labels[1]:GetText() == "Murders", "the facts beside the poster start with Murders")
   local v = ns.UI.ProfileView("Rogz Fang")
+  check(not ns.Plain(v.posterSub):find("Enemy", 1, true), "no \"Enemy\" under the name: " .. v.posterSub)
+  -- the bounty: 100 per murder, 25 per attack, 250 per friend who has them as most wanted, at least 10
+  check(ns.Bounty.Price(0, 0, 0) == 10 and ns.Bounty.Price(4, 4, 0) == 500 and ns.Bounty.Price(1, 0, 2) == 600, "bounty sums")
+  check(ns.Plain(P.bounty:GetText()) == ns.Plain(ns.Art.Gold(v.bounty)), "the bounty shown in gold: " .. ns.Plain(P.bounty:GetText()))
+  check(ns.Plain(ns.Art.Gold(12500)):match("^12,500") and ns.Plain(ns.Art.Gold(950)):match("^950") and ns.Plain(ns.Art.Gold(1000000)):match("^1,000,000"), "gold with thousands separators")
+  check(P.factionIcon:IsShown(), "the faction crest in the corner")
+  -- the portrait: race unknown -> their class crest fills it (no corner badge then)
+  local rogz = ns.Data.FindPlayer("Rogz Fang") or ns.Data.FindHit("Rogz Fang")
+  local hadClass = rogz.class
+  local hadCoords = CLASS_ICON_TCOORDS
+  CLASS_ICON_TCOORDS = CLASS_ICON_TCOORDS or { ROGUE = { 0.5, 0.75, 0, 0.25 } }
+  rogz.class = rogz.class or "ROGUE"
+  ns.UI.ShowProfile("Rogz Fang")
+  check(P.portraitIcon:IsShown() and not P.badge:IsShown(), "race unknown: their class crest is the portrait")
+  -- seen them: their race symbol, with the class crest on the corner, and the race in the line
+  RACE_ICON_TCOORDS = { ORC_MALE = { 0.25, 0.375, 0.25, 0.5 } }
+  rogz.race, rogz.raceName, rogz.sex = "Orc", "Orc", 2
+  ns.UI.ShowProfile("Rogz Fang")
+  check(P.portraitIcon:IsShown() and P.badge:IsShown(), "seen them: race in the portrait, class on its corner")
+  check(ns.Plain(P.posterSub:GetText()):find("Orc", 1, true) ~= nil, "race in the line under the name: " .. ns.Plain(P.posterSub:GetText()))
+  -- the portrait is the game's painted face for their race and sex
+  local file
+  P.portraitIcon.SetTexture = function(_, f) file = f; return true end
+  ns.UI.ShowProfile("Rogz Fang")
+  check(file == "Interface\\CharacterFrame\\TemporaryPortrait-Male-Orc", "the game's painted face for a male orc: " .. tostring(file))
+  rogz.sex = 3
+  ns.UI.ShowProfile("Rogz Fang")
+  check(file == "Interface\\CharacterFrame\\TemporaryPortrait-Female-Orc", "and for a female one")
+  rogz.sex = 2
+  P.portraitIcon.SetTexture = function(_, f) file = f; return false end -- (a client without the file)
+  ns.UI.ShowProfile("Rogz Fang")
+  check(P.portraitIcon:IsShown() and file:find("CharacterCreate-Races", 1, true), "no face file: the race symbol instead")
+  P.portraitIcon.SetTexture = nil
+  check(ns.UI.IsTarget == nil and P.portraitModel == nil, "no 3D model on posters")
+  rogz.race, rogz.raceName, rogz.sex, rogz.class = nil, nil, nil, hadClass
+  RACE_ICON_TCOORDS = nil
+  CLASS_ICON_TCOORDS = hadCoords
+  -- numbers show their real value straight away (the count-up only animates on screen)
+  v = ns.UI.ProfileView("Rogz Fang")
   check(fr.profile.values[1]:GetText() == tostring(v.lines[1][2]), "the numbers are right from the start")
   ns.UI.ShowProfile(ns.me)
   check(not fr.profile.poster:IsShown(), "your own profile: no poster")
   ns.UI.Show("hitlist")
   check(ns.errors == errs, "no errors with the window's look (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.8.1: Leaderboard ties on the sorted column stay in rank order (live: rank 8 above three rank 5s)
+do
+  local rr = ns.Data.RealRealm()
+  local t = time()
+  rr.players["Tie Zero"] = { name = "Tie Zero", friend = true, k = 0, d = 0, sk = 0, sd = 0, lastSeen = t }
+  rr.players["Aa Onedeath"] = { name = "Aa Onedeath", friend = true, k = 0, d = 1, sk = 0, sd = 1, lastSeen = t }
+  ns.UI.Show("board")
+  ns.UI.SetBoardView("friends")
+  ns.UI.SortBy(2)
+  ns.UI.SortBy(3) -- Kills, most first
+  local okOrder, prev = true, 0
+  for _, r in ipairs(ns.UI.Rows()) do
+    if r.rank then
+      if r.rank < prev then okOrder = false end
+      prev = r.rank
+    end
+  end
+  check(okOrder, "sorted by kills, the ranks never go backwards")
+  rr.players["Tie Zero"], rr.players["Aa Onedeath"] = nil, nil
+end
+
+-- 0.8.1: an enemy you see yourself: their race is read (for their Wanted poster)
+do
+  local saved = { UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitRace, UnitSex, UnitIsUnit }
+  UnitExists = function(u) return u == "target" end
+  UnitIsPlayer = function(u) return u == "target" end
+  UnitFactionGroup = function(u) if u == "player" then return MY_FACTION end return "Alliance" end
+  UnitName = function(u) if u == "player" then return ME, MY_SURNAME end if u == "target" then return "Racey", "Elf" end end
+  UnitClass = function(u) if u == "player" then return "Warrior", "WARRIOR" end return "Priest", "PRIEST" end
+  UnitLevel = function() return 30 end
+  UnitRace = function(u) if u == "target" then return "Night Elf", "NightElf", 4 end end
+  UnitSex = function(u) if u == "target" then return 3 end end
+  UnitIsUnit = function() return false end
+  local info = ns.PvP.ReadEnemy("target")
+  check(info and info.race == "NightElf" and info.raceName == "Night Elf" and info.sex == 3, "race and sex read from a seen enemy")
+  UnitSex = function() return 1 end
+  info = ns.PvP.ReadEnemy("target")
+  check(info and info.sex == nil, "unknown sex: left out")
+  UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitRace, UnitSex, UnitIsUnit = (unpack or table.unpack)(saved, 1, 9)
+end
+
+-- 0.9: bounties - an enemy's open bounty, collected (and shared) by whoever kills them
+do
+  local errs = ns.errors
+  local B = ns.Bounty
+  local rr = ns.Data.RealRealm()
+  local saved = FriendsAndFoesDB.profile.bounty
+  FriendsAndFoesDB.profile.bounty = nil
+  rr.players["Bounty Bob"] = { name = "Bounty Bob", enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, lastSeen = time() }
+  check(B.Open("Bounty Bob") == 500, "open bounty: 4 murders and 4 attacks = 500, got " .. B.Open("Bounty Bob"))
+  check(B.Mine() == 0, "nothing collected yet")
+
+  -- you and a friend get the kill: you share it
+  B.OnKill(ns.me, "Bounty Bob")
+  B.OnKill("Buddy Pal", "Bounty Bob")
+  B.OnKill(ns.me, "Bounty Bob") -- (the same kill reported twice counts once)
+  B.SettleAll()
+  local total, n, best = B.Mine()
+  check(total == 250 and n == 1, "split two ways: 250 each, got " .. total)
+  check(best and best.name == "Bounty Bob" and best.amount == 250, "your biggest bounty remembered")
+  check(B.Open("Bounty Bob") == B.MIN, "collected: the open bounty starts again")
+
+  -- they murder again: the bounty grows from there
+  rr.players["Bounty Bob"].k = 6
+  check(B.Open("Bounty Bob") == 200, "two new murders since: 200")
+
+  -- a friend kills them without you (from their message): nothing for you, but it resets
+  ADVANCE(120)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "bty1"), "WHISPER", 77)
+  drainToasts()
+  B.SettleAll()
+  check(B.Mine() == 250 and B.Open("Bounty Bob") == B.MIN, "a friend collected it: yours unchanged, the poster starts again")
+
+  -- your own kill, through the real kill handler: collected after the friends' reports had time
+  rr.players["Bounty Bob"].k = 7
+  ADVANCE(120)
+  ns.Events.Emit("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" })
+  RUN_TIMERS()
+  check(B.Mine() == 350 and select(2, B.Mine()) == 2, "your own kill collects it (alone: all 100), got " .. B.Mine())
+  -- the simulation never pays out
+  ADVANCE(120)
+  rr.players["Bounty Bob"].k = 9
+  ns.Events.Emit("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, true)
+  RUN_TIMERS()
+  check(B.Mine() == 350, "simulated kills collect nothing")
+  ns.Data.ClearSim() -- (a simulated event switches the window to the simulation)
+
+  -- most wanted adds a standing price
+  ns.Profile.SetWanted("Bounty Bob")
+  RUN_TIMERS()
+
+  -- your total goes to friends with your profile; theirs comes back the same way
+  check(tostring(ns.Profile.Fields().bt) == "350", "your total is in your profile message")
+  rr.players["Bounty Pal"] = { name = "Bounty Pal", friend = true, faction = MY_FACTION, class = "MAGE", k = 0, d = 0, lastSeen = time() }
+  local buddy = rr.players["Bounty Pal"]
+  ns.Profile.Apply(buddy, { k = "1", d = "1", wanted = "", zone = "Duskwood", status = "", t = "", bt = "1300" })
+  check(buddy.sbt == 1300, "a friend's total arrives with their profile")
+  ns.Profile.Apply(buddy, { k = "1", d = "1", wanted = "", zone = "Duskwood", status = "", t = "" })
+  check(buddy.sbt == nil, "an older version sends none: unknown, not 0")
+  ns.Profile.Apply(buddy, { k = "1", d = "1", wanted = "", zone = "Duskwood", status = "", t = "", bt = "1300" })
+
+  -- the Leaderboard has a Bounties column; your profile and theirs show it
+  local cols, bcol = ns.UI.TabColumns("board"), nil
+  for i, c in ipairs(cols) do if c[1] == ns.L.COL_BOUNTY then bcol = i end end
+  check(bcol ~= nil, "Leaderboard: a Bounties column")
+  local mineRow, buddyRow
+  for _, r in ipairs(ns.Profile.Board()) do
+    if r.me then mineRow = r elseif r.name == "Bounty Pal" then buddyRow = r end
+  end
+  check(mineRow.bounty == 350, "Leaderboard: your row has your total")
+  check(buddyRow ~= nil and buddyRow.bounty == 1300, "and a friend's row theirs")
+  check(ns.Plain(cols[bcol][3]({ bounty = 1300 })):match("^1,300") ~= nil, "shown in gold: " .. ns.Plain(cols[bcol][3]({ bounty = 1300 })))
+  check(cols[bcol][3]({ name = "Old Version" }) == "" and cols[bcol][3]({ bounty = 5, invited = true }) == "", "unknown or invited: empty")
+  local function lineOf(v, label) for _, l in ipairs(v.lines) do if l[1] == label then return ns.Plain(tostring(l[2])) end end end
+  check(lineOf(ns.UI.ProfileView(ns.me), ns.L.PROF_BOUNTIES):find("350", 1, true) ~= nil, "your profile: your bounties")
+  local bv = ns.UI.ProfileView("Bounty Pal")
+  check(bv and (lineOf(bv, ns.L.PROF_BOUNTIES) or ""):find("1,300", 1, true) ~= nil, "a friend's profile: theirs: " .. tostring(bv and bv.kind) .. " " .. tostring(bv and lineOf(bv, ns.L.PROF_BOUNTIES)) .. " sbt=" .. tostring(buddy.sbt))
+
+  ns.Profile.SetWanted(nil)
+  RUN_TIMERS()
+  rr.players["Bounty Bob"] = nil
+  rr.players["Bounty Pal"] = nil
+  rr.hitlist["Bounty Bob"] = nil
+  FriendsAndFoesDB.profile.bounty = saved
+  check(ns.errors == errs, "no errors with bounties (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: every message kind - registered, round-trips, and fits the 255-byte limit with worst-case
+-- content (longest names, guilds, zones, item links). A message that doesn't fit is never sent,
+-- so this is where a too-long new field would be caught.
+do
+  local errs = ns.errors
+  local C = ns.Comm
+  local NAME = "Abcdefghijkl Mnopqrstuvwx" -- 12 + 12 letters
+  local GUILD = "Abcdefghijklmnopqrstuvwx" -- 24
+  local ZONE = string.rep("Z", 48) -- the longest zone the add-on keeps
+  local LINK = "|cffa335ee|Hitem:19019:2564:0:0:0:0:0:0:60:0:0:0:0|h[Thunderfury, Blessed Blade of the Windseeker]|h|r"
+  local UNIT = NAME .. ":WARRIOR:60:" .. GUILD
+  local worst = {
+    LVL = { level = "60", ago = "86400", rl = "1" },
+    LOOT = { link = LINK, source = NAME, ago = "86400", rl = "1" },
+    GEAR = { link = LINK, count = "19", epics = "19", ago = "86400", rl = "1" },
+    ATK = { enc = "ffffffff", zone = ZONE, attackers = UNIT .. ";" .. UNIT, ago = "86400", rl = "1" },
+    DIE = { zone = ZONE, killer = UNIT, conf = "c", assists = UNIT .. ";" .. UNIT .. ";" .. UNIT, ended = "99", ago = "86400", rl = "1" },
+    KILL = { victim = NAME, vclass = "WARRIOR", vlevel = "60", vguild = GUILD, zone = ZONE, streak = "99", ago = "86400", rl = "1" },
+    SIGHT = { name = NAME, class = "WARRIOR", level = "60", guild = GUILD, zone = ZONE },
+    ENG = { zone = ZONE, target = UNIT, ago = "86400", rl = "1" },
+    REQ = { window = "86400" },
+    PRO = { k = "99999", d = "99999", wanted = NAME, zone = ZONE, status = "pvp", t = "1999999999", bt = "999999999" },
+    KLQ = { who = NAME },
+  }
+  local tooLong, broken = {}, {}
+  for kind, schema in pairs(C.SCHEMA) do
+    check(C.KINDS[kind] ~= nil, kind .. ": registered in Comm.KINDS")
+    local hasRl = false
+    for _, f in ipairs(schema) do if f == "rl" then hasRl = true end end
+    check((C.KINDS[kind] and C.KINDS[kind].relay or false) == hasRl, kind .. ": may be passed on exactly when it carries 'rl'")
+    local fields = worst[kind]
+    if fields then
+      local msg = { kind = kind, id = "ffffffffff", name = NAME, class = "WARRIOR", level = 60, f = fields }
+      local payload = C.Fit(msg)
+      if not payload then
+        tooLong[#tooLong + 1] = kind .. " (" .. #C.Encode(msg) .. " bytes)"
+      else
+        local back = C.Decode(payload)
+        if not back or back.kind ~= kind or back.name ~= NAME then broken[#broken + 1] = kind end
+        -- every field survives (guild names may be dropped from unit lists to make it fit)
+        for _, f in ipairs(schema) do
+          if back and back.f[f] ~= tostring(fields[f]) and not (f == "attackers" or f == "killer" or f == "assists" or f == "target") then
+            broken[#broken + 1] = kind .. "." .. f
+          end
+        end
+      end
+    end
+  end
+  check(#tooLong == 0, "every message fits 255 bytes even at its longest: " .. table.concat(tooLong, ", "))
+  check(worst.DIE.assists:find(";.*;"), "(trimming a death to fit leaves your own copy alone)")
+  check(#broken == 0, "every message reads back the same: " .. table.concat(broken, ", "))
+  -- a friend's version: what it can do
+  check(C.VersionSupports("0.9.0", "bounties") and not C.VersionSupports("0.8.0", "bounties"), "bounties: 0.9.0 and later")
+  check(C.VersionSupports("0.7.1", "groups") and not C.VersionSupports(nil, "groups"), "unknown version: assume not")
+  check(ns.errors == errs, "no errors checking messages (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: older friends - one chat line per session naming them; the debug report
+do
+  local errs = ns.errors
+  ns.Events.OlderVersion("Old Timer", "0.7.2")
+  ns.Events.OlderVersion("Older Still", "0.6.3")
+  ns.Events.OlderVersion("Old Timer", "0.7.2")
+  local said = {}
+  local oldChat = ns.Toast.Chat
+  ns.Toast.Chat = function(text) said[#said + 1] = ns.Plain(text) end
+  RUN_TIMERS()
+  check(#said == 1 and said[1]:find("Old Timer (0.7.2)", 1, true) and said[1]:find("Older Still (0.6.3)", 1, true), "one line naming both: " .. tostring(said[1]))
+  ns.Events.OlderVersion("Old Timer", "0.7.2")
+  RUN_TIMERS()
+  check(#said == 1, "and not again for the same friend this session")
+  ns.Toast.Chat = oldChat
+  local text = ns.Report.Text()
+  check(text:find("Friends & Foes " .. ns.VERSION, 1, true) and text:find("== errors", 1, true) and text:find("== debug log", 1, true), "the debug report has its sections")
+  check(not text:find("|", 1, true), "no '|' in the report (it would turn into colour codes)")
+  check(not text:find("#%d%d%d%d"), "no BattleTags in the report")
+  ns.Report.Show()
+  check(ns.errors == errs, "no errors with the report and version notes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: layout helpers - each item placed against the one before it
+do
+  local function region() local r = { points = {} }
+    r.ClearAllPoints = function(self) self.points = {} end
+    r.SetPoint = function(self, ...) self.points[#self.points + 1] = { ... } end
+    return r end
+  local parent = region()
+  local col = ns.UI.Column(parent, "TOP", 0, -5)
+  local a, b = col:Add(region(), 10), col:Add(region(), 4)
+  check(a.points[1][1] == "TOP" and a.points[1][2] == parent and a.points[1][5] == -15, "a column's first item: on the parent, gap included")
+  check(b.points[1][2] == a and b.points[1][3] == "BOTTOM" and b.points[1][5] == -4, "the next one: under the one before")
+  local row = ns.UI.Row(parent, "BOTTOMRIGHT", -2, 3)
+  local x, y = row:Add(region()), row:Add(region(), 6)
+  check(x.points[1][1] == "BOTTOMRIGHT" and x.points[1][4] == -2, "a row's first item: in the corner")
+  check(y.points[1][1] == "RIGHT" and y.points[1][2] == x and y.points[1][4] == -6, "from a right corner, the row grows leftwards")
+end
+
+-- 0.9: saved data - upgrade steps run once, in order; what grows has a limit
+do
+  local errs = ns.errors
+  local S = ns.Saved
+  check(FriendsAndFoesDB.dataVersion == #S.STEPS, "saved data is at the latest step: " .. tostring(FriendsAndFoesDB.dataVersion))
+  local ran = 0
+  table.insert(S.STEPS, function() ran = ran + 1 end)
+  S.Upgrade(FriendsAndFoesDB)
+  S.Upgrade(FriendsAndFoesDB)
+  check(ran == 1 and FriendsAndFoesDB.dataVersion == #S.STEPS, "a new step runs once")
+  table.remove(S.STEPS)
+  FriendsAndFoesDB.dataVersion = #S.STEPS
+
+  -- a kill list over the limit keeps the victims killed most
+  local rr = ns.Data.RealRealm()
+  local killer = { name = "Trim Test", friend = true, k = 0, d = 0, slain = {} }
+  for i = 1, S.KILL_LIST_MAX + 20 do killer.slain["Victim " .. i] = { n = (i == 1) and 50 or 1, t = i } end
+  rr.players["Trim Test"] = killer
+  -- enemy records over the limit: the oldest harmless ones go, never the hitlist or killers
+  local before = 0
+  for _ in pairs(rr.players) do before = before + 1 end
+  local extra = S.PLAYERS_MAX - before + 10
+  for i = 1, extra do rr.players["Old Enemy " .. i] = { name = "Old Enemy " .. i, enemy = true, k = 0, d = 0, lastSeen = i } end
+  rr.players["Old Enemy 1"].k = 2 -- killed one of you: kept
+  rr.hitlist["Old Enemy 2"] = { name = "Old Enemy 2", victims = {} } -- on the hitlist: kept
+  local kills, players = S.Trim()
+  local n = 0
+  for _ in pairs(killer.slain) do n = n + 1 end
+  check(kills == 20 and n == S.KILL_LIST_MAX and killer.slain["Victim 1"], "kill list trimmed to the limit, the top victim kept")
+  local total = 0
+  for _ in pairs(rr.players) do total = total + 1 end
+  check(players == 10 and total == S.PLAYERS_MAX, "enemy records trimmed to the limit: " .. total)
+  check(rr.players["Old Enemy 1"] and rr.players["Old Enemy 2"] and not rr.players["Old Enemy 3"], "the oldest harmless ones went; killers and the hitlist stayed")
+  for i = 1, extra do rr.players["Old Enemy " .. i] = nil end
+  rr.hitlist["Old Enemy 2"], rr.players["Trim Test"] = nil, nil
+  check(ns.errors == errs, "no errors with saved data upkeep (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: the first-run tour - once per account, three pages, then gone
+do
+  local errs = ns.errors
+  local T = ns.Tour
+  FriendsAndFoesDB.toured = nil
+  ns.UI.Show("hitlist")
+  check(T.IsShown() and T.Page() == 1 and FriendsAndFoesDB.toured, "first time the window opens: the tour")
+  T.Next(); T.Next()
+  check(T.Page() == 3, "Next, Next: page 3")
+  T.Next()
+  check(not T.IsShown(), "Got it: gone")
+  ns.UI.Show("hitlist")
+  check(not T.IsShown(), "and not again")
+  SlashCmdList.FRIENDSANDFOES("tour")
+  check(T.IsShown() and T.Page() == 1, "/fnf tour shows it again")
+  T.Next(); T.Next(); T.Next()
+  check(ns.errors == errs, "no errors with the tour (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: hover explanations - the numbers that need it have one, on every tab and profile
+do
+  check(ns.UI.ColumnTip("board", ns.L.COL_KD) and ns.UI.ColumnTip("board", ns.L.COL_BOUNTY), "Leaderboard: K/D and Bounties explained")
+  check(ns.UI.ColumnTip("hitlist", ns.L.COL_KILLS):find("*", 1, true), "Hitlist: Kills explains the *")
+  check(ns.UI.ColumnTip("hitlist", ns.L.COL_KILLS) ~= ns.UI.ColumnTip("board", ns.L.COL_KILLS), "the same header means different things on different tabs")
+  check(ns.UI.ColumnTip("feed", "Time") == nil, "and nothing where there's nothing to explain")
+  local missing = {}
+  for _, key in ipairs({ "PROF_KILLS", "PROF_DEATHS", "PROF_KD", "PROF_RANK", "PROF_BOUNTIES", "PROF_KILLS_ON_US", "PROF_DIED_TO_US", "PROF_ATTACKS", "PROF_REVENGE" }) do
+    if not ns.L.PROFILE_TIPS[ns.L[key]] then missing[#missing + 1] = key end
+  end
+  check(#missing == 0, "every profile number explained: " .. table.concat(missing, ", "))
+end
+
+-- layout: hidden items take no room; a row can start next to another frame
+do
+  local function region() local r = { points = {}, shown = true }
+    r.ClearAllPoints = function(self) self.points = {} end
+    r.SetPoint = function(self, ...) self.points[#self.points + 1] = { ... } end
+    r.IsShown = function(self) return self.shown end
+    return r end
+  local bar, dropdown = region(), region()
+  local row = ns.UI.Row(bar, "LEFT", 8, 0, dropdown)
+  local new, invite, leave = row:Add(region()), row:Add(region()), row:Add(region(), 4)
+  check(new.points[1][2] == dropdown and new.points[1][4] == 8, "the first button sits 8 right of the dropdown")
+  new.shown = false
+  row:Layout()
+  check(invite.points[1][2] == dropdown and invite.points[1][4] == 8, "first one hidden: the next takes its place")
+  check(leave.points[1][2] == invite and leave.points[1][4] == 4, "and the rest follow it")
+  new.shown, invite.shown, leave.shown = true, false, false
+  row:Layout()
+  check(new.points[1][2] == dropdown, "back again: in its place")
+  local col = ns.UI.Column(bar, "TOP", 0, 0)
+  local a, b, c = col:Add(region()), col:Add(region(), 6), col:Add(region(), 3)
+  b.shown = false
+  col:Layout()
+  check(c.points[1][2] == a, "a column closes up around a hidden line")
+end
+
+-- 0.9: the Wanted poster is its own window beside the main one
+do
+  local errs = ns.errors
+  local P = ns.UI.Frames().profile
+  ns.UI.Show("hitlist")
+  ns.UI.ShowPlayer("Rogz Fang")
+  check(P.poster:IsShown(), "an enemy's profile opens their poster window")
+  check(P.labels[1]:GetText() == "Murders", "and their facts fill the profile page")
+  ns.UI.Back()
+  check(not P.poster:IsShown(), "Back to the list: the poster goes too")
+  ns.UI.ShowPlayer("Rogz Fang")
+  ns.UI.TogglePoster()
+  check(not P.poster:IsShown(), "closed")
+  ns.UI.Refresh()
+  check(not P.poster:IsShown(), "and it stays closed for them, even when the page updates")
+  check(P.controls.posterBtn:IsShown(), "the Wanted poster button is there to open it again")
+  ns.UI.TogglePoster()
+  check(P.poster:IsShown(), "opened again")
+  ns.UI.ShowProfile(ns.me)
+  check(not P.poster:IsShown() and not P.controls.posterBtn:IsShown(), "your own profile: no poster, no button")
+  ns.UI.Show("hitlist")
+  check(ns.errors == errs, "no errors with the poster window (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9: the group window - members, totals and the buttons that apply, beside the Leaderboard
+do
+  local errs = ns.errors
+  local G = ns.Groups
+  local oldInfo = BNGetInfo
+  BNGetInfo = function() return 1, "Testme#1111" end
+  local g = G.Create("Window Crew")
+  local KB = G.KeyOf("Buddy#2222")
+  g.members[KB] = { a = time(), name = "Buddy Pal" } -- invited, not joined
+  ns.UI.Show("board")
+  ns.UI.SetBoardView(g.id)
+  ns.UI.ShowGroupWindow(FriendsAndFoesFrame)
+  local w = ns.UI.GroupWindow()
+  check(w:IsShown() and w.title:GetText() == "Window Crew", "the group window: its name on top")
+  check(w.sub:GetText() == ns.L.GROUPWIN_YOU_LEAD, "you made it, so you lead it")
+  check(w.leave:IsShown() and w.invite:IsShown() and not w.join:IsShown(), "a member: Invite and Leave")
+  local mine = g.members[G.MyKey()]
+  local joined = mine.j
+  mine.j = nil -- (as if someone had invited you)
+  ns.UI.RefreshGroupWindow()
+  check(w.join:IsShown() and w.decline:IsShown() and not w.leave:IsShown() and not w.invite:IsShown(), "invited: Join and Decline")
+  mine.j = joined
+  ns.UI.RefreshGroupWindow()
+  check(w.totals:GetText() ~= "" and not w.totals:GetText():find("Group button", 1, true), "the group's totals, without the board's hint")
+  ns.UI.SetBoardView("friends")
+  check(not w:IsShown(), "back to your friends' board: no group, no window")
+  ns.UI.SetBoardView(g.id)
+  ns.UI.ShowGroupWindow(FriendsAndFoesFrame)
+  ns.UI.Show("hitlist")
+  check(not w:IsShown(), "another tab: the window goes with the Leaderboard")
+  G.Leave(g)
+  BNGetInfo = oldInfo
+  ns.UI.SetBoardView("friends")
+  check(ns.errors == errs, "no errors with the group window (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

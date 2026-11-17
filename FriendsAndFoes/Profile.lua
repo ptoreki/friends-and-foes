@@ -137,6 +137,7 @@ function Profile.Fields()
     zone = cut(zone, ZONE_MAX),
     status = shareWhere and Profile.MyStatus() or "",
     t = sharePvp and Profile.MyStatsTime() or "",
+    bt = sharePvp and (ns.Bounty.Mine()) or "", -- bounties collected (0.9; older clients ignore it)
   }
 end
 
@@ -151,7 +152,7 @@ end
 local lastSig
 local function signature(msg)
   local f = msg.f
-  return table.concat({ tostring(f.k), tostring(f.d), f.wanted, f.zone, f.status, tostring(msg.level) }, "\t")
+  return table.concat({ tostring(f.k), tostring(f.d), f.wanted, f.zone, f.status, tostring(msg.level), tostring(f.bt) }, "\t")
 end
 
 -- force: send even if nothing changed since the last time
@@ -212,6 +213,9 @@ function Profile.Apply(p, f)
   p.statusAt = time()
   -- as of when (their clock, never in the future on yours); older clients don't say: now
   p.statAt = Profile.ClampTime(f.t) or time()
+  -- their bounties collected; nil = an older version (or they don't share PvP)
+  local bt = tonumber(f.bt)
+  p.sbt = bt and ns.Count(bt) or nil
 end
 
 -- what a friend is doing now, if they're online: "Hillsbrad Foothills · in a fight"
@@ -282,7 +286,8 @@ local function groupBoard(g)
     local name = isMe and ns.me or (s and s.name) or m.name
     local p = players[ns.Data.Resolve(players, name)]
     local row = { key = m.key, name = name, class = p and p.class, level = p and p.level, me = isMe, rec = p,
-      lastSeen = p and p.lastSeen, invited = m.state == "invited", leader = m.leader }
+      lastSeen = p and p.lastSeen, invited = m.state == "invited", leader = m.leader,
+      bounty = isMe and (ns.Bounty.Mine()) or (s and s.bt) or (p and p.sbt) }
     if isMe then
       local _, class = UnitClass("player")
       row.class = row.class or class
@@ -320,7 +325,8 @@ function Profile.Board(groupId)
     local k = (not isMe and p.sk) or ns.Count(p.k)
     local d = (not isMe and p.sd) or ns.Count(p.d)
     rows[#rows + 1] = { name = p.name, class = p.class, level = p.level, k = k, d = d, kd = Profile.KD(k, d),
-      estimated = not reported, me = isMe, rec = p, lastSeen = p.lastSeen }
+      estimated = not reported, me = isMe, rec = p, lastSeen = p.lastSeen,
+      bounty = isMe and (ns.Bounty.Mine()) or p.sbt }
   end
   local me = realm.players[ns.Data.Resolve(realm.players, ns.me)]
   local _, class = UnitClass("player")

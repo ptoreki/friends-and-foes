@@ -1,11 +1,11 @@
 {
   "name": "friends-and-foes",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Dev tooling for the Friends & Foes WoW Forever addon (tests run the Lua in a mocked WoW API).",
   "scripts": {
-    "test": "node tests/syntax.js FriendsAndFoes && node tests/run.js FriendsAndFoes",
+    "test": "node tests/syntax.js FriendsAndFoes && node tests/locale.js FriendsAndFoes && node tests/run.js FriendsAndFoes",
     "package": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package.ps1"
   },
   "devDependencies": {

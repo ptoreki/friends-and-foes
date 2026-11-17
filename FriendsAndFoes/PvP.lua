@@ -103,6 +103,17 @@ local function readEnemy(unit)
   if not issecret(class) then info.class = class end
   local level = UnitLevel(unit)
   if not issecret(level) and level and level > 0 then info.level = level end
+  -- race and sex: for the race symbol on their Wanted poster (only from your own sightings)
+  if UnitRace then
+    local raceName, raceFile = UnitRace(unit)
+    if not issecret(raceName) and not issecret(raceFile) and type(raceFile) == "string" and raceFile ~= "" then
+      info.race, info.raceName = raceFile, type(raceName) == "string" and raceName or raceFile
+    end
+  end
+  if UnitSex then
+    local sex = UnitSex(unit)
+    if not issecret(sex) and (sex == 2 or sex == 3) then info.sex = sex end
+  end
   if GetGuildInfo then
     local guild = GetGuildInfo(unit)
     if guild and not issecret(guild) and guild ~= "" then info.guild = guild end
@@ -125,12 +136,28 @@ function PvP.ReadEnemy(unit)
   return nil
 end
 
+local function noteRace(rec, info)
+  if rec and info and info.race then
+    rec.race, rec.raceName, rec.sex = info.race, info.raceName, info.sex or rec.sex
+  end
+end
+
+-- an enemy record just made or updated: their race, if you've seen them in the last 10 minutes
+function PvP.NoteRace(rec)
+  if rec and rec.name then noteRace(rec, seen[rec.name]) end
+end
+
 local seenCount = 0
 local function remember(info)
   if not info.name then return end
   info.time = GetTime()
   if not seen[info.name] then seenCount = seenCount + 1 end
   seen[info.name] = info
+  if info.race then
+    local p = ns.Data.FindPlayer(info.name)
+    if p and p.enemy then noteRace(p, info) end
+    noteRace(ns.Data.FindHit(info.name), info)
+  end
   if seenCount > 300 then
     local now = GetTime()
     for name, i in pairs(seen) do

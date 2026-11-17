@@ -1,10 +1,10 @@
 # Friends & Foes
 
 **Summary (short description field):**
-See your Battle.net friends' level-ups, epic loot and world PvP fights, and keep a hitlist of everyone who ganks your group.
+See your Battle.net friends' level-ups, epic loot and world PvP fights, and put a bounty on everyone who ganks your group.
 
 **Longer summary (for an intro paragraph, Wago's description, or a forum post):**
-Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you hear about it. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you goes on a shared hitlist. They get a skull on their nameplate, and you're told when you or a friend spots them again. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
+Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you hear about it. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you goes on a shared hitlist, with a Wanted poster and a bounty on their head that grows with every murder. They get a skull on their nameplate, you're told when you or a friend spots them again, and whoever kills them collects the bounty. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
 
 ---
 
@@ -15,7 +15,8 @@ Stay connected with your friends in WoW Forever. See their level-ups, epic loot 
 - **Friends' progress:** level-ups, epic loot and new gear. Big moments (level 60, epic BoE, revenge, kill streaks) always pop up.
 - **World PvP alerts:** a friend attacked, attacking someone, killed, or getting a kill, with who and where.
 - **Hitlist:** anyone who kills you or a friend. Hover them to see who of your friends they killed and how often. They get a nameplate skull, and you're alerted when you or a friend spots them.
-- **Leaderboard:** world PvP kills, deaths and K/D for you and your friends, all-time.
+- **Wanted posters & bounties:** every enemy who hurts your group has a Wanted poster with their face, what they've done, and a bounty in gold (just for fun). Kill them to collect it, shared with the friends who help.
+- **Leaderboard:** world PvP kills, deaths, K/D and bounties collected for you and your friends, all-time.
 - **Shared groups:** follow a group's stats together, with group totals. Members pass numbers along, so not everyone needs to be friends with everyone.
 - **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted, where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy for your friends to see.
 - **Tracking:** kills and deaths per player, plus a weekly summary with your nemesis.
@@ -36,4 +37,14 @@ In **Options → AddOns → Friends & Foes**:
   you missed. Options can't be opened in combat.
 Includes ProfanityLib (by Deathwing) to filter offensive words out of group names. Licensed under the GNU GPL v3.
 
-**Something not working?** Turn on **Debug logging** (Options → Advanced), play, type **/reload**, and send `WTF\Account\<account>\SavedVariables\FriendsAndFoes.lua`.
+**Something not working?** Turn on **Debug logging** (Options → Advanced, or **/fnf debug**), play until it happens, then type **/fnf report**, copy the box and paste it into a comment or issue.
+
+---
+
+## Screenshots to upload (in this order, with these captions)
+1. **An enemy's Wanted poster** (someone you've seen, so their face shows): *"Every ganker gets a Wanted poster and a bounty."*
+2. **The Leaderboard** with a few friends and the Bounties column: *"Who's the deadliest of your friends?"*
+3. **A toast** for a friend's kill or death (/fnf test): *"Know when a friend is in a fight, and where."*
+4. **The Hitlist**: *"Everyone who ganked your group, and who they got."*
+5. **Your own profile** with your character: *"Your record, your nemesis, your bounties."*
+6. **The options page**: *"Every alert: toast, chat line or off."*

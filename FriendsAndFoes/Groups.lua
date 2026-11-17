@@ -263,24 +263,28 @@ function Groups.MyTotals()
   for _, p in pairs(ns.Data.RealRealm().players) do
     if p.self then k, d = k + ns.Count(p.k), d + ns.Count(p.d) end
   end
+  -- bounties collected (0.9) ride along: a new total is newer news too
+  local bt = ns.Bounty and (ns.Bounty.Mine()) or 0
   local s = FriendsAndFoesDB.groupStat
-  if not s or s.k ~= k or s.d ~= d then
-    s = { k = k, d = d, t = time() }
+  if not s or s.k ~= k or s.d ~= d or s.bt ~= bt then
+    s = { k = k, d = d, bt = bt, t = time() }
     FriendsAndFoesDB.groupStat = s
   end
   return s
 end
 
--- best known numbers for an account: { k, d, t, name, via, direct, self } or nil
+-- best known card for an account: { k, d, bt, t, name, via, direct, self } or nil.
+-- One card per member account, newest wins, passed on by members to members (GST). bt: bounties
+-- collected (nil from a member on a version before 0.9). New stats go on the end of the card.
 function Groups.StatsOf(key)
   if key and key == Groups.MyKey() then
     if not ns.S().share.pvp then return nil end
     local s = Groups.MyTotals()
-    return { k = s.k, d = s.d, t = s.t, name = ns.me, self = true }
+    return { k = s.k, d = s.d, bt = s.bt, t = s.t, name = ns.me, self = true }
   end
   local r = key and relayed()[key]
   if not r then return nil end
-  return { k = r.k, d = r.d, t = r.t or 0, name = r.name, via = r.via, direct = r.direct }
+  return { k = r.k, d = r.d, bt = r.bt, t = r.t or 0, name = r.name, via = r.via, direct = r.direct }
 end
 
 ---------------------------------------------------------------------------
@@ -350,12 +354,16 @@ function Groups.GroupMessages(g, recipientKey)
   end)
 end
 
--- GST messages with the stats of these accounts (the ones we know): "key:k:d:time:Name"
+-- GST messages with the cards of these accounts (the ones we know): "key:k:d:time:Name:bt".
+-- Fields only ever go on the end: older versions read the first five and ignore the rest.
 function Groups.StatsMessages(keys)
   local items = {}
   for _, key in ipairs(keys) do
     local s = Groups.StatsOf(key)
-    if s then items[#items + 1] = key .. ":" .. s.k .. ":" .. s.d .. ":" .. b36(s.t) .. ":" .. plainName(s.name) end
+    if s then
+      items[#items + 1] = key .. ":" .. s.k .. ":" .. s.d .. ":" .. b36(s.t) .. ":" .. plainName(s.name)
+        .. ":" .. (s.bt and b36(s.bt) or "")
+    end
   end
   return chunked(items, function(batch) return msg("GST", { stats = table.concat(batch, ";") }) end)
 end
@@ -647,7 +655,8 @@ function Groups.OnStats(sender, f)
       -- newer wins; same age: the member's own word wins over a relayed copy
       if not cur or t > (cur.t or 0) or (t == cur.t and direct and not cur.direct) then
         local name = ns.CleanName(p[5]) or (cur and cur.name)
-        relayed()[key] = { k = ns.Count(k), d = ns.Count(d), t = t, name = name,
+        local bt = p[6] and p[6] ~= "" and unb36(p[6]) or nil -- (none from before 0.9)
+        relayed()[key] = { k = ns.Count(k), d = ns.Count(d), bt = bt and ns.Count(bt) or nil, t = t, name = name,
           via = (not direct) and sender or nil, direct = direct or nil }
         Groups.StatsChanged(key, senderKey)
       end

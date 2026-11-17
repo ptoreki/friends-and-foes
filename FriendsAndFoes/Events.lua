@@ -118,6 +118,7 @@ local function enemyTouch(u, zone)
   local e = ns.Data.Player(u.name)
   e.enemy = true
   ns.Data.Touch(e, { class = u.class, level = u.level, guild = u.guild, zone = zone })
+  ns.PvP.NoteRace(e)
   return e
 end
 
@@ -128,6 +129,7 @@ local function hitTouch(u, zone, victim)
   local isNew = ns.Data.FindHit(u.name) == nil
   local h = ns.Data.Hit(u.name)
   ns.Data.Touch(h, { class = u.class, level = u.level, guild = u.guild, zone = zone })
+  ns.PvP.NoteRace(h)
   h.victims[victim] = true
   if isNew then
     local e = ns.Data.FindPlayer(u.name)
@@ -157,6 +159,30 @@ function Events.NewerVersion(sender, version)
     text = version and L.TOAST_NEWER_VERSION_TEXT:format(sender, version, ns.VERSION)
       or L.TOAST_NEWER_PROTOCOL_TEXT:format(sender),
   })
+end
+
+-- friends on an older version: one quiet chat line per session naming them (gathered for a
+-- while after you log in, so everyone online is in the one line), and again for anyone new
+local OLDER_GATHER = 30
+local olderSeen, olderTold, olderPending = {}, {}, false
+function Events.OlderVersion(sender, version)
+  if not sender or olderTold[sender] then return end
+  olderSeen[sender] = version
+  if olderPending then return end
+  olderPending = true
+  C_Timer.After(OLDER_GATHER, function()
+    olderPending = false
+    local names = {}
+    for name, v in pairs(olderSeen) do
+      names[#names + 1] = ns.ClassColored(name) .. " (" .. v .. ")"
+      olderTold[name] = true
+    end
+    wipe(olderSeen)
+    if #names == 0 then return end
+    table.sort(names)
+    ns.Toast.Chat(L.CHAT_OLDER_VERSIONS:format(ns.JoinNames(names), ns.VERSION))
+    ns.Debug("OLDER", table.concat(names, ", "))
+  end)
 end
 
 -- a friend's client speaks another protocol: neither side can read the other
@@ -206,6 +232,8 @@ function Events.Apply(msg, isSelf)
 
   if not isSelf and not sim and ns.VersionNewer(msg.version, ns.VERSION) then
     Events.NewerVersion(msg.from, msg.version)
+  elseif not isSelf and not sim and msg.version and ns.VersionNewer(ns.VERSION, msg.version) then
+    Events.OlderVersion(msg.from, msg.version)
   end
   if sim then ns.viewSim = true end
   if not sim and ns.Marks then ns.Marks.Refresh() end -- a new hitlist entry may be on screen
@@ -404,6 +432,10 @@ H.KILL = function(msg, isSelf, p, f)
   local e = enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
   ns.Kills.Add(p, e.name, f.zone) -- the killer's kill list
+  -- their bounty: collected by everyone who got the kill (never in the simulation)
+  if not msg.id:find("^S") and not ns.viewSim and e.enemy then
+    ns.Bounty.OnKill(isSelf and ns.me or p.name, e.name)
+  end
 
   local hit = ns.Data.FindHit(name)
   local revenge = false

@@ -1,7 +1,7 @@
 # Friends & Foes
 
 A WoW Forever addon that keeps your friend group connected: see your Battle.net friends' level-ups,
-epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks your group.
+epic loot and world PvP fights, and put a bounty on everyone who ganks your group.
 
 > **Beta.** Being tested with real players. Report anything odd (see *Reporting a bug*).
 
@@ -15,8 +15,12 @@ epic loot and world PvP fights, and keep a shared hitlist of everyone who ganks 
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
   - Entries fade after 90 days unseen.
-- **Leaderboard:** world PvP kills, deaths and K/D for you and your friends, all-time. Each player
-  reports their own numbers.
+- **Wanted posters & bounties:** an enemy's profile is a Wanted poster: their face (once you've
+  seen them), what they've done to your group, and a bounty in gold (just for fun). It grows with
+  every murder and attack; whoever kills them collects it, shared equally with the friends who
+  get the kill too.
+- **Leaderboard:** world PvP kills, deaths, K/D and bounties collected for you and your friends,
+  all-time. Each player reports their own numbers.
 - **Shared groups:** named groups whose stats you follow together, with group totals. Members
   pass each other's numbers along, so not everyone needs to be friends with everyone.
 - **Kill lists:** who you and each friend have killed, and how often (sortable); for an enemy,
@@ -65,12 +69,14 @@ on your faction. You don't need to group, share a server, or be in the same zone
 | `/fnf share` | Send your hitlist to your friends |
 | `/fnf sim all [self]` / `/fnf sim stop` / `/fnf sim clear` | Simulate every alert with fake data (`self` also sends it to friends) |
 | `/fnf debug` / `/fnf debug clear` | Debug logging on/off, or clear the log |
+| `/fnf report` | A debug report to copy and paste into a bug report |
+| `/fnf tour` | The short tour from the first time you opened the window |
 
 ## Reporting a bug
 1. Turn on **Debug logging** (Options → Advanced, or `/fnf debug`).
-2. Play until it happens, then type `/reload`.
-3. Send `World of Warcraft\_forever_\WTF\Account\<account>\SavedVariables\FriendsAndFoes.lua`
-   with a short description, or open an [issue](https://github.com/ptoreki/friends-and-foes/issues).
+2. Play until it happens, then type `/fnf report`.
+3. Copy the box (it's all selected: Ctrl+C) and paste it into an
+   [issue](https://github.com/ptoreki/friends-and-foes/issues) with a short description.
 
 Debug logging turns itself off after 7 days.
 
@@ -87,8 +93,13 @@ Debug logging turns itself off after 7 days.
 - Options can't be opened during combat. That's a game rule.
 
 ## Development
-- `npm install`, then `npm test`. That runs a Lua syntax check, then loads the whole addon in a Lua
-  VM with a mocked WoW API (`tests/mock.lua`) and runs the tests (`tests/test.lua`).
+- `npm install`, then `npm test`. That runs a Lua syntax check, checks every string the code uses
+  is defined (`tests/locale.js`), then loads the whole addon in a Lua VM with a mocked WoW API
+  (`tests/mock.lua`) and runs the tests (`tests/test.lua`).
+- Where things are: messages and their versions in `Comm.lua` (`Comm.SCHEMA`, `Comm.KINDS`),
+  saved data and its upgrade steps in `Saved.lua`, the window in `UI.lua` (lists, tabs),
+  `UIProfile.lua` (profiles, Wanted posters), `UIWidgets.lua` (buttons, layout) and `UISlash.lua`
+  (commands). Translating: see the top of `Locale.lua`.
 - `npm run package` builds a local zip in `dist/`.
 - Releases are automatic: push a `vX.Y.Z` or `vX.Y.Z-beta` tag. A GitHub Action then runs the tests
   and uploads the zip to CurseForge, Wago and GitHub Releases. See [PUBLISHING.md](PUBLISHING.md).

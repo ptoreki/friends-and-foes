@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.8.0"
+ns.VERSION = "0.9.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -230,42 +230,13 @@ ns.On("ADDON_LOADED", function(name)
   local db = FriendsAndFoesDB
   db.settings = db.settings or {}
   fillDefaults(db.settings, DEFAULTS)
-  -- 0.3.3 and earlier: toast = { kind = bool }. Keep "off" choices, drop the rest.
-  if type(db.settings.toast) == "table" then
-    for k, v in pairs(db.settings.toast) do
-      if v == false and db.settings.show[k] then db.settings.show[k] = "off" end
-    end
-    db.settings.toast = nil
-  end
-  -- 0.5.5 and earlier: one "hold toasts in instances" switch; off meant show everywhere
-  if db.settings.dnd.instance ~= nil then
-    if db.settings.dnd.instance == false then
-      for k in pairs(db.settings.where) do db.settings.where[k] = "show" end
-    end
-    db.settings.dnd.instance = nil
-  end
-  -- 0.6.1 and earlier: one switch for skull + tooltip; the new tooltip switch keeps that choice (once)
-  if not db.settings.markSplit then
-    db.settings.markTooltip = db.settings.mark ~= false
-    db.settings.markSplit = true
-  end
-  -- 0.5.3 and earlier defaulted a friend's kill to chat; it's a toast now (once).
-  if not db.settings.killToast then
-    if db.settings.show.kill == "chat" then db.settings.show.kill = "toast" end
-    db.settings.killToast = true
-  end
-  -- 0.4.2 and earlier: sound per category (pvp, progress; "sighting" means the same now).
-  -- Keep "off" choices for the kinds in that category.
-  local snd = db.settings.sound
-  for old, kinds in pairs({ pvp = { "attacked", "died", "kill" }, progress = { "level", "loot", "gear", "share" } }) do
-    if snd[old] == false then for _, k in ipairs(kinds) do snd[k] = false end end
-    snd[old] = nil
-  end
   db.realms = db.realms or {}
   db.debugLog = db.debugLog or {}
   db.errorLog = db.errorLog or {}
   FriendsAndFoesCharDB = FriendsAndFoesCharDB or {}
   FriendsAndFoesCharDB.equipped = FriendsAndFoesCharDB.equipped or {}
+  -- older saved data brought up to date, step by step (Saved.lua)
+  ns.Saved.Upgrade(db)
 end)
 
 ns.On("PLAYER_LOGIN", function()

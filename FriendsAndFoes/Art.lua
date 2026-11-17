@@ -29,14 +29,21 @@ function Art.UseTitleFont(fs, size)
 end
 
 ---------------------------------------------------------------------------
--- aged parchment: a dark warm base (always), the game's parchment on top (dimmed so white
--- and gold text stay readable), and a thin gold edge. If the parchment file is missing, the
--- base alone still looks right.
+-- a Wanted poster's paper: light and worn, for dark ink. A warm base (always), the game's
+-- parchment on top, edges darkened like old paper, and a thin ink border. If the parchment
+-- file is missing, the base alone still looks right.
 ---------------------------------------------------------------------------
 local PARCHMENT = "Interface\\AchievementFrame\\UI-Achievement-Parchment-Horizontal"
-local BASE = { 0.13, 0.09, 0.05, 0.92 }
-local PAPER_TINT = { 0.42, 0.34, 0.24, 0.55 }
-local EDGE = { 0.65, 0.52, 0.25, 0.55 }
+local BASE = { 0.78, 0.68, 0.49, 1 }
+local PAPER_TINT = { 1, 0.95, 0.84, 1 }
+local EDGE = { 0.32, 0.2, 0.09, 0.9 }
+local WORN = { 0.38, 0.25, 0.11 } -- the darkened edges: bands that fade towards the middle
+local WORN_BANDS = { { 3, 0.35 }, { 8, 0.18 }, { 16, 0.08 } } -- { width, alpha }
+
+-- ink colours for text on the paper
+Art.INK = { 0.24, 0.13, 0.06 }
+Art.INK_SOFT = { 0.36, 0.24, 0.13 }
+Art.INK_GOLD = { 0.5, 0.32, 0.02 }
 
 -- owner: the frame it's drawn on (behind that frame's own text); area: the part it covers
 -- (default: all of owner). Returns a handle with :SetShown(bool).
@@ -55,18 +62,24 @@ function Art.Parchment(owner, area)
   else
     paper:Hide()
   end
-  local function edge(p1, p2, horizontal)
-    local t = owner:CreateTexture(nil, "BORDER")
-    t:SetColorTexture(EDGE[1], EDGE[2], EDGE[3], EDGE[4])
+  local function edge(p1, p2, horizontal, size, color, layer, sub)
+    local t = owner:CreateTexture(nil, layer or "BORDER", nil, sub)
+    t:SetColorTexture(color[1], color[2], color[3], color[4])
     t:SetPoint(p1, area)
     t:SetPoint(p2, area)
-    if horizontal then t:SetHeight(1) else t:SetWidth(1) end
+    if horizontal then t:SetHeight(size) else t:SetWidth(size) end
     layers[#layers + 1] = t
   end
-  edge("TOPLEFT", "TOPRIGHT", true)
-  edge("BOTTOMLEFT", "BOTTOMRIGHT", true)
-  edge("TOPLEFT", "BOTTOMLEFT", false)
-  edge("TOPRIGHT", "BOTTOMRIGHT", false)
+  local function allSides(size, color, layer, sub)
+    edge("TOPLEFT", "TOPRIGHT", true, size, color, layer, sub)
+    edge("BOTTOMLEFT", "BOTTOMRIGHT", true, size, color, layer, sub)
+    edge("TOPLEFT", "BOTTOMLEFT", false, size, color, layer, sub)
+    edge("TOPRIGHT", "BOTTOMRIGHT", false, size, color, layer, sub)
+  end
+  for i, band in ipairs(WORN_BANDS) do
+    allSides(band[1], { WORN[1], WORN[2], WORN[3], band[2] }, "BACKGROUND", -7 + i)
+  end
+  allSides(1, EDGE)
   local handle = { shown = true }
   function handle:SetShown(on)
     on = on and true or false
@@ -78,14 +91,61 @@ function Art.Parchment(owner, area)
   return handle
 end
 
--- a faint ruled line (ledger rows), in the parchment's ink colour
-function Art.RuledLine(frame)
-  local t = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
-  t:SetColorTexture(EDGE[1], EDGE[2], EDGE[3], 0.22)
-  t:SetPoint("BOTTOMLEFT")
-  t:SetPoint("BOTTOMRIGHT")
-  t:SetHeight(1)
-  return t
+---------------------------------------------------------------------------
+-- symbols for a Wanted poster: race and faction (class uses the class crest, in UI.lua)
+---------------------------------------------------------------------------
+local function atlasExists(name)
+  if not (C_Texture and C_Texture.GetAtlasInfo) then return false end
+  local ok, info = pcall(C_Texture.GetAtlasInfo, name)
+  return ok and info ~= nil
+end
+
+local RACE_FILE = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Races"
+
+-- the game's painted face for a race and sex: the portraits unit frames show when a 3D face
+-- can't be drawn ("TemporaryPortrait-Male-Orc"). Referenced from the game's files, not copied.
+-- race: the game's race file name ("Orc", "NightElf", "Scourge"); sex: 2 male, 3 female.
+-- true if the texture now shows their face.
+local PORTRAIT_FILE = "Interface\\CharacterFrame\\TemporaryPortrait-%s-%s"
+function Art.SetRacePortrait(tex, race, sex)
+  if type(race) ~= "string" or not race:match("^%a+$") then return false end
+  local file = PORTRAIT_FILE:format(sex == 3 and "Female" or "Male", race)
+  local ok, loaded = pcall(tex.SetTexture, tex, file)
+  if not ok or loaded == false then return false end
+  tex:SetTexCoord(0, 1, 0, 1)
+  return true
+end
+
+-- race: the game's race file name ("Orc", "NightElf", "Scourge"); sex: 2 male, 3 female.
+-- true if the texture now shows their race symbol.
+function Art.SetRaceIcon(tex, race, sex)
+  if type(race) ~= "string" or race == "" then return false end
+  local s = sex == 3 and "female" or "male"
+  local lower = race:lower()
+  local names = { lower }
+  if lower == "scourge" then names[2] = "undead" end
+  for _, n in ipairs(names) do
+    local atlas = "raceicon-" .. n .. "-" .. s
+    if atlasExists(atlas) and tex.SetAtlas and pcall(tex.SetAtlas, tex, atlas) then return true end
+  end
+  local c = RACE_ICON_TCOORDS and RACE_ICON_TCOORDS[race:upper() .. "_" .. s:upper()]
+  if type(c) == "table" and c[4] then
+    tex:SetTexture(RACE_FILE)
+    tex:SetTexCoord(c[1], c[2], c[3], c[4])
+    return true
+  end
+  return false
+end
+
+local FACTION_FILE = { Horde = "Interface\\TargetingFrame\\UI-PVP-Horde", Alliance = "Interface\\TargetingFrame\\UI-PVP-Alliance" }
+
+-- faction: "Horde" | "Alliance". true if the texture now shows its crest.
+function Art.SetFactionIcon(tex, faction)
+  local file = FACTION_FILE[faction]
+  if not file then return false end
+  tex:SetTexture(file)
+  tex:SetTexCoord(0, 0.62, 0, 0.62) -- (the crest sits in the top-left of the file)
+  return true
 end
 
 ---------------------------------------------------------------------------
@@ -116,10 +176,11 @@ local COUNT_TIME = 0.4
 local counting = {}
 local counter
 
-function Art.CountUp(fs, target)
+-- fmt (optional): turns a number into the text shown (default: the plain number)
+function Art.CountUp(fs, target, fmt)
   target = tonumber(target)
   if not fs or not target or target < 2 or target ~= math.floor(target) then return end
-  counting[fs] = { target = target, start = GetTime() }
+  counting[fs] = { target = target, start = GetTime(), fmt = fmt or tostring }
   if not counter then
     counter = CreateFrame("Frame")
     counter:SetScript("OnUpdate", function(self)
@@ -127,10 +188,10 @@ function Art.CountUp(fs, target)
       for f, c in pairs(counting) do
         local p = (now - c.start) / COUNT_TIME
         if p >= 1 or not f:IsVisible() then
-          f:SetText(tostring(c.target))
+          f:SetText(c.fmt(c.target))
           counting[f] = nil
         else
-          f:SetText(tostring(math.floor(c.target * (1 - (1 - p) * (1 - p)))))
+          f:SetText(c.fmt(math.floor(c.target * (1 - (1 - p) * (1 - p)))))
           left = true
         end
       end
@@ -142,6 +203,14 @@ end
 
 -- stop counting (the text is about to be replaced)
 function Art.StopCount(fs) counting[fs] = nil end
+
+-- 12500 -> "12,500" with a gold coin after it
+function Art.Gold(n)
+  local s = tostring(math.floor(tonumber(n) or 0))
+  local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+  if out:sub(1, 1) == "," then out = out:sub(2) end
+  return out .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
+end
 
 ---------------------------------------------------------------------------
 -- window sounds: the game's own, like its Character window and spellbook.

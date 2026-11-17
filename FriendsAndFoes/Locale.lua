@@ -1,6 +1,16 @@
 local _, ns = ...
 
--- English only for now; all user-facing strings live here.
+-- All user-facing strings live here, in English. A missing one shows its key instead of breaking
+-- anything (tests/locale.js checks every string the code uses is defined).
+--
+-- Translating: add a file Locale_xxXX.lua (deDE, frFR, esES, ...) to the .toc right after this
+-- one, starting with
+--   local _, ns = ...
+--   if GetLocale() ~= "deDE" then return end
+--   local L = ns.L
+-- then set only the strings you translate (L.TAB_HITLIST = "Abschussliste"); the rest stay
+-- English. Keep every %s / %d in the same order. Don't translate keys used as tables
+-- (L.COLUMN_TIPS, L.PROFILE_TIPS) without their labels: they're looked up by the label text.
 local L = setmetatable({}, { __index = function(_, k) return k end })
 ns.L = L
 
@@ -158,6 +168,7 @@ L.TOAST_NEWER_VERSION = "Friends & Foes update available"
 L.TOAST_NEWER_VERSION_TEXT = "%s has %s (you have %s)"
 L.TOAST_NEWER_PROTOCOL_TEXT = "%s uses a newer, incompatible version - please update"
 L.TOAST_OLDER_VERSION = "Friend needs to update Friends & Foes"
+L.CHAT_OLDER_VERSIONS = "On an older Friends & Foes: %s. You have %s - newer things (like bounties) won't sync with them until they update."
 L.TOAST_OLDER_PROTOCOL_TEXT = "%s runs an old, incompatible version - send them the new one"
 L.TOAST_SHARE = "%s shared their hitlist"
 L.TOAST_SHARE_TEXT = "%d new entries added"
@@ -171,6 +182,12 @@ L.SHARE_NO_FRIENDS = "No friends with the addon are online."
 L.SHARE_STARTED = "Sharing %d hitlist entries with %d friends (sent slowly to avoid throttling)."
 L.BTN_SHARE = "Share hitlist"
 L.BTN_SIM = "Simulate events"
+L.BTN_REPORT = "Copy debug report"
+L.OPT_REPORT = "Debug report"
+L.TIP_REPORT = "Everything a bug report needs in one box (version, what works on this client, friends' versions, errors, the debug log), ready to copy and paste. Also: /fnf report"
+L.REPORT_TITLE = "Friends & Foes debug report"
+L.REPORT_HINT = "Press Ctrl+C to copy (it's all selected), then paste it where you report the bug."
+L.REPORT_SELECT = "Select all again"
 L.DND_HEADER = "Do not disturb"
 L.OPT_DND_COMBAT = "Hold progress toasts in combat"
 L.OPT_DND_INSTANCE = "Hold toasts in dungeons, raids and battlegrounds"
@@ -188,7 +205,7 @@ L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|engage|died|kill|sighting|all> 
 L.SIM_CLEARED = "simulation data cleared"
 
 -- slash
-L.HELP = "/fnf [board | groups | profile | wanted | alerts | options | unlock | lock | test | status | chat | size | duration | share | sim | debug | debug clear | minimap]"
+L.HELP = "/fnf [board | groups | profile | wanted | alerts | options | unlock | lock | test | status | chat | size | duration | share | sim | debug | debug clear | report | tour | minimap]"
 
 -- native options panel (Options.lua): pages, choices and hover tooltips
 L.PAGE_APPEARANCE = "Appearance"
@@ -300,6 +317,16 @@ L.SEARCH = "Search"
 L.SEARCH_NONE = "No matches."
 L.WELCOME_1 = "is on. You'll hear about your friends' level-ups, loot and world PvP fights."
 L.WELCOME_2 = "Type /fnf for the window, or open Options -> AddOns -> Friends & Foes to choose what pops up."
+L.TOUR_1_TITLE = "Friends & Foes"
+L.TOUR_1_TEXT = "Your Battle.net friends who have Friends & Foes share their level-ups, loot and world PvP with you, and you with them. Fights, kills and deaths pop up as alerts; everything is kept here in this window."
+L.TOUR_2_TITLE = "Foes"
+L.TOUR_2_TEXT = "Anyone who kills one of you goes on your Hitlist, with a skull on their nameplate. Click a name for their Wanted poster: what they've done, and the bounty on their head. Kill them to collect it - shared with the friends who help."
+L.TOUR_3_TITLE = "Friends"
+L.TOUR_3_TEXT = "Your friends need the add-on too: it's on CurseForge and Wago. The Leaderboard ranks your kills and bounties; start a group there to compete with friends of friends. What pops up and what you share: the Options button, top right."
+L.TOUR_STEP = "%d of %d"
+L.TOUR_NEXT = "Next"
+L.TOUR_BACK = "Back"
+L.TOUR_DONE = "Got it"
 L.TIP_FRIENDS_ONLINE = "Friends online: %d"
 L.TIP_HITLIST_SIZE = "On your hitlist: %d"
 L.TIP_LAST_FIGHT = "Last fight: %s"
@@ -373,7 +400,7 @@ L.COL_NOW = "Now"
 L.YOU = "(you)"
 L.STATUS_AFK = "AFK"
 L.STATUS_FIGHT = "in a fight"
-L.BOARD_HINT = "World PvP kills and deaths, all-time. Click a name for their profile."
+L.BOARD_HINT = "World PvP kills, deaths and bounties collected, all-time. Click a name for their profile."
 L.PROFILE_EMPTY = "Nothing known about this player yet. Click a name on any list to see their profile."
 L.PROFILE_HINT = "Back to the list: click its tab below."
 L.PROF_KILLS = "Kills"
@@ -385,13 +412,22 @@ L.PROF_NEMESIS = "Nemesis"
 L.PROF_NEMESIS_TEXT = "%s (killed them %dx)"
 L.PROF_WANTED = "Most wanted"
 L.PROF_WANTED_POSTER = "WANTED"
+L.PROF_DEAD_OR_ALIVE = "DEAD OR ALIVE"
+L.BTN_POSTER = "Wanted poster"
+L.PROF_BOUNTY = "Bounty"
+L.TIP_BOUNTY = "Just for fun, not real gold: %d for every murder and %d for every attack since someone last collected it, plus %d for every friend who has them as their most wanted. Kill them to collect it: everyone who gets the kill shares it."
+L.COL_BOUNTY = "Bounties"
+L.PROF_BOUNTIES = "Bounties"
+L.PROF_BOUNTIES_N = "(%d collected)"
+L.BOUNTY_COLLECTED = "You collected the %s bounty on %s."
+L.BOUNTY_COLLECTED_SHARED = "You collected %s, your share of the bounty on %s (with %s)."
 L.PROF_NOW = "Now"
 L.PROF_LAST_SEEN = "Last seen"
 L.PROF_ADDON = "Addon"
 L.PROF_OUTDATED = "%s (older than yours - tell them to update)"
 L.PROF_NEWER = "%s (newer than yours - time to update)"
 L.PROF_ESTIMATED = "Counted from their alerts: they need 0.7 or newer to report their own numbers."
-L.PROF_KILLS_ON_US = "Kills on us"
+L.PROF_KILLS_ON_US = "Murders"
 L.PROF_DIED_TO_US = "Died to us"
 L.PROF_ATTACKS = "Attacks on us"
 L.PROF_KILLED = "Killed"
@@ -403,7 +439,6 @@ L.PROF_NOT_ON_HITLIST = "no"
 L.PROF_RECENT = "Recent PvP"
 L.PROF_RECENT_NONE = "Nothing yet."
 L.PROF_FRIEND = "Friend"
-L.PROF_ENEMY = "Enemy"
 L.PROF_LEVEL_CLASS = "Level %s %s"
 L.BTN_WANTED_SET = "Make most wanted"
 L.BTN_WANTED_CLEAR = "Clear most wanted"
@@ -419,6 +454,12 @@ L.BTN_GROUP_INVITE = "Invite"
 L.BTN_GROUP_LEAVE = "Leave"
 L.BTN_GROUP_JOIN = "Join"
 L.BTN_GROUP_DECLINE = "Decline"
+L.BTN_GROUP_OPEN = "Group"
+L.BTN_GROUP_INVITATION = "Invitation"
+L.BTN_GROUP_REMOVE = "Remove"
+L.GROUPWIN_INVITED = "You're invited. Join to share your kills, deaths and bounties with this group."
+L.GROUPWIN_YOU_LEAD = "You lead this group (whoever has been in longest leads)."
+L.GROUPWIN_LED_BY = "Led by %s (whoever has been in longest leads)."
 L.GROUP_INVITED_TAG = "(invited)"
 L.GROUP_ROW_INVITED = "invited - hasn't joined yet"
 L.GROUP_ROW_VIA = "as of %s, via %s"
@@ -429,15 +470,15 @@ L.N_MEMBERS = { "%d member", "%d members" }
 L.N_KILLS = { "%d kill", "%d kills" }
 L.N_DEATHS = { "%d death", "%d deaths" }
 L.GROUP_TOTALS_PARTIAL = { "1 member without numbers yet.", "%d without numbers yet." }
-L.GROUP_HINT = "Right-click yourself to leave. The leader is whoever has been in longest."
-L.GROUP_HINT_LEADER = "You lead this group: right-click a member to remove them."
+L.GROUP_HINT = "The Group button has the members, invites and Leave."
+L.GROUP_HINT_LEADER = "You lead this group. The Group button has the members, invites and Remove."
 L.GROUP_NEW_PROMPT = "Name your new group:"
-L.GROUP_CREATED = "Group %s created. Invite friends with the Invite button on the Leaderboard."
+L.GROUP_CREATED = "Group %s created. Invite friends from its window (the Group button on the Leaderboard)."
 L.GROUP_INVITE_TITLE = "Invite to %s"
 L.GROUP_INVITE_SENT = "Invited %s to %s. They'll get it when they're online."
 L.GROUP_NOBODY_TO_INVITE = "No friends left to invite - friends show up here once the addon has seen them."
 L.GROUP_INVITED = "%s invited you to %s"
-L.GROUP_INVITED_TEXT = "Join or decline on the Leaderboard (/fnf board)."
+L.GROUP_INVITED_TEXT = "Join or decline on the Leaderboard: pick the group, then Invitation (/fnf board)."
 L.GROUP_JOINED = "You joined %s."
 L.GROUP_LEFT = "You left %s."
 L.GROUP_DECLINED = "You declined the invite to %s."
@@ -492,3 +533,36 @@ L.PROF_LAST_PLACE = "Last place"
 -- 0.7.2: one click = profile everywhere
 L.HITLIST_HINT = "Click a name for their profile (note, kill list, most wanted). Right-click to remove."
 L.PROF_SHARED_BY = "Shared by"
+
+-- 0.9: what a number means, on hover. Column headers (by tab: "Kills" means different things on
+-- different tabs) and profile labels.
+L.COLUMN_TIPS = {
+  hitlist = {
+    [L.COL_KILLS] = "How many times they killed you or a friend. * = includes suspected kills (likely, not certain).",
+    [L.COL_VICTIMS] = "Which of you they killed, and how often.",
+  },
+  enemies = {
+    [L.COL_KILLS_ON_US] = "How many times they killed you or a friend.",
+    [L.COL_DEATHS_TO_US] = "How many times you or a friend killed them.",
+  },
+  board = {
+    [L.COL_RANK] = "Place on this board: most kills first; on a tie, fewer deaths first.",
+    [L.COL_KILLS] = "World PvP kills, all-time, as each player's own add-on reports them.",
+    [L.COL_DEATHS] = "World PvP deaths, all-time.",
+    [L.COL_KD] = "Kills per death. With no deaths yet, just the kills.",
+    [L.COL_BOUNTY] = "Gold collected from bounties on enemies, all-time (just for fun, not real gold). Empty: they're on a version before 0.9.",
+  },
+}
+L.PROFILE_TIPS = {
+  [L.PROF_KILLS] = "World PvP kills, all-time.",
+  [L.PROF_DEATHS] = "World PvP deaths, all-time.",
+  [L.PROF_KD] = "Kills per death. With no deaths yet, just the kills.",
+  [L.PROF_RANK] = "Place on your friends' Leaderboard, by kills.",
+  [L.PROF_BOUNTIES] = "Gold collected from bounties on enemies, all-time (just for fun, not real gold).",
+  [L.PROF_KILLS_ON_US] = "How many times they killed you or a friend.",
+  [L.PROF_DIED_TO_US] = "How many times you or a friend killed them.",
+  [L.PROF_ATTACKS] = "How many fights they started with you or a friend.",
+  [L.PROF_REVENGE] = "How many times one of you killed them while they were on your hitlist.",
+  [L.PROF_WANTED_BY] = "Friends who have them as their most wanted: each adds to their bounty.",
+  [L.PROF_NEMESIS] = "The enemy who killed them most.",
+}
