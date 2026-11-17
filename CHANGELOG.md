@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0
+A look pass: the window feels more like part of the game. Everything uses only the game's own
+fonts, art and sounds, and falls back to the plain look if any of it is missing.
+- **Enemy profiles are Wanted posters:** aged parchment, "WANTED" above their name, their class
+  crest in the corner.
+- **Title font:** names on profiles and the Recent PvP heading use the game's quest-title font.
+- **Medals on the Leaderboard:** the top 3 get a gold, silver or copper coin and colour.
+- **The Hitlist is a ledger:** parchment with ruled lines.
+- **Soft motion:** the window and each tab fade in; profile numbers count up when you open one.
+- **Window sounds:** the game's own sounds when you open or close the window, turn to another
+  tab, or save a note. New option "Window sounds" (on by default; also follows "Sounds on").
+
 ## 0.7.3
 - **Your character on your own profile:** the Profile tab shows your character model above
   your recent PvP (drag it to turn it). Friends' and enemies' profiles are unchanged.

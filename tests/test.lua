@@ -2737,4 +2737,49 @@ do
   check(ns.errors == errs, "no errors with the profile model (" .. tostring(ns.lastError) .. ")")
 end
 
+-- the window's look: medals, Wanted poster, ledger, count-up, window sounds
+do
+  local errs = ns.errors
+  local Art = ns.Art
+  check(strtrim(ns.Plain(Art.RankText(1))) == "1" and Art.RankText(1):find("GoldIcon", 1, true), "rank 1: gold, with a gold coin after the number")
+  check(Art.RankText(3):find("CopperIcon", 1, true) and Art.RankText(4) == "4" and Art.RankText(nil) == "", "rank 3 copper, 4 and up plain")
+
+  -- sounds: the game's own, only with "Window sounds" and "Sounds on"
+  SOUNDKIT = { IG_CHARACTER_INFO_OPEN = 1, IG_CHARACTER_INFO_CLOSE = 2, IG_ABILITY_PAGE_TURN = 3, IG_QUEST_LIST_SELECT = 4 }
+  local before = SOUNDS_PLAYED or 0
+  ns.UI.Show("hitlist")
+  ns.UI.SelectTab("feed")
+  check((SOUNDS_PLAYED or 0) == before + 1, "turning to another tab plays a page sound")
+  ns.UI.SelectTab("feed")
+  check((SOUNDS_PLAYED or 0) == before + 1, "the same tab again: no sound")
+  ns.S().sound.ui = false
+  ns.UI.SelectTab("hitlist")
+  check((SOUNDS_PLAYED or 0) == before + 1, "Window sounds off: silent")
+  ns.S().sound.ui, ns.S().sound.enabled = true, false
+  ns.UI.SelectTab("feed")
+  check((SOUNDS_PLAYED or 0) == before + 1, "Sounds on off: silent too")
+  ns.S().sound.enabled = true
+  SOUNDKIT = nil
+  ns.UI.SelectTab("hitlist")
+  check((SOUNDS_PLAYED or 0) == before + 1, "a client without the sound list: silent, no error")
+
+  -- the Hitlist is a ledger; other tabs aren't
+  local fr = ns.UI.Frames()
+  check(fr.rows.ledger:IsShown(), "Hitlist: parchment ledger")
+  ns.UI.SelectTab("enemies")
+  check(not fr.rows.ledger:IsShown(), "Enemies: no parchment")
+
+  -- an enemy's profile is a Wanted poster; a friend's and yours aren't
+  ns.UI.ShowPlayer("Rogz Fang")
+  check(ns.UI.CurrentTab() == "profile" and fr.profile.poster:IsShown(), "an enemy's profile: Wanted poster")
+  check(ns.Plain(fr.profile.title:GetText()) == "Rogz Fang", "the poster's name has no small icon (the crest is on the poster)")
+  -- numbers show their real value straight away (the count-up only animates on screen)
+  local v = ns.UI.ProfileView("Rogz Fang")
+  check(fr.profile.values[1]:GetText() == tostring(v.lines[1][2]), "the numbers are right from the start")
+  ns.UI.ShowProfile(ns.me)
+  check(not fr.profile.poster:IsShown(), "your own profile: no poster")
+  ns.UI.Show("hitlist")
+  check(ns.errors == errs, "no errors with the window's look (" .. tostring(ns.lastError) .. ")")
+end
+
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

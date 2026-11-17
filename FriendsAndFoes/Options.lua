@@ -119,6 +119,8 @@ local function build(p)
   y = y - 22
   check(p, x, y, L.OPT_ALL_SOUNDS, toggle("sound", "enabled"))
   y = y - 22
+  check(p, x, y, L.OPT_UI_SOUNDS, function() return S().sound.ui ~= false end, function(v) S().sound.ui = v end)
+  y = y - 22
   check(p, x, y, L.OPT_FLAVOR, function() return S().flavor end, function(v) S().flavor = v end)
   y = y - 22
   check(p, x, y, L.OPT_MILESTONES, function() return S().milestones ~= false end, function(v) S().milestones = v end)
@@ -377,6 +379,7 @@ function Options.BuildNative()
   -- Sounds: which sound each event plays (picking one plays it)
   local snd, sndLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_SOUNDS)
   checkbox(snd, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
+  checkbox(snd, "sound_ui", S().sound, "ui", L.OPT_UI_SOUNDS, D.sound.ui, L.TIP_UI_SOUNDS)
   header(sndLayout, L.SOUNDS_HEADER, L.TIP_SOUNDS_HEADER)
   local CATEGORY = { attacked = "pvp", engage = "pvp", died = "pvp", kill = "pvp", sighting = "sighting",
     level = "progress", loot = "progress", gear = "progress", share = "progress" }

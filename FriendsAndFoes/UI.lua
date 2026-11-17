@@ -245,7 +245,7 @@ local KILL_COLS = {
 }
 
 local BOARD_COLS = {
-  { L.COL_RANK, 34, function(r) return r.rank and tostring(r.rank) or "" end, function(r) return -(r.rank or 999) end },
+  { L.COL_RANK, 34, function(r) return ns.Art.RankText(r.rank) end, function(r) return -(r.rank or 999) end },
   { L.COL_NAME, 200, function(r)
     return nameCol(r) .. (r.me and ("  |cff888888" .. L.YOU .. "|r") or "") .. (r.leader and ("  |cffffd100" .. L.GROUP_LEADER_TAG .. "|r") or "")
   end, byName },
@@ -452,6 +452,9 @@ end
 local PROFILE_LINES, RECENT_LINES = 9, 10
 -- your own profile: your character above recent PvP, which then has room for fewer lines
 local MODEL_TOP, MODEL_H, RECENT_LINES_ME = -40, 190, 5
+-- an enemy's Wanted poster: its width, and how far "WANTED" pushes the name and facts down
+local POSTER_W, POSTER_SHIFT = 340, 32
+local countedFor -- whose profile numbers have counted up already (once per visit)
 local PROFILE_TOP = -50 -- where the facts and recent PvP start, below the name lines
 local DASH = "|cff888888-|r"
 
@@ -476,7 +479,8 @@ function UI.ProfileView(name)
   if kind == "enemy" then
     local h = hitlist[ns.Data.Resolve(hitlist, name)]
     local e = rec or h
-    view.title = classIcon(e.class) .. ns.ClassColored(e.name, e.class)
+    view.title = ns.ClassColored(e.name, e.class) -- (their class crest is on the poster)
+    view.class = e.class
     view.sub = L.PROF_ENEMY .. "  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(e), className(e.class)) .. (e.guild and ("  <" .. e.guild .. ">") or "")
     line(L.PROF_KILLS_ON_US, C(rec and rec.k))
     line(L.PROF_DIED_TO_US, C(rec and rec.d))
@@ -552,12 +556,47 @@ local function renderProfile()
   if not profileName then profileName = ns.me end
   local v = UI.ProfileView(profileName)
   profile.empty:SetShown(v == nil)
+
+  -- an enemy: the Wanted poster, with the name and facts moved down below "WANTED"
+  local poster = v ~= nil and v.kind == "enemy"
+  profile.poster:SetShown(poster)
+  profile.paper:SetShown(poster)
+  profile.wanted:SetShown(poster)
+  local shift = poster and POSTER_SHIFT or 0
+  local c = poster and v.class and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[v.class]
+  profile.crest:SetShown(c and true or false)
+  if c then
+    profile.crest:SetTexture(CLASS_ICONS)
+    profile.crest:SetTexCoord(c[1], c[2], c[3], c[4])
+  end
+  profile.title:ClearAllPoints()
+  profile.title:SetPoint("TOPLEFT", 0, -shift)
+  -- on the poster the name stops before the crest
+  profile.title:SetWidth(poster and (POSTER_W - 70) or 640)
+  profile.sub:SetWidth(poster and (POSTER_W - 16) or 640)
+  local factsTop = PROFILE_TOP - shift
+  for i = 1, PROFILE_LINES do
+    local y = factsTop - (i - 1) * 19
+    profile.labels[i]:ClearAllPoints()
+    profile.labels[i]:SetPoint("TOPLEFT", 0, y)
+    profile.values[i]:ClearAllPoints()
+    profile.values[i]:SetPoint("TOPLEFT", 104, y)
+  end
+  profile.footnote:ClearAllPoints()
+  profile.footnote:SetPoint("TOPLEFT", 0, factsTop - PROFILE_LINES * 19 - 6)
+
   profile.title:SetText(v and v.title or "")
   profile.sub:SetText(v and v.sub or "")
+  -- numbers count up once each time you open someone's profile
+  local count = v ~= nil and countedFor ~= profileName
+  if count then countedFor = profileName end
   for i = 1, PROFILE_LINES do
     local l = v and v.lines[i]
+    local value = l and tostring(l[2]) or ""
     profile.labels[i]:SetText(l and l[1] or "")
-    profile.values[i]:SetText(l and tostring(l[2]) or "")
+    ns.Art.StopCount(profile.values[i])
+    profile.values[i]:SetText(value)
+    if count and value:match("^%d+$") then ns.Art.CountUp(profile.values[i], tonumber(value)) end
   end
   -- your character, on your own profile
   local model = profile.model
@@ -823,6 +862,7 @@ function UI.Refresh()
   refreshGroupBar()
 
   local isProfile = currentTab == "profile"
+  if not isProfile then countedFor = nil end -- (back to a profile later: count up again)
   rowsFrame:SetShown(not isProfile)
   profile:SetShown(isProfile)
   searchBox:SetShown(not isProfile)
@@ -854,6 +894,12 @@ function UI.Refresh()
     data = kept
   end
   applySort(data, cols)
+  local ledger = currentTab == "hitlist"
+  rowsFrame.ledger:SetShown(ledger)
+  for _, row in ipairs(rows) do
+    if row.stripe then row.stripe:SetShown(not ledger) end
+    row.rule:SetShown(ledger)
+  end
   local maxOffset = math.max(0, #data - ROWS)
   if offset > maxOffset then offset = maxOffset end
   layoutColumns(cols)
@@ -942,9 +988,14 @@ function UI.SelectTab(key)
   else
     wipe(history) -- picking a tab yourself starts over
   end
+  local changed = key ~= currentTab
   currentTab = key
   offset = 0
   UI.Refresh()
+  if changed then -- a page turn, and the new page fades in
+    ns.Art.Sound("page")
+    ns.Art.FadeIn(key == "profile" and profile or rowsFrame)
+  end
 end
 
 -- 0.6 name: the Enemies/Friends dropdown is two tabs now
@@ -1129,7 +1180,12 @@ local function build()
   win:RegisterForDrag("LeftButton")
   win:SetScript("OnDragStart", win.StartMoving)
   win:SetScript("OnDragStop", win.StopMovingOrSizing)
-  win:SetScript("OnShow", function() UI.Refresh() end)
+  win:SetScript("OnShow", function()
+    ns.Art.Sound("open")
+    ns.Art.FadeIn(win)
+    UI.Refresh()
+  end)
+  win:SetScript("OnHide", function() ns.Art.Sound("close") end)
   win:Hide()
   tinsert(UISpecialFrames, "FriendsAndFoesFrame")
 
@@ -1215,6 +1271,8 @@ local function build()
   rowsFrame = CreateFrame("Frame", nil, win)
   rowsFrame:SetPoint("TOPLEFT", 14, -58)
   rowsFrame:SetPoint("BOTTOMRIGHT", -14, 76)
+  rowsFrame.ledger = ns.Art.Parchment(rowsFrame) -- (the Hitlist only)
+  rowsFrame.ledger:SetShown(false)
   rowsFrame:EnableMouseWheel(true)
   rowsFrame:SetScript("OnMouseWheel", function(_, delta)
     offset = math.max(0, math.min(offset - delta * 3, math.max(0, #data - ROWS)))
@@ -1261,10 +1319,13 @@ local function build()
     row.sel:SetColorTexture(1, 0.8, 0.1, 0.15)
     row.sel:Hide()
     if i % 2 == 0 then
-      local bg = row:CreateTexture(nil, "BACKGROUND", nil, -1)
-      bg:SetAllPoints()
-      bg:SetColorTexture(1, 1, 1, 0.03)
+      row.stripe = row:CreateTexture(nil, "BACKGROUND", nil, -1)
+      row.stripe:SetAllPoints()
+      row.stripe:SetColorTexture(1, 1, 1, 0.03)
     end
+    -- the Hitlist is a ledger: ruled lines instead of stripes
+    row.rule = ns.Art.RuledLine(row)
+    row.rule:Hide()
     row.cells = {}
     for c = 1, MAX_COLS do
       local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1385,7 +1446,30 @@ local function build()
     fs:SetWordWrap(wrap and true or false)
     return fs
   end
+  -- an enemy's profile is a Wanted poster: aged parchment behind the left column, "WANTED"
+  -- above their name, their class crest in the corner
+  -- (all drawn on the profile frame itself, behind its text; `poster` only marks the area)
+  local poster = CreateFrame("Frame", nil, profile)
+  poster:SetPoint("TOPLEFT", -8, 8)
+  poster:SetPoint("BOTTOMLEFT", -8, 32)
+  poster:SetWidth(POSTER_W)
+  local paper = ns.Art.Parchment(profile, poster)
+  profile.wanted = profile:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  profile.wanted:SetPoint("TOPLEFT", poster, "TOPLEFT", 8, -8)
+  ns.Art.UseTitleFont(profile.wanted, 24)
+  profile.wanted:SetTextColor(0.85, 0.22, 0.15)
+  profile.wanted:SetText(L.PROF_WANTED_POSTER)
+  profile.crest = profile:CreateTexture(nil, "ARTWORK")
+  profile.crest:SetSize(44, 44)
+  profile.crest:SetPoint("TOPRIGHT", poster, "TOPRIGHT", -10, -10)
+  poster:Hide()
+  paper:SetShown(false)
+  profile.wanted:Hide()
+  profile.crest:Hide()
+  profile.poster, profile.paper = poster, paper
+
   profile.title = text("GameFontNormalLarge")
+  ns.Art.UseTitleFont(profile.title, 20)
   profile.title:SetPoint("TOPLEFT", 0, 0)
   profile.title:SetWidth(640)
   profile.sub = text("GameFontHighlightSmall")
@@ -1393,16 +1477,14 @@ local function build()
   profile.sub:SetWidth(640)
   profile.labels, profile.values = {}, {}
   for i = 1, PROFILE_LINES do
-    local y = PROFILE_TOP - (i - 1) * 19
     local label = text("GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", 0, y)
     label:SetWidth(100)
     local value = text("GameFontHighlightSmall")
-    value:SetPoint("TOPLEFT", 104, y)
     value:SetWidth(220)
     profile.labels[i], profile.values[i] = label, value
   end
   profile.recentHeader = text("GameFontNormalSmall")
+  ns.Art.UseTitleFont(profile.recentHeader, 15)
   profile.recentHeader:SetPoint("TOPLEFT", 340, PROFILE_TOP)
   profile.recent = {}
   for i = 1, RECENT_LINES do
@@ -1473,6 +1555,7 @@ local function build()
   c.edit:SetMaxLetters(200)
   local function saveEdit()
     c.edit:ClearFocus()
+    ns.Art.Sound("save")
     UI.ProfileSave(c.edit:GetText())
   end
   c.save = button(c, 60, L.SAVE, saveEdit)
@@ -1587,6 +1670,7 @@ end
 -- the profile tab's player (for tests)
 function UI.ProfileName() return profileName end
 function UI.ProfileModel() return profile and profile.model end -- (for tests)
+function UI.Frames() return { profile = profile, rows = rowsFrame } end -- (for tests)
 
 -- clicking a toast: that player's profile
 function UI.ShowPlayer(name)

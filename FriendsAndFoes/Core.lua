@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.7.3"
+ns.VERSION = "0.8.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -35,7 +35,7 @@ local DEFAULTS = {
   markTooltip = true, -- hitlist record in hitlist players' tooltips
   forgetAfter = 0, -- days unseen before a hitlist entry (without a note) is removed; 0 = never
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
-  sound = { enabled = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false },
+  sound = { enabled = true, ui = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false },
   dnd = { combat = false },
   -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
   where = { party = "hold", raid = "hold", pvp = "hold" },
