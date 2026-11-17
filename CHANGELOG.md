@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.9.2
+- **Your profile shows your character from the chest up** (head and shoulders) instead of the
+  whole body with the top of the head cut off.
+- **The Hitlist now also has anyone who attacks you or a friend first**, not only killers. Their
+  kills start at 0 and count up if they kill one of you. Shared hitlists bring attackers along
+  too.
+- **No more Enemies tab:** enemies are on the Hitlist. `/fnf` and old links to "Enemies" open
+  the Hitlist.
+- **Fixes:**
+  - A friend's test alerts (`/fnf sim all self`) no longer switch your window to the
+    simulation, and no longer stop your real kills from collecting bounties. One chat line says
+    they arrived.
+  - A most wanted's bounty price (250 per friend who wants them) is paid out once, not on every
+    kill of them.
+  - A kill is only credited to an enemy you saw alive in the last minute, so an old corpse you
+    target or ride past isn't counted as your kill.
+- **Profile page:**
+  - Your own profile says "You", and your nemesis "killed you".
+  - Kills whose victim couldn't be named are a "Name not readable" line in the kill list, so the
+    kill list adds up to your kills.
+  - A likely killer (the last attacker, when the death recap couldn't tell) is shown as
+    "(likely)" instead of a bare "?".
+  - "Clear most wanted" is only there when you have one.
+  - A recent PvP line that's cut short shows in full on hover.
+- **Safer text from friends:** zones, guilds and classes in friends' messages are plain text, and
+  anything that isn't a real item link is shown as plain text.
+- **Lighter catch-up:** a friend passes on at most 30 of your other friends' events when you log
+  in (was 100); every online friend answers, so this was mostly duplicates.
+- **SPEC.md rewritten** to match how the add-on works now.
+
 ## 0.9.1
 - **The Wanted poster is back inside the enemy's profile**, not a separate window: the poster on
   the left, their facts and recent PvP beside it. No window popping up, nothing to close.

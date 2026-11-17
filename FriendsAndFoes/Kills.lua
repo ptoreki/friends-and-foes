@@ -9,7 +9,8 @@ local L = ns.L
 --    and their answer (KLA, their top victims) is kept as `slainRep` and merged in (highest
 --    count wins, so nothing you saw gets lost).
 --  * Enemies: the friends they killed, from the hitlist.
--- Kills whose victim couldn't be named (Forever's honor message has no name) aren't listed.
+-- Kills whose victim couldn't be named (Forever's honor message has no name) are one line at the
+-- end, "Name not readable", counted on the killer's record (kx).
 local Kills = {}
 ns.Kills = Kills
 
@@ -75,6 +76,8 @@ function Kills.List(name)
     end
   end
   for _, row in pairs(merged) do rows[#rows + 1] = enemyInfo(players, row.name, row) end
+  -- kills whose victim couldn't be named: one line, so the list adds up to their kills
+  if ns.Count(p.kx) > 0 then rows[#rows + 1] = { name = L.KILLS_UNKNOWN, n = ns.Count(p.kx), unknown = true } end
   return rows
 end
 

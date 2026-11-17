@@ -29,6 +29,18 @@ local recapMax = 0
 local sightCooldown = {}
 local engaged = {}  -- enemy name -> GetTime() when you started a fight with them
 local ENGAGE_COOLDOWN = 120
+-- enemy name -> GetTime() they were last seen alive. A kill is only credited to someone seen alive
+-- in the last ALIVE_WINDOW seconds: an old corpse you target or ride past isn't your kill.
+local lastAlive = {}
+local ALIVE_WINDOW = 60
+
+-- true = dead, false = alive, nil = can't tell
+local function isDead(unit)
+  if not UnitIsDeadOrGhost then return nil end
+  local ok, dead = pcall(UnitIsDeadOrGhost, unit)
+  if not ok or issecret(dead) then return nil end
+  return dead and true or false
+end
 
 ---------------------------------------------------------------------------
 -- context
@@ -131,7 +143,10 @@ end
 
 function PvP.ReadEnemy(unit)
   local ok, info = pcall(readEnemy, unit)
-  if ok then return info end
+  if ok then
+    if info and info.name and isDead(unit) == false then lastAlive[info.name] = GetTime() end
+    return info
+  end
   ns.Debug("ERR:readEnemy", unit, info)
   return nil
 end
@@ -168,6 +183,9 @@ local function remember(info)
     end
     for name, t in pairs(threat) do
       if now - t.time > 60 then threat[name] = nil end
+    end
+    for name, t in pairs(lastAlive) do
+      if now - t > 600 then lastAlive[name] = nil end
     end
   end
 end
@@ -489,13 +507,6 @@ local recentDead = {}   -- { info, t }: enemy players seen dead (newest last)
 local usedVictim = {}   -- name -> time it was credited (one death, one kill)
 local DEAD_WINDOW, REUSE_AFTER = 5, 15
 
-local function isDead(unit)
-  if not UnitIsDeadOrGhost then return nil end
-  local ok, dead = pcall(UnitIsDeadOrGhost, unit)
-  if not ok or issecret(dead) then return nil end
-  return dead and true or false
-end
-
 ns.On("NAME_PLATE_UNIT_ADDED", function(unit)
   if issecret(unit) then return end
   local info = PvP.ReadEnemy(unit)
@@ -512,8 +523,12 @@ ns.On("NAME_PLATE_UNIT_REMOVED", function(unit)
   end
 end)
 
+-- a victim we can credit: seen alive a moment ago, and not credited for another kill just now
 local function fresh(info, now)
-  return info and info.name and not (usedVictim[info.name] and now - usedVictim[info.name] < REUSE_AFTER)
+  if not (info and info.name) then return false end
+  if usedVictim[info.name] and now - usedVictim[info.name] < REUSE_AFTER then return false end
+  local alive = lastAlive[info.name]
+  return alive ~= nil and now - alive <= ALIVE_WINDOW
 end
 
 function PvP.FindDeadEnemy()

@@ -4,7 +4,7 @@
 See your Battle.net friends' level-ups, epic loot and world PvP fights, and put a bounty on everyone who ganks your group.
 
 **Longer summary (for an intro paragraph, Wago's description, or a forum post):**
-Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you hear about it. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you goes on a shared hitlist, with a Wanted poster and a bounty on their head that grows with every murder. They get a skull on their nameplate, you're told when you or a friend spots them again, and whoever kills them collects the bounty. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
+Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you hear about it. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you, or attacks one of you first, goes on a shared hitlist, with a Wanted poster and a bounty on their head that grows with every murder. They get a skull on their nameplate, you're told when you or a friend spots them again, and whoever kills them collects the bounty. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
 
 ---
 
@@ -14,7 +14,7 @@ Stay connected with your friends in WoW Forever. See their level-ups, epic loot 
 ### What you get
 - **Friends' progress:** level-ups, epic loot and new gear. Big moments (level 60, epic BoE, revenge, kill streaks) always pop up.
 - **World PvP alerts:** a friend attacked, attacking someone, killed, or getting a kill, with who and where.
-- **Hitlist:** anyone who kills you or a friend. Hover them to see who of your friends they killed and how often. They get a nameplate skull, and you're alerted when you or a friend spots them.
+- **Hitlist:** anyone who kills you or a friend, or attacks one of you first. Hover them to see who of your friends they killed and how often. They get a nameplate skull, and you're alerted when you or a friend spots them.
 - **Wanted posters & bounties:** every enemy who hurts your group has a Wanted poster with their face, what they've done, and a bounty in gold (just for fun). Kill them to collect it, shared with the friends who help.
 - **Leaderboard:** world PvP kills, deaths, K/D and bounties collected for you and your friends, all-time.
 - **Shared groups:** follow a group's stats together, with group totals. Members pass numbers along, so not everyone needs to be friends with everyone.

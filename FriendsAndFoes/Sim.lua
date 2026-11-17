@@ -46,6 +46,7 @@ local function deliverFromFriend(kind, fields)
   local decoded = ns.Comm.Decode(ns.Comm.Encode(msg))
   if not decoded then return end
   decoded.from = FRIEND
+  decoded.localSim = true -- made up here: the window switches to the simulation
   ns.Events.Apply(decoded, false)
 end
 

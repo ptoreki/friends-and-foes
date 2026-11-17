@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.9.1"
+ns.VERSION = "0.9.2"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -69,6 +69,15 @@ function ns.ItemQuality(link)
   if q then return tonumber(q) end
   local color = link:match("|cff(%x%x%x%x%x%x)")
   return color and QUALITY_COLOR[color:lower()] or nil
+end
+
+-- an item link from a friend's message: kept only if it's a plain item link; anything else is
+-- cut down to its name as plain text (nil if nothing is left)
+function ns.SafeLink(link)
+  if type(link) ~= "string" or issecret(link) then return nil end
+  if link:match("^|c[^|]*|Hitem:[%d:%-]*|h%[[^|]*%]|h|r$") then return link end
+  local plain = ns.Plain((link:gsub("|A.-|a", "")))
+  return ns.Profile and ns.Profile.CleanText(plain, 80) or nil
 end
 
 -- a count for display: a whole number, never negative and never "-0"
@@ -302,6 +311,7 @@ end
 -- Accepts "First Last", "First-Last", "First Last-Realm"; trailing parts beyond the surname are dropped.
 function ns.CleanName(name, second)
   if not name or issecret(name) or type(name) ~= "string" then return nil end
+  if name:find("|", 1, true) then return nil end -- a colour code, link or texture: not a name
   local forever = ns.ForeverNames()
   local words = {}
   for w in name:gmatch("[^%s%-]+") do words[#words + 1] = w end
@@ -398,9 +408,9 @@ function ns.DecodeUnit(s)
   local p = ns.Split(s, ":")
   return {
     name = ns.CleanName(p[1]),
-    class = (p[2] and p[2] ~= "") and p[2] or nil,
+    class = p[2] and p[2]:match("^%u+$") or nil,
     level = tonumber(p[3]),
-    guild = (p[4] and p[4] ~= "") and p[4] or nil,
+    guild = p[4] and ns.Profile and ns.Profile.CleanText(p[4], 64) or nil,
   }
 end
 

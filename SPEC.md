@@ -1,299 +1,196 @@
-# Friends & Foes — Spec (v0.3)
+# Friends & Foes — Design notes (1.0)
 
-WoW Forever addon (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`).
-Tells you what your friends are doing (leveling, epic BoEs, new gear), alerts you to
-world-PvP fights involving them, and keeps a hitlist and per-player K/D/A.
+How the add-on works and why, for whoever changes it next. The README says what it does for
+players, the CHANGELOG says what changed when, and the code comments say the details. When this
+file and the code disagree, the code is right, so fix this file.
+
+WoW Forever add-on (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`).
 
 ## Platform constraints
-- Forever uses the modern (Midnight 12.x) addon API. **The combat log is unavailable**,
-  and some combat values come back as *secret values*.
-- So each client reports **only its own events** and sends them to friends.
-  No client watches other players.
-- Every value that might be secret is checked with `issecretvalue` before it is used.
-  Every event handler is wrapped in `pcall`.
-- If a signal turns out to be unreadable, that feature quietly degrades instead of erroring.
-- Nothing has been tested on a live client. Friends are the testers.
+- Forever runs the modern (Midnight 12.x) add-on API. **There is no combat log**, and some combat
+  values come back as *secret values*.
+- So each client reports **only its own events** and sends them to friends. No client watches
+  other players' fights.
+- Every value that might be secret is checked with `issecretvalue` before use, and every event
+  handler runs through `ns.Try` (`pcall`). A signal that turns out unreadable degrades its feature
+  (recorded in `ns.caps`), never errors.
+- **Forever has no realms.** `GetRealmName` returns an internal server name that differs between
+  friends who play together, so it's ignored. Everything lives in one store, `realms.Forever`.
+- **Names:** every character is "First Last". Only the pair is unique (region-wide). First names
+  are shared, and neither part has spaces or hyphens. `UnitName` returns `(first, surname)`. The
+  key is always "First Last" (`ns.CleanName`). A bare first name resolves to a full one only when
+  exactly one matches, and is folded in later when it can be.
+- Blizzard's add-on policy, ToU and EULA are followed **by a margin**: low message traffic, no
+  outside servers or programs, BattleTags and notes never leave your Battle.net friends, and text
+  other players typed passes the language filter before it's shown.
 
 ## Friends and sync
-- A "friend" is a Battle.net friend who is **online in WoW Forever** (same WoW project), **on your
-  faction**, and has the addon.
-  - Other-faction friends are left out of the roster: nothing is sent to them, their events are
-    dropped, and they aren't listed. Their fights would otherwise put your own faction on the
-    hitlist.
-  - You never appear in your own Friends list.
-  Forever has no realms: `GetRealmName` returns an internal server name ("CAMWOW EU4 Realm 8 PvP")
-  that differs between friends who play together, so it is ignored. Names are unique region-wide.
-- **Picked friends** (`FriendsAndFoesDB.group`, keyed by BattleTag): if the set is empty, every
-  friend above counts. Otherwise events are sent to, and accepted from, picked friends only. Toggle a
-  friend by clicking them in the Friends tab, or with `/fnf group <name|BattleTag>`. `/fnf group all`
-  clears the set. Unpicked online friends are still listed so you can pick them.
-- Each event is sent **two ways**:
-  - `BNSendGameData` to the friend's game account
-  - an addon `WHISPER` to the friend's character (same faction only)
-- The receiver drops duplicates using `sender:eventId`.
-- Alerts are **live only**. Two things fill in what you missed:
-  - **Catch-up at login.** Each client keeps its own last 12 hours of LVL, LOOT, GEAR, ATK, ENG,
-    DIE and KILL (at most 40, per character, only kinds you share). 15 seconds after login, if
-    you were away at least 2 minutes (`lastOnline`, saved every minute and at logout), you send
-    `REQ` with the window in seconds (at most 12 hours). Each online friend answers once a minute
-    at most, to you only, with their own events from that window, the original IDs, and `ago`
-    (seconds since it happened) as the last field.
-    - A received event with `ago` goes to the Feed (at the time it happened) and the records
-      and hitlist, with **no toast, chat line or sound**. One chat line sums it up afterwards.
-    - It doesn't overwrite fresher info (level, guild, zone, last seen).
-    - Received event IDs are kept 13 hours (`got`) so a replay of something you saw live is
-      ignored.
-    - Only events of friends who are online when you log in can arrive; there's no server.
-  - A manual **Share hitlist** sends your 40 most recent entries. Receivers merge by taking the
-    higher of each counter.
-- Message format (protocol 3): `3\tKIND\tID\tsenderName\tclass\tlevel\taddonVersion\t<fields...>`,
-  at most 255 bytes. If a message is too long, guild names are dropped first.
-- The sender name in the header is accepted only if its first name matches what the route
-  reports (Battle.net `characterName` or the whisper sender). The roster then switches to the
-  full name, and whispers are addressed to "First Last".
+- A **friend** is a Battle.net friend who is online in WoW Forever, on your faction, and has the
+  add-on. Other-faction friends are left out: nothing is sent to them and their events are
+  dropped. You are never your own friend.
+- **Alert list** ("picks", `FriendsAndFoesDB.group`, by BattleTag). When it's empty, every friend
+  counts. Otherwise alerts go to and come from picked friends only. Groups, kill lists and
+  profiles still flow with everyone.
+- **Route:** Battle.net game data (`BNSendGameData`) only. An addon whisper is used only if
+  Battle.net messaging is missing, and whispers from older versions are still accepted. The
+  receiver drops duplicates by `sender:id`.
+- **Wire format (protocol 3):** `3\tKIND\tID\tsender\tclass\tlevel\tversion\t<fields...>`, at most
+  255 bytes. If a message is too long, guild names are dropped, then helpers one at a time
+  (`Comm.Fit`). The sender name in the header must match the first name the route reports.
+- **Message rule:** new fields only go on the end, and kinds are never reused. Older clients
+  ignore unknown kinds and extra fields. `Comm.SCHEMA`, `Comm.KINDS` and `Comm.FEATURES` are the
+  reference.
+- **Throttle:** one token bucket per route (8 tokens, 1 per second) with three priorities: PvP,
+  then normal, then bulk. The queue holds at most 400; bulk is dropped first, PvP never.
+- **Simulation:** IDs starting with `S` are simulated. They go to a separate store
+  (`FriendsAndFoesDB.sim`), never to real data and never to bounties. Your own `/fnf sim` switches
+  the window to it. A friend's simulated events don't; one chat line says they arrived.
+- **Text from friends** is cleaned before use (`Events.Clean`, `ns.SafeLink`, `ns.CleanName`):
+  zones and guilds become plain text, classes must be class tokens, names with escape codes are
+  dropped, and an item link that isn't a plain item link is cut to its name.
 
-## Names (WoW Forever)
-- Every character has a first name and a surname. **Only the pair is unique** (region-wide).
-  First names are shared. Neither part contains spaces or hyphens.
-- `UnitName` returns `(first, surname)` where retail returns `(name, realm)`. The death recap and
-  addon whispers use "First Last". "First-Last" also addresses a character.
-- The key is always "First Last". A bare first name is resolved to a known full name only when
-  exactly one matches. Otherwise it's kept as its own record, and folded in later once the full
-  name appears and there's no ambiguity.
-- At login, 0.2 records stored under a bare first name are merged into their unique full-name
-  record.
-- **Throttling:** each route has a token bucket of 8 that refills at 1 per second, with three
-  priorities (PvP, then progress, then bulk). A client throttle result puts the message back
-  in the queue.
-- **Version check:** friends' versions appear in the Friends tab. You get a toast once per session
-  when a friend runs a newer version or an incompatible protocol.
-- **Simulation:** IDs that start with `S` are simulated. Every client stores them in
-  `FriendsAndFoesDB.sim`, never in real data.
-
-## Events
-| Kind | Trigger (own character) | Fields |
+## Message kinds
+| Kind | When | Fields |
 |---|---|---|
-| LVL | `PLAYER_LEVEL_UP` (every level) | level |
-| LOOT | Looted or crafted item: **epic or better**, BoE or BoU | link, source (`loot`/`craft`) |
-| GEAR | Newly equipped item: **blue or better**, never equipped on this character before. Changes within 4 seconds are bundled | link (best item), count |
-| ENG | You start a fight: auto-attack / auto-shot (PLAYER_ENTER_COMBAT, START_AUTOREPEAT_SPELL) or a harmful spell (UNIT_SPELLCAST_SUCCEEDED + C_Spell.IsSpellHarmful) on a targeted enemy player, not already attacking you; once per enemy per 2 min | zone, target |
-| ATK | Hostile-faction player starts attacking you (one per encounter; repeated as more attackers join, 2 attackers per message) | enc, zone, attackers |
-| DIE | You died in a world PvP context | zone, killer, conf (`c` confirmed / `s` suspected), assists (at most 3), ended (the kill streak this death ended) |
-| KILL | Honorable-kill / honor-award message | victim (may be empty), vclass, vlevel, vguild, zone, streak (kills in a row, including this one) |
-| HIT | Manual hitlist share | share id, packed entries |
-| SIGHT | You spot a hitlist player (once per player every 5 min) | name, class, level, guild, zone |
-| REQ | You log in after being away 2+ minutes | window (seconds) |
+| LVL | you level up | level |
+| LOOT | you loot or craft an epic+ BoE/BoU item | link, source (`loot`/`craft`) |
+| GEAR | you equip a blue+ item new to this character (bundled over 4 s) | link, count, epics |
+| ATK | an enemy player starts attacking you (one per encounter, 2 attackers per message) | enc, zone, attackers |
+| ENG | you start a fight with an enemy player (once per enemy per 2 min) | zone, target |
+| DIE | you die in a tracked PvP context | zone, killer, conf (`c`/`s`), assists (≤3), ended (streak) |
+| KILL | you get an honorable kill | victim (may be empty), vclass, vlevel, vguild, zone, streak |
+| SIGHT | you spot someone on your hitlist (once per player per 5 min) | name, class, level, guild, zone |
+| HIT | Share hitlist (manual) | share, entries |
+| REQ | catch-up request at login | window |
+| PRO | your profile (on change, and to each friend who comes online) | k, d, wanted, zone, status, t, bt |
+| GRP / GST | shared groups: membership / relayed stats | see Groups |
+| KLQ / KLA | kill list request / answer | who / who, total, list |
+| RLQ / RLY | relayed catch-up request / one relayed event | window, names / origin, …, data |
 
-LVL, LOOT, GEAR, ENG, ATK, DIE and KILL end with an `ago` field: empty when live, seconds since
-it happened when replayed for catch-up. Older clients ignore it.
+LVL, LOOT, GEAR, ATK, ENG, DIE and KILL also end with `ago` (seconds since it happened, when
+replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:guild`.
 
-Units are encoded as `name:CLASS:level:guild`, with the name as "First Last".
+## Catch-up (alerts are live only)
+- Each character keeps its own events from the last **24 hours** (at most 100, only the kinds you
+  share).
+- **At login:** 15 seconds in, if you were away at least 2 minutes (`lastOnline`, saved every
+  minute), you ask online friends (REQ). A friend who comes online later is asked once per
+  session.
+- Replayed events go to the Feed, records and hitlist **at the time they happened**, with no
+  toasts, chat lines or sounds; one chat line sums them up. They never overwrite fresher info.
+  Received IDs are kept 25 hours (`got`) so a replay of something you saw live is ignored.
+- **Relayed catch-up:** you name your offline friends (RLQ), and online friends pass on events
+  those friends sent them (RLY). Rules:
+  - one hop only
+  - only events marked `rl` (the sender's "Friends may pass on my events" is on and their alert
+    list is empty)
+  - at most **30 per answer**, from a "heard" box of 300 events / 24 hours
+  - the origin must be your own friend, and your picks still apply
 
-Rules:
-- **Gear identity** is item ID plus random suffix; enchants are ignored. Shirt, tabard and ammo are excluded.
-- **Seeding:** items already equipped when the addon first runs on a character are recorded silently.
-- **Collapse:** a GEAR event isn't sent if the same item was shared as LOOT within the last 5 minutes.
-- **Where your PvP is tracked** (`settings.track`, Options → Where it works):
-  - the open world (on): cities count, objective subzones (the EPL towers) never do
-  - battlegrounds (off). Forever has no arenas; one would count as a battleground.
-  - Dungeons and raids are never tracked. Duels are excluded automatically, because attackers must
-    be the opposite faction.
-- **Encounter:** starts when you take a hit while a hostile player is targeting you. It ends after
-  **30 seconds** without hits.
-- **Killer:**
-  - the death recap's source, if readable and either a known enemy or flagged as a player
-    by its GUID or flags (confirmed)
-  - the recap's name isn't used to guess "player" from its shape, since Forever player names
-    ("Kragg Bear") look like NPC names
-  - otherwise the most recent attacker in the encounter (suspected)
-  - the other encounter attackers, plus other players in the recap, count as assists. Assists
-    are not added to the hitlist.
-- **Names-unreadable fallback:** a death the recap shows came from a player is recorded even
-  when no encounter was detected. The Settings tab shows which fallback mode is active.
-- **Who was killed:** Forever's honor message names no one ("You have been awarded 7 Honor.").
-  The victim is worked out from the screen:
-  1. a dead enemy player as target, mouseover or focus
-  2. a visible nameplate of a dead enemy player
-  3. an enemy player whose nameplate went away dead within the last 5 seconds
+## PvP detection
+- **Where:** the open world (cities count; the EPL tower subzones don't). Battlegrounds only if
+  turned on. Never dungeons or raids. Duels are excluded because attackers must be the other
+  faction.
+- **Attacked (ATK):** you take a hit while an enemy player (target, focus, mouseover or nameplate)
+  targets you. The encounter ends after **30 s** without hits. Enemies you attacked first count
+  as an ENG, not an ATK.
+- **Killer (DIE):**
+  - the death recap's newest non-friendly source, if it's a known attacker or flagged as a
+    player (confirmed)
+  - otherwise the encounter's last attacker (suspected; shown with "(likely)")
+  - other attackers and recap players are assists
+  - someone on your side (you, Battle.net friends, party/raid) is never a killer or helper
+- **Kills (KILL):** Forever's honor message names no one ("You have been awarded 7 Honor."), so
+  the victim is worked out from the screen, in this order:
+  1. a dead enemy target, mouseover or focus
+  2. a visible dead enemy nameplate
+  3. an enemy whose nameplate went away dead in the last 5 s
 
-  A corpse is credited once per 15 seconds. If none of these applies, the KILL is sent with an
-  empty victim: "X got a kill · Place". Clients older than 0.5.4 ignore those. A message that does
-  name the victim (the classic wording) is still used directly.
-- **Kill vs. assist:** killing blows can't be detected without the combat log, so a friend's honorable
-  kills are counted as **takedowns**.
+  The victim must have been **seen alive in the last 60 s** (an old corpse isn't your kill), and
+  is credited once per 15 s. Otherwise the KILL goes out with an empty victim, which counts
+  towards K/D and is the kill list's "Name not readable" line (`kx`). Killing blows can't be
+  seen, so a kill is any honorable kill.
+- **Kill streak:** kills in a row without a PvP death, counted by the player's own client (per
+  character) and sent with KILL and DIE.
 
-## Records (account-wide, one store: `realms.Forever`; older per-server stores are merged at login)
-- **Players**: K/D/A per name.
-  - Friends and you: takedowns and deaths.
-  - Enemies: kills on us, deaths to us, and assists on our deaths.
-- **Hitlist**: anyone who **killed** you or a friend. Only a kill adds someone; an attack alone
-  only alerts.
-  - An enemy's attacks are counted on their player record (`atk`) and carried over when a kill
-    adds them. Attacks keep being counted while they're on the list.
-  - Stores guild, attacks, kills (with a suspected count), revenge count, victims (who they
-    killed), last seen and zone, a note, and who shared it.
-  - A shared entry with no kills (from an older client) isn't added.
-  - From 0.5.4, a one-time cleanup removes entries with no kills, unless they have a note.
-  - Entries fade (grey, listed last) after 90 days unseen (`Data.IsStale`); seeing them again
-    revives them. Optional removal after N unseen days (`settings.forgetAfter`: 0 = never, 90,
-    180 or 365), never for entries with a note.
-  - Levels seen over 30 days ago show as "N+". Friends unheard of for 180 days are hidden from
-    the Friends list unless online (records kept).
-  - Otherwise entries never expire. Remove one (Remove button or right-click), or clear the whole list
-    (Clear hitlist). Both ask Yes/No first. Player records (Players tab) can be removed by
-    right-click too, also with confirmation.
-- **Pruning** at login: enemies not seen for 90 days, with no kills or assists on us and not on
-  the hitlist, are removed.
-- **Feed**: the last 500 events.
-- **Error log**: the last 50 errors, always kept (`FriendsAndFoesDB.errorLog`).
-- **Per character**: the set of item keys already equipped.
+## Records (account-wide, `realms.Forever`)
+- **Players:** K/D/A per name, plus each player's kill list (`slain`; a friend's own report merges
+  in as `slainRep`, highest count wins).
+- **Hitlist:** anyone who **killed** you or a friend, or **attacked one of you first** (ATK). It
+  keeps guild, attacks, kills (and how many were suspected), revenge, who they killed (`kv`),
+  last seen and zone, your note, and who shared it.
+  - Assists and enemies you attacked first are recorded on their player record only.
+  - Entries fade after 90 days unseen. "Forget hitlist players" (off, or 90/180/365 days)
+    removes old entries, never ones with a note.
+  - **Share hitlist** sends your 40 most recent entries. Receivers take the higher of each
+    counter and add entries that have a kill or an attack.
+- **Feed:** the last 500 events, in the order they happened.
+- **Limits** (`Saved.lua`): players 3,000 (harmless enemies unseen for 90 days are dropped), kill
+  lists 250 victims each, debug log 2,000 lines (it switches off after 7 days), error log 50.
+- **Upgrades:** `Saved.STEPS` run once each, in order (`dataVersion`).
 
-## Alerts (toast, chat or off)
-- **Rule:** if you can act on it in the next 30 seconds, it's a toast. Everything else is a chat line.
-  Each kind can be set to Toast, Chat or Off in Settings (`settings.show`). Defaults:
-  - **Toast:** friend attacked, friend killed, friend's kill
-  - **Chat:** level up, loot/craft, new gear, hitlist sighting, hitlist share
-- **Nearby only** (`settings.nearbyOnly`, default on): "friend attacked" is shown as a toast only when the
-  friend's zone (from the message) is your current zone. Otherwise it's a chat line.
-- **Milestones always toast** (unless that kind is Off): reaching level 60 (`ns.MILESTONE_LEVEL`),
-  a **looted** epic BoE (crafted ones follow the setting), and a revenge kill.
+## Profiles, Leaderboard, bounties
+- **PRO:** each client is the authority on its own numbers. It sends the current character's
+  all-time kills and deaths (if it shares PvP), most wanted, zone and status (if it shares
+  "where I am"), and bounties collected. Friends keep the latest one.
+- **Leaderboard:** you and your friends (your picks, if any), one row per character, ranked by
+  kills, then fewer deaths.
+- **Bounties (just for fun):** an enemy's open bounty is 100 per murder + 25 per attack since the
+  last collection, + 250 for each friend who has them as most wanted (paid once per friend), at
+  least 10. Any kill of them by you or a friend collects it. Kills within 60 s share it equally;
+  your share is settled after 15 s. Each client counts on its own, so the split is best-effort.
+  Totals are account-wide and self-reported, like K/D.
+
+## Shared groups (`Groups.lua`)
+- Named groups whose stats members follow together. Members are Battle.net **accounts** (keyed by
+  a hash of the BattleTag), and their stats add up all their characters.
+- No server: every member keeps a copy. Membership entries carry three times: invited, joined,
+  removed. Copies merge by taking the newest of each, so every client works out the same result.
+- Limits: 10 members (joined first, then invites, oldest first), 5 groups, names 2–24 characters
+  through the language filter. The leader is the longest-joined member.
+- Members pass stats along (GST) because not everyone is friends with everyone. Only stats are
+  relayed, never live alerts.
+
+## Alerts
+- **Show:** each kind is Toast, Chat or Off, with or without sound (`settings.show`,
+  `settings.sound`, `settings.soundPick`). Defaults are in `Core.lua` `DEFAULTS`.
+- **Milestones** always toast unless that kind is off: level 60, a looted epic BoE, a revenge
+  kill, kill streaks of 5, 10, then every 5.
+- **Nearby only:** fights outside your zone become chat lines.
+- **Instances** (`settings.where`): show, hold until you're out (default), chat, or off. In combat,
+  only PvP and sighting toasts show if "Do not disturb in combat" is on.
+- **Toasts:** at most 1–4 on screen (default 2), queue 30, queued PvP toasts older than 60 s are
+  dropped. Similar toasts merge (level-ups, a burst of gear), milestones never. Four styles:
+  Modern, Classic, Alliance, Horde. Clicking a PvP toast opens that enemy's profile.
+- **Wording:** with flavor on, messages vary using local history (repeat killers, "Nth today",
+  streaks, revenge naming whom it avenged). Off: one short line, who did what, then where.
 - Your own events go to the Feed only. Records are kept whatever the display setting.
-- **Chat lines:** "F&F: <feed text>" in the guild-achievement colour, with clickable item links.
-  They go to chat tab 1, or the tab picked with `/fnf chat <n>`.
-- **Sound per event** (`settings.sound[kind]`): plays whenever that event is shown, as a toast or a
-  chat line. Defaults: on for friend attacked, friend killed, sighting and loot; off for the rest.
-  Milestones play a soft chime even when their event's sound is off. There's also a global
-  "Sounds on". Sounds:
-  - PvP: a short boss-whisper alert
-  - progress and milestones: the Battle.net toast chime
-  - sightings: the whisper ping
-- **Hitlist marks** (`settings.mark`, default on):
-  - a skull next to a hitlist player's nameplate
-  - a tooltip line: kills, attacks, who they killed, and your note
-  - Sightings (nameplate, target or mouseover, once per player every 5 minutes, world PvP only)
-    still produce a chat line or toast.
-- **Toast style** (`settings.theme`):
-  - `minimal`, shown as "Modern" (the default)
-  - `achievement`, shown as "Classic"
-  - `alliance` and `horde`: a dark faction-coloured panel, metal trim, a faded faction crest
-    (`TargetingFrameUI-PVP-*`), the header and an event-colour stripe
-  - Achievement uses `Interface\AchievementFrame` alert art. If the art is missing, it falls back
-    to a dark panel.
-  - It shows a header (by event kind, or "Revenge!", "Kill streak!", "Max level!"), the title, and
-    the details.
-  - It's tinted red for PvP and purple for sightings.
-  - Frames are pooled per style.
-- **Death helpers:** enemy assists from the death recap are added to the death line, "(with Z)".
-- **Sightings:** your own sightings are sent as SIGHT. A received one shows "X spotted by Y" with
-  your record of X (if X is on your hitlist) and the place. One alert per player every 5 minutes,
-  shared between your own and friends' sightings (`PvP.SightingDue`).
-- **Sounds per event** (`settings.soundPick[kind]`): "default" (the built-in sound for its kind)
-  or one of `Toast.SOUND_CHOICES`, the curated built-in game sounds. A milestone uses its pick,
-  else the chime.
-- **Counts** are always shown through `ns.Count`: whole numbers, never negative or "-0".
-- **Toast size and duration:** `settings.toastScale` (0.7–1.5) scales a holder frame under the
-  anchor; `settings.toastDuration` (2–10 s, PvP +2).
-- **Toast layout:** one compact line (icon, title, details; long text wraps to at most 3 lines) on a dark strip with a thin coloured
-  edge: red for PvP, gold for progress, purple for sightings. It fades in and out. PvP toasts stay
-  5 seconds, others 3. At most 2 are on screen and the rest are queued (at most 30). The anchor is
-  movable (`/fnf unlock`).
-- **Do not disturb:** in combat only PvP and sighting toasts show.
-- **Alerts while in an instance** (`settings.where[party|raid|pvp]`): show, hold (the default:
-  toasts wait until you leave), chat (everything becomes a chat line, even milestones), or off
-  (nothing shown; still recorded). Previews ignore this. The old `dnd.instance` false migrates to
-  show everywhere.
-  Queued PvP toasts older than 60 seconds are dropped.
-- **Message shape:** short. Who did what, then extras, then the place, separated by " · ", e.g.
-  "Rogz killed Bob again (3rd) · 5th today · Tarren Mill". The place is the subzone if the
-  sender had one, else the zone (`Flavor.Place`); the hitlist still stores the full zone.
-- **Varied wording** (`Flavor.lua`, `settings.flavor`, default on): built from history kept locally.
-  - Hitlist `kv[victim]` counts that enemy's kills on each friend:
-    - 2 or more: "Y killed X again (Nth)"
-    - 5 or more: "Y has X's number (Nth)"
-    - 10 or more: "X's nemesis Y strikes (Nth)"
-  - Each player's `deathTimes` and `killTimes` keep the last 2 days, at most 50 each:
-    - 3 or more deaths today, or 5 or more kills today: "Nth today"
-  - **Kill streak:** kills in a row without a world PvP death. Each client counts its own
-    (`FriendsAndFoesCharDB.streak`, per character; simulated events don't count) and sends it with
-    KILL. A DIE sends the streak it ended, then resets it. Fields added at the end are ignored by
-    older clients, and missing ones read as empty.
-    - from 3: "N in a row" (it takes the place of "Nth today")
-    - 5, 10, then every 5 more: "N in a row!", a milestone that always toasts (flavor on only)
-    - a death that ended 3 or more: "ended a N-kill streak"
-  - Enemy `kb[friend]` counts kills on that enemy by each friend: 3 or more gives "X owns Y (Nth)".
-  - Revenge names the friends that enemy had killed ("X avenged A on Y").
-  - An attack mentions the attacker's past kills on that friend ("(killed them N×)").
-  - Otherwise one plain wording is picked at random.
-- **Flavor off:** every message is one short line, who did what, then where. PvP:
-  "X killed by Y · Place", "X killed Y [(revenge)] · Place", "X attacked by Y · Place", and
-  "Hitlist: Y nearby · Place". Progress uses the Feed line. The toast shows that line only, with
-  no second part and no merging.
-  The same line goes to the toast, the chat line and the Feed. Counts are per client, since each
-  client builds them from the events it received.
-- **Revenge:** a kill on a hitlist entry adds "revenge!" and "R<n>" to the Kills column.
-- **Collapse:** level-up toasts merge ("Bob, Alice and 2 others leveled up"), and so does a burst
-  of gear toasts from one friend. Milestones are never merged.
-- **Suppression:** "Friend attacked" is suppressed when that friend is in your group and you're
-  in combat.
-- **Clicks:** a PvP toast opens that enemy in the main window. Hovering an item toast shows its
-  tooltip.
-- **Older settings:** a 0.3 toast that was turned off becomes Off. A 0.4 sound category that was
-  off turns that category's events silent.
+- **Hitlist marks:** a skull on hitlist players' nameplates and their record in the tooltip.
 
-## UI
-- **Window** (`/fnf`, the minimap addon menu, or the optional minimap button): Blizzard's plain
-  window frame, with tabs below it like the Character window.
-  - **Hitlist**: the hitlist, plus a note editor, Remove and Share
-  - **Players**: an Enemies / Friends filter
-    - Enemies shows K/D/A.
-    - Friends shows level, version, takedowns, deaths and alerts. Click a friend to pick them.
-  - **Feed**: recent events
-  - Rows show class icons. An **Options** button opens the settings.
-- **Options** use the game's native Settings API (`Settings.RegisterVerticalLayoutCategory`, with
-  dropdowns, checkboxes and buttons). Pages: Alerts (main), Appearance, Friends & sharing, Advanced.
-  Each event has one dropdown that combines show and sound: toast + sound / toast /
-  chat + sound / chat / off. If the API is missing or fails, the canvas panel below is used.
-- **Window:** column headers sort (click again to reverse; arrow shows the direction; default
-  newest first; each view keeps its own sort). Page arrows sit beside the count. Players has a
-  Show: Enemies / Friends dropdown, using the modern dropdown when available and a < > stepper
-  otherwise.
-- **Options (fallback canvas)** live in the game's Options → AddOns panel. If that panel can't be opened, the addon
-  opens its own window instead.
-  - Alerts: for each event, Show (Toast / Chat / Off, click to cycle) and Sound (on / off),
-    plus "nearby only" and "Sounds on"
-  - Share with friends, per type
-  - Do not disturb
-  - Other: hitlist marks, minimap button, debug logging, move toasts
-  - **Beta tools** (only while debug is on): test toasts, simulate, and which features this client
-    supports
-- **Minimap:** Friends & Foes is in the minimap's addon menu where the client has one
-  (`AddonCompartmentFunc`). The separate minimap button then starts hidden, once; your later
-  choice sticks.
-- Slash commands: `/fnf`, `/fnf options` (also `settings`), `/fnf unlock`, `/fnf lock`, `/fnf test`, `/fnf status`,
-  `/fnf share`, `/fnf group [name|BattleTag|all]`, `/fnf chat <tab>`, `/fnf sim <kind|all> [self]`, `/fnf sim view`, `/fnf sim clear`, `/fnf debug`,
-  `/fnf debug clear`, `/fnf minimap`.
+## Window
+- Tabs: **Hitlist**, **Leaderboard**, **Friends**, **Feed**, **Profile** (always yours). Clicking
+  any name opens their profile inside the current tab, with Back. A friend's profile has their
+  numbers, nemesis, where they are now and recent PvP. An enemy's is their Wanted poster with
+  bounty, note and most wanted. Kill lists open from a profile.
+- The old tab names `players` and `enemies` open the Hitlist.
+- **Group window:** members, invites, Join/Leave, opened from the Leaderboard.
+- **Options:** the game's Settings panel (Alerts, Where, Sounds, Appearance, Friends & sharing,
+  Advanced), with a fallback panel if that API is missing.
+- Slash commands: see the README.
 
 ## Tooling
-- `npm test` runs a Lua 5.1 syntax check, then loads the whole addon in a JavaScript Lua VM
-  (fengari, which is Lua 5.3) against a mocked WoW API (`tests/mock.lua`) and runs
-  `tests/test.lua`.
-- `npm run package` builds `dist/FriendsAndFoes-<version>.zip`.
+- `npm test`: a Lua 5.1 syntax check, a check that every string the code uses is defined
+  (`tests/locale.js`), then the whole add-on loaded in a Lua VM (fengari) against a mocked WoW API
+  (`tests/mock.lua`), running `tests/test.lua`.
+- `npm run package` builds `dist/FriendsAndFoes-<version>.zip`. Releases go through a tag and the
+  GitHub Action (PUBLISHING.md).
+- **Debugging:** `/fnf debug` logs to `FriendsAndFoesDB.debugLog`, and `/fnf report` gives a
+  copyable report. The log has the capability results, errors, messages sent and received, and
+  each alert's outcome with its reason.
 
-## Debugging
-`/fnf debug` logs to `FriendsAndFoesDB.debugLog` (newest 2000 lines; switches itself off after 7 days). The log is saved on `/reload`
-or logout, to `WTF\Account\<ACCOUNT>\SavedVariables\FriendsAndFoes.lua`. It records:
-- secret or readable results for each capability (bnet, whisper, unitNames, deathRecap, honor)
-- caught errors
-- messages sent and received
-- each alert's outcome (`[TOAST] kind | line | outcome`): toast / chat line / off / waiting (combat,
-  instance) / merged / dropped (stale, queue full) / dismissed, each with its reason
-
-## Known risks to check in beta
-1. Whether attacker names are readable (`unitNames` capability). If not, no ATK events fire and
-   the hitlist stays empty.
-2. Whether death recap IDs and fields work as assumed.
-3. Whether honor-kill message wording matches the English patterns.
-4. Whether the Battle.net and whisper sync routes deliver.
-
-## Out of scope for 0.1
-Localization, login replay, waypoints, public release.
+## Known risks (live testing)
+1. The honor-kill victim guess (screen-based) on busy fights.
+2. Group joins from the invitee's side, kill-list fetches and relayed events with a non-mutual
+   friend pair.
+3. Whether Battle.net always gives a character name (it sometimes doesn't; the name learned from
+   the friend's messages is used then).

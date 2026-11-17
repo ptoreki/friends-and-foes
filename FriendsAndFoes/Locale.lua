@@ -79,7 +79,6 @@ L.FEED_GEAR = "%s equipped %s"
 
 -- window
 L.TAB_HITLIST = "Hitlist"
-L.TAB_ENEMIES = "Enemies"
 L.TAB_FRIENDS = "Friends"
 L.BTN_OPTIONS = "Options"
 L.FRIEND_ONLINE = "online"
@@ -103,9 +102,6 @@ L.COL_LEVEL = "Lvl"
 L.COL_KILLS = "Kills"
 L.COL_VICTIMS = "Victims"
 L.COL_LAST = "Last seen"
-L.COL_KILLS_ON_US = "Kills on us"
-L.COL_DEATHS_TO_US = "Died to us"
-L.COL_ASSISTS = "Assists"
 L.COL_TAKEDOWNS = "Takedowns"
 L.COL_DEATHS = "Deaths"
 L.COL_LAST_EVENT = "Last event"
@@ -294,7 +290,7 @@ L.TIP_TRACK = "Where your own fights are tracked and sent to friends: attacks on
 L.TRACK_WORLD = "Open world"
 L.TRACK_PVP = "Battlegrounds"
 L.TIP_TRACK_WORLD = "World PvP - what the addon is made for. Objective areas (like the Eastern Plaguelands towers) are always skipped."
-L.TIP_TRACK_PVP = "Also track battleground fights. Anyone who kills you or a friend there goes on your hitlist too."
+L.TIP_TRACK_PVP = "Also track battleground fights. Anyone who kills or attacks you or a friend there goes on your hitlist too."
 L.OPTIONS_IN_COMBAT = "Options can't be opened during combat."
 L.CONFIRM_REMOVE_HIT = "Remove %s from your hitlist?"
 L.CONFIRM_REMOVE_PLAYER = "Remove %s and their kill/death record?"
@@ -320,7 +316,7 @@ L.WELCOME_2 = "Type /fnf for the window, or open Options -> AddOns -> Friends & 
 L.TOUR_1_TITLE = "Friends & Foes"
 L.TOUR_1_TEXT = "Your Battle.net friends who have Friends & Foes share their level-ups, loot and world PvP with you, and you with them. Fights, kills and deaths pop up as alerts; everything is kept here in this window."
 L.TOUR_2_TITLE = "Foes"
-L.TOUR_2_TEXT = "Anyone who kills one of you goes on your Hitlist, with a skull on their nameplate. Click a name for their Wanted poster: what they've done, and the bounty on their head. Kill them to collect it - shared with the friends who help."
+L.TOUR_2_TEXT = "Anyone who kills one of you, or attacks one of you first, goes on your Hitlist, with a skull on their nameplate. Click a name for their Wanted poster: what they've done, and the bounty on their head. Kill them to collect it - shared with the friends who help."
 L.TOUR_3_TITLE = "Friends"
 L.TOUR_3_TEXT = "Your friends need the add-on too: it's on CurseForge and Wago. The Leaderboard ranks your kills and bounties; start a group there to compete with friends of friends. What pops up and what you share: the Options button, top right."
 L.TOUR_STEP = "%d of %d"
@@ -410,6 +406,7 @@ L.PROF_RANK = "Rank"
 L.PROF_RANK_OF = "#%d of %d"
 L.PROF_NEMESIS = "Nemesis"
 L.PROF_NEMESIS_TEXT = "%s (killed them %dx)"
+L.PROF_NEMESIS_ME = "%s (killed you %dx)"
 L.PROF_WANTED = "Most wanted"
 L.PROF_WANTED_POSTER = "WANTED"
 L.PROF_DEAD_OR_ALIVE = "DEAD OR ALIVE"
@@ -438,6 +435,7 @@ L.PROF_NOT_ON_HITLIST = "no"
 L.PROF_RECENT = "Recent PvP"
 L.PROF_RECENT_NONE = "Nothing yet."
 L.PROF_FRIEND = "Friend"
+L.PROF_ME = "You"
 L.PROF_LEVEL_CLASS = "Level %s %s"
 L.BTN_WANTED_SET = "Make most wanted"
 L.BTN_WANTED_CLEAR = "Clear most wanted"
@@ -540,10 +538,6 @@ L.COLUMN_TIPS = {
     [L.COL_KILLS] = "How many times they killed you or a friend. * = includes suspected kills (likely, not certain).",
     [L.COL_VICTIMS] = "Which of you they killed, and how often.",
   },
-  enemies = {
-    [L.COL_KILLS_ON_US] = "How many times they killed you or a friend.",
-    [L.COL_DEATHS_TO_US] = "How many times you or a friend killed them.",
-  },
   board = {
     [L.COL_RANK] = "Place on this board: most kills first; on a tie, fewer deaths first.",
     [L.COL_KILLS] = "World PvP kills, all-time, as each player's own add-on reports them.",
@@ -565,3 +559,8 @@ L.PROFILE_TIPS = {
   [L.PROF_WANTED_BY] = "Friends who have them as their most wanted: each adds to their bounty.",
   [L.PROF_NEMESIS] = "The enemy who killed them most.",
 }
+
+-- 1.0
+L.SUSPECT_TAG = " (likely)" -- after a killer's name when it's a best guess (the last attacker)
+L.KILLS_UNKNOWN = "Name not readable" -- kill list row: kills whose victim couldn't be named
+L.SIM_FROM_FRIEND = "%s sent test alerts (simulation). They're kept apart from your real data: /fnf sim view to look, /fnf sim clear to remove."

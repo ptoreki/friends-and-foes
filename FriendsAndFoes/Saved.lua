@@ -78,6 +78,16 @@ local STEPS = {
   end,
   -- 6 (0.9): kill lists and enemy records get their limits right away
   function() Saved.Trim() end,
+  -- 7 (1.0): kills whose victim couldn't be named get their own count (kx), for the kill list's
+  -- "Name not readable" line; earlier ones are counted from the Feed (it names the killer since 0.7)
+  function(db)
+    for _, store in pairs(db.realms or {}) do
+      for _, e in ipairs(store.feed or {}) do
+        local p = e.kind == "kill" and e.who and not (e.foes and e.foes[1]) and store.players and store.players[e.who]
+        if p then p.kx = ns.Count(p.kx) + 1 end
+      end
+    end
+  end,
 }
 Saved.STEPS = STEPS
 

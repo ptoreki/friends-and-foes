@@ -122,15 +122,16 @@ local function enemyTouch(u, zone)
   return e
 end
 
--- Only a kill puts someone on the hitlist. Attacks before that are counted on their enemy
--- record (e.atk) and carried over when the kill adds them.
+-- A kill puts someone on the hitlist, and so does attacking one of you first (an ATK: they
+-- started it). Attacks counted on their enemy record (e.atk) are carried over when they're added.
+-- victim: who they killed (nil for an attack).
 local function hitTouch(u, zone, victim)
   if ns.PvP.IsFriendly(u.name) then return scratch(u.name) end
   local isNew = ns.Data.FindHit(u.name) == nil
   local h = ns.Data.Hit(u.name)
   ns.Data.Touch(h, { class = u.class, level = u.level, guild = u.guild, zone = zone })
   ns.PvP.NoteRace(h)
-  h.victims[victim] = true
+  if victim then h.victims[victim] = true end
   if isNew then
     local e = ns.Data.FindPlayer(u.name)
     if e and e.atk then h.attacks = math.max(h.attacks or 0, e.atk) end
@@ -205,9 +206,27 @@ local H = {}
 -- events whose zone is where the sender was (their own fights and sightings)
 local PLACE_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, SIGHT = true }
 
+-- Text from friends' messages is shown in chat and the window: only plain text, a class token,
+-- or a real item link gets through (a modified client can't slip in textures or other links)
+local TEXT_FIELDS = { zone = true, guild = true, vguild = true }
+local CLASS_FIELDS = { class = true, vclass = true }
+function Events.Clean(msg)
+  local f = msg.f
+  for k, v in pairs(f) do
+    if type(v) == "string" and v ~= "" then
+      if TEXT_FIELDS[k] then f[k] = ns.Profile.CleanText(v, 64) or ""
+      elseif CLASS_FIELDS[k] then f[k] = v:match("^%u+$") or ""
+      elseif k == "link" then f[k] = ns.SafeLink(v) or "" end
+    end
+  end
+end
+
+local simTold = {} -- friends whose test alerts you were told about (once per session)
+
 function Events.Apply(msg, isSelf)
   local h = H[msg.kind]
   if not h then return end
+  if not isSelf then Events.Clean(msg) end
   local sim = msg.id:sub(1, 1) == "S"
   ns.simulating = sim
   local ok, err = pcall(function()
@@ -235,7 +254,14 @@ function Events.Apply(msg, isSelf)
   elseif not isSelf and not sim and msg.version and ns.VersionNewer(ns.VERSION, msg.version) then
     Events.OlderVersion(msg.from, msg.version)
   end
-  if sim then ns.viewSim = true end
+  -- your own simulation switches the window to it; a friend's test alerts don't take your window
+  -- over (one chat line says they're there)
+  if sim and (isSelf or msg.localSim) then
+    ns.viewSim = true
+  elseif sim and not simTold[msg.from] then
+    simTold[msg.from] = true
+    ns.Toast.Chat(L.SIM_FROM_FRIEND:format(ns.ClassColored(msg.from)))
+  end
   if not sim and ns.Marks then ns.Marks.Refresh() end -- a new hitlist entry may be on screen
   if ns.UI and ns.UI.OnDataChanged then ns.UI.OnDataChanged() end
 end
@@ -323,8 +349,10 @@ H.ATK = function(msg, isSelf, p, f)
         atkSeenCount = atkSeenCount + 1
         local e = enemyTouch(u, f.zone)
         e.atk = (e.atk or 0) + 1
-        local h = hitUpdate(u, f.zone) -- an attack alone doesn't add anyone to the hitlist
-        if h then h.attacks = (h.attacks or 0) + 1 end
+        -- they attacked first (a fight you started is an ENG, not an ATK): on the hitlist
+        local isNew = ns.Data.FindHit(u.name) == nil
+        local h = hitTouch(u, f.zone) -- (a new entry starts with their attacks so far, this one included)
+        if not isNew then h.attacks = (h.attacks or 0) + 1 end
       end
     end
   end
@@ -384,7 +412,7 @@ H.DIE = function(msg, isSelf, p, f)
     h = hitTouch(killer, f.zone, msg.from)
     h.kills = h.kills + 1
     if suspect then h.suspect = h.suspect + 1 end
-    by = ns.ClassColored(killer.name, killer.class) .. (suspect and "?" or "")
+    by = ns.ClassColored(killer.name, killer.class) .. (suspect and L.SUSPECT_TAG or "")
   end
   local helpers, foes = {}, { killer and killer.name }
   for _, u in ipairs(ns.DecodeUnits(f.assists)) do
@@ -418,7 +446,9 @@ H.KILL = function(msg, isSelf, p, f)
   p.k = p.k + 1
   local streak = tonumber(f.streak)
   if not name then
-    -- the killer's client couldn't tell who died (Forever's honor message has no name)
+    -- the killer's client couldn't tell who died (Forever's honor message has no name): counted
+    -- on its own so the kill list can show them as one "name not readable" line
+    p.kx = ns.Count(p.kx) + 1
     local title, text, line = ns.Flavor.Kill(p, who(p), nil, nil, nil, false, f.zone, streak)
     feed(p, "kill", line)
     if isSelf then return end
@@ -433,7 +463,7 @@ H.KILL = function(msg, isSelf, p, f)
   local counted = ns.Data.EnemyDied(name)
   ns.Kills.Add(p, e.name, f.zone) -- the killer's kill list
   -- their bounty: collected by everyone who got the kill (never in the simulation)
-  if not msg.id:find("^S") and not ns.viewSim and e.enemy then
+  if not msg.id:find("^S") and e.enemy then
     ns.Bounty.OnKill(isSelf and ns.me or p.name, e.name)
   end
 
@@ -550,14 +580,16 @@ H.HIT = function(msg, isSelf, p, f)
     local hours = tonumber(e[8])
     local forget = tonumber(ns.S().forgetAfter) or 0
     local tooOld = isNew and forget > 0 and hours and hours / 24 > forget
-    -- older clients also share attack-only entries; only someone with kills is added
+    -- a new entry needs a kill or an attack on one of you (an empty one is never added)
     -- (never someone on your side, even if they are on the sharer's list)
-    if name and not tooOld and not ns.PvP.IsFriendly(name) and (not isNew or (tonumber(e[6]) or 0) > 0) then
+    if name and not tooOld and not ns.PvP.IsFriendly(name) and (not isNew or (tonumber(e[6]) or 0) > 0 or (tonumber(e[5]) or 0) > 0) then
       local h = ns.Data.Hit(name)
-      if e[2] and e[2] ~= "" then h.class = h.class or e[2] end
+      local cls = e[2] and e[2]:match("^%u+$")
+      if cls then h.class = h.class or cls end
       local lvl = tonumber(e[3])
       if lvl and lvl > 0 then h.level = math.max(h.level or 0, lvl) end
-      if e[4] and e[4] ~= "" then h.guild = h.guild or e[4] end
+      local g = ns.Profile.CleanText(e[4], 64)
+      if g then h.guild = h.guild or g end
       h.attacks = math.max(h.attacks or 0, tonumber(e[5]) or 0)
       h.kills = math.max(h.kills or 0, tonumber(e[6]) or 0)
       h.revenge = math.max(h.revenge or 0, tonumber(e[7]) or 0)

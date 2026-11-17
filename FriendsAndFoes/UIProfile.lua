@@ -89,7 +89,7 @@ function UI.ProfileView(name)
   local _, myClass = UnitClass("player")
   local p = rec or { name = name, class = isMe and myClass or nil, level = isMe and UnitLevel("player") or nil, k = 0, d = 0 }
   view.title = classIcon(p.class) .. ns.ClassColored(p.name, p.class) .. (isMe and ("  |cff888888" .. L.YOU .. "|r") or "")
-  view.sub = L.PROF_FRIEND .. "  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(p), className(p.class))
+  view.sub = (isMe and L.PROF_ME or L.PROF_FRIEND) .."  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(p), className(p.class))
 
   local board, row = ns.Profile.Board(), nil
   for _, r in ipairs(board) do if r.name == p.name then row = r end end
@@ -108,7 +108,7 @@ function UI.ProfileView(name)
     line(L.PROF_BOUNTIES, p.sbt and ns.Art.Gold(p.sbt) or DASH)
   end
   local nem, times = ns.Profile.Nemesis(p.name)
-  line(L.PROF_NEMESIS, nem and L.PROF_NEMESIS_TEXT:format(ns.ClassColored(nem.name, nem.class), times) or DASH)
+  line(L.PROF_NEMESIS, nem and (isMe and L.PROF_NEMESIS_ME or L.PROF_NEMESIS_TEXT):format(ns.ClassColored(nem.name, nem.class), times) or DASH)
   line(L.PROF_WANTED, nameOr(isMe and ns.Profile.Wanted() or p.wanted))
   if isMe then
     local zone = GetRealZoneText and GetRealZoneText()
@@ -262,8 +262,9 @@ function UI.RenderProfile()
   action:Show()
   action:Enable()
   if v.isMe then
+    -- only there when you have a most wanted to clear (you set one on an enemy's profile)
     UI.SetButtonText(action, L.BTN_WANTED_CLEAR)
-    action:SetEnabled(ns.Profile.Wanted() ~= nil)
+    action:SetShown(ns.Profile.Wanted() ~= nil)
   elseif v.kind == "enemy" then
     local isWanted = ns.Profile.Wanted() == profileName
     UI.SetButtonText(action, isWanted and L.BTN_WANTED_CLEAR or L.BTN_WANTED_SET)
@@ -272,6 +273,7 @@ function UI.RenderProfile()
     UI.SetButtonText(action, ns.Comm.IsPicked(tag) and L.BTN_PICK_OFF or L.BTN_PICK_ON)
     action:SetEnabled(tag ~= nil and not ns.viewSim and profileName ~= ns.me)
   end
+  c.row:Layout() -- (the action button may have come or gone)
 end
 
 function UI.ProfileAction()
@@ -454,7 +456,20 @@ function UI.BuildProfile(win)
     local fs = text("GameFontHighlightSmall")
     fs:SetPoint("TOPLEFT", 340, PROFILE_TOP - i * 19)
     fs:SetWidth(320)
+    fs:SetWordWrap(false)
     profile.recent[i] = fs
+    -- a line cut short ("...") shows in full on hover
+    local hover = CreateFrame("Frame", nil, profile)
+    hover:SetAllPoints(fs)
+    hover:EnableMouse(true)
+    hover:SetScript("OnEnter", function(self)
+      local full = fs:GetText()
+      if not full or full == "" or not (fs.IsTruncated and fs:IsTruncated()) then return end
+      GameTooltip:SetOwner(self, "ANCHOR_TOP")
+      GameTooltip:AddLine(full, 1, 1, 1, true)
+      GameTooltip:Show()
+    end)
+    hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
   end
   -- your own profile: your character, top of the right column (recent PvP moves below it).
   -- Drag to turn it. Without model frames in this client, the page is the same as a friend's.
@@ -463,12 +478,19 @@ function UI.BuildProfile(win)
     model:SetPoint("TOPLEFT", 340, MODEL_TOP)
     model:SetSize(320, MODEL_H)
     model:Hide()
+    -- head-and-shoulders framing (0 = whole body, 1 = face only); set again once the model
+    -- has loaded, since the client resets the camera when a unit's model finishes loading
+    local function frame(self)
+      pcall(self.SetPortraitZoom, self, 0.6)
+    end
     local function dress(self)
       pcall(self.SetUnit, self, "player")
       pcall(self.SetFacing, self, 0)
+      frame(self)
     end
     model.dress = dress
     model:SetScript("OnShow", dress) -- (the window reopened: a hidden model can lose its unit)
+    pcall(model.SetScript, model, "OnModelLoaded", frame)
     model:EnableMouse(true)
     model:SetScript("OnMouseDown", function(self, mouse)
       if mouse == "LeftButton" then self.dragX = GetCursorPosition() end

@@ -122,16 +122,6 @@ local HITLIST_COLS = {
   { L.COL_LAST, 145, lastText, byLast },
 }
 
-local ENEMY_COLS = {
-  { L.COL_NAME, 170, nameCol, byName },
-  { L.COL_LEVEL, 30, lvl, byLevel },
-  { L.COL_GUILD, 110, guild, byGuild },
-  { L.COL_KILLS_ON_US, 75, function(e) return C(e.k) end, function(e) return C(e.k) end },
-  { L.COL_DEATHS_TO_US, 70, function(e) return C(e.d) end, function(e) return C(e.d) end },
-  { L.COL_ASSISTS, 55, function(e) return C(e.a) end, function(e) return C(e.a) end },
-  { L.COL_LAST, 150, lastText, byLast },
-}
-
 -- a friend's kills and deaths: the same numbers as on the Leaderboard and their profile (their
 -- own report, or counted from their alerts while they don't report yet)
 local function friendKD(e)
@@ -280,8 +270,6 @@ local TABS = {
       end
       return ns.Profile.Board(g.id)
     end },
-  { key = "enemies", label = L.TAB_ENEMIES, columns = ENEMY_COLS,
-    fetch = function() return sortedValues(R().players, function(p) return p.enemy and not isFriendRecord(p.name) end) end },
   { key = "friends", label = L.TAB_FRIENDS, columns = FRIEND_COLS, fetch = fetchFriends },
   { key = "feed", label = L.TAB_FEED,
     columns = {
@@ -310,7 +298,6 @@ local function colsOf(def)
 end
 
 local function friendsView() return currentTab == "friends" end
-local function playersView() return currentTab == "enemies" or currentTab == "friends" end
 
 -- sorting: per tab, by column; newest first by default
 local sortState = {}
@@ -703,7 +690,7 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(playersView() or currentTab == "board" or currentTab == "kills")
+  friendsHint:SetShown(friendsView() or currentTab == "board" or currentTab == "kills")
   if currentTab == "kills" then
     friendsHint:SetText(killsHint())
   elseif currentTab == "board" then
@@ -751,7 +738,8 @@ function UI.BackLabel() return history[#history] and placeLabel(history[#history
 function UI.KillsOf() return killsOf end
 
 function UI.SelectTab(key)
-  if key == "players" then key = "enemies" end -- 0.6 had one Players tab
+  -- older names: 0.6 had one Players tab; the Enemies tab is gone (enemies are on the Hitlist)
+  if key == "players" or key == "enemies" then key = "hitlist" end
   key = tabDef(key).key
   wipe(history) -- picking a tab yourself starts over
   local changed = key ~= homeTab or key ~= currentTab
@@ -765,8 +753,8 @@ function UI.SelectTab(key)
   end
 end
 
--- 0.6 name: the Enemies/Friends dropdown is two tabs now
-function UI.SetPlayerFilter(which) UI.SelectTab(which == "friends" and "friends" or "enemies") end
+-- 0.6 name: the Enemies/Friends dropdown (enemies are on the Hitlist now)
+function UI.SetPlayerFilter(which) UI.SelectTab(which == "friends" and "friends" or "hitlist") end
 
 function UI.OpenSettings() ns.Options.Open() end
 
@@ -1002,7 +990,7 @@ local function build()
       if mouse == "RightButton" then
         if e and not e.pending and currentTab == "hitlist" then
           UI.RemoveFromHitlist(e.name)
-        elseif e and not e.pending and playersView() then
+        elseif e and not e.pending and friendsView() then
           UI.RemovePlayer(e.name)
         elseif e and currentTab == "board" and currentGroup() then
           UI.RemoveFromGroup(e.key, e.name)
@@ -1107,11 +1095,12 @@ function UI.TogglePick(name)
 end
 
 
--- tab: "hitlist" | "board" | "enemies" | "friends" | "feed" | "profile" ("players" = enemies, as in 0.6)
+-- tab: "hitlist" | "board" | "friends" | "feed" | "profile" ("players" / "enemies" from older
+-- versions open the Hitlist)
 function UI.Show(tab)
   if not win then build() end
-  if tab == "players" then
-    tab = "enemies"
+  if tab == "players" or tab == "enemies" then
+    tab = "hitlist"
   elseif tab == "settings" then
     UI.OpenSettings()
     return
@@ -1184,7 +1173,7 @@ function UI.ShowPlayer(name)
   elseif r.players[name] and r.players[name].friend then
     UI.Show("friends")
   else
-    UI.Show("enemies")
+    UI.Show("hitlist")
   end
 end
 

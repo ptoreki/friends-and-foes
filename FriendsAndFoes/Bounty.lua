@@ -3,8 +3,8 @@ local L = ns.L
 
 -- Bounties (0.9): just for fun, in gold.
 -- Every enemy has an open bounty on their Wanted poster: what they've done to you and your
--- friends since someone last collected on them (per murder, per attack), plus a standing price
--- for every friend who has them as most wanted. Killing them collects it: everyone who got the
+-- friends since someone last collected on them (per murder, per attack), plus a price
+-- for every friend who has them as most wanted (paid out once per friend). Killing them collects it: everyone who got the
 -- kill (each one's client reports it) shares it equally, and the open bounty starts again.
 -- Each player's total is their own (account-wide), sent to friends with their profile like their
 -- K/D, and shown on the Leaderboard and profiles.
@@ -42,19 +42,33 @@ local function counts(name)
   return rec, murders, attacks
 end
 
+-- friends (and you) who want them and haven't had their most-wanted price paid out yet: each
+-- one's price is paid once, so killing a most wanted again and again doesn't pay it again
+local function unpaidWanters(rec, name)
+  local paid, n = rec and rec.bwPaid, 0
+  for _, who in ipairs(ns.Profile.WantedBy(name)) do
+    if not (paid and paid[who]) then n = n + 1 end
+  end
+  return n
+end
+
 -- an enemy's open bounty right now
 function Bounty.Open(name)
   if not name then return Bounty.MIN end
   local rec, murders, attacks = counts(name)
   local m = math.max(0, murders - ns.Count(rec and rec.bk0))
   local a = math.max(0, attacks - ns.Count(rec and rec.ba0))
-  return Bounty.Price(m, a, #ns.Profile.WantedBy(name))
+  return Bounty.Price(m, a, unpaidWanters(rec, name))
 end
 
--- someone collected: the open bounty starts again from here
+-- someone collected: the open bounty starts again from here, and the most-wanted prices in it
+-- are paid
 local function reset(name)
   local rec, murders, attacks = counts(name)
-  if rec then rec.bk0, rec.ba0 = murders, attacks end
+  if not rec then return end
+  rec.bk0, rec.ba0 = murders, attacks
+  rec.bwPaid = rec.bwPaid or {}
+  for _, who in ipairs(ns.Profile.WantedBy(name)) do rec.bwPaid[who] = true end
 end
 
 ---------------------------------------------------------------------------

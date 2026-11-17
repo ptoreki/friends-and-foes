@@ -10,7 +10,7 @@ epic loot and world PvP fights, and put a bounty on everyone who ganks your grou
   revenge, kill streaks) always pop up.
 - **World PvP alerts:** a friend is attacked, attacks someone, is killed, or gets a kill, with who
   and where.
-- **Hitlist:** anyone who kills you or a friend.
+- **Hitlist:** anyone who kills you or a friend, or attacks one of you first.
   - Hover them to see who of your friends they killed and how often.
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
@@ -56,7 +56,7 @@ on your faction. You don't need to group, share a server, or be in the same zone
 ## Commands
 | Command | What it does |
 |---|---|
-| `/fnf` | Open or close the window (Hitlist, Leaderboard, Enemies, Friends, Feed, Profile) |
+| `/fnf` | Open or close the window (Hitlist, Leaderboard, Friends, Feed, Profile) |
 | `/fnf board` | Open the Leaderboard |
 | `/fnf groups [new\|invite\|join\|decline\|leave\|remove ...]` | List your shared groups, or manage one (see `/fnf groups`) |
 | `/fnf profile [name]` | Open a profile (yours if no name) |

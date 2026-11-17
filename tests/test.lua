@@ -57,7 +57,7 @@ check(sf and sf.k == 1 and sf.d == 1 and sf.level == 43,
   "Simfriend K/D/level in sim store: " .. tostring(sf and sf.k) .. "/" .. tostring(sf and sf.d) .. "/" .. tostring(sf and sf.level))
 local sg = sim.hitlist["Simganker Shade"]
 check(sg and sg.attacks == 1 and sg.kills == 1 and sg.revenge == 1 and sg.guild == "Sim Gankers", "Simganker hitlist: attacks/kills/revenge/guild")
-check(sim.hitlist["Simhelper Shade"] == nil, "assist not added to hitlist (kills only)")
+check(sim.hitlist["Simhelper Shade"] and sim.hitlist["Simhelper Shade"].kills == 0, "an enemy who attacked first is on the hitlist, with no kills")
 check(sim.players["Simhelper Shade"] and sim.players["Simhelper Shade"].a == 1, "assist counted")
 check(sim.players["Simganker Shade"].d == 1 and sim.players["Simganker Shade"].k == 1, "enemy K and D")
 check(#sim.feed >= 6, "sim feed entries: " .. #sim.feed)
@@ -290,11 +290,11 @@ end
 check(maxLen <= 255 and hitMsgs > 0, "share payloads <=255 (max " .. maxLen .. ", msgs " .. hitMsgs .. ")")
 -- receive a share chunk from Buddy
 local before = count(real.hitlist)
-FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s1", entries = "Newguy Hunt:HUNTER:59:Their Guild:3:2:0:5;Enemy1 Foe:MAGE:60::99:7:1:1;Peaceful Pete:MAGE:20::4:0:0:2" }, "h1"), "WHISPER", 77)
-check(count(real.hitlist) == before + 1, "share adds new entry")
+FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s1", entries = "Newguy Hunt:HUNTER:59:Their Guild:3:2:0:5;Enemy1 Foe:MAGE:60::99:7:1:1;Peaceful Pete:MAGE:20::4:0:0:2;Empty Ed:MAGE:20::0:0:0:2" }, "h1"), "WHISPER", 77)
+check(count(real.hitlist) == before + 2, "share adds new entries")
 check(real.hitlist["Enemy1 Foe"].attacks == 99 and real.hitlist["Enemy1 Foe"].kills == 7, "share merges with max()")
 check(real.hitlist["Newguy Hunt"].sharedBy == "Buddy Pal", "sharedBy recorded")
-check(real.hitlist["Peaceful Pete"] == nil, "shared entry with no kills is not added")
+check(real.hitlist["Peaceful Pete"] ~= nil and real.hitlist["Empty Ed"] == nil, "a shared attacker is added; an entry with no kills or attacks is not")
 
 -- do-not-disturb: progress held in combat, pvp shown
 local function drainToasts()
@@ -343,8 +343,8 @@ ns.S().show.level = "off"
 local t6 = toasted(function() FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "r6"), "WHISPER", 77) end)
 check(not t6 and #CHAT == 0, "off silences even milestones")
 ns.S().show.level = "chat"
-check(real.hitlist["Zed Q"] == nil and real.players["Zed Q"].atk == 3 and #real.feed > 0,
-  "attacks alone: toasts/feed and enemy record, but not on the hitlist")
+check(real.hitlist["Zed Q"] and real.hitlist["Zed Q"].attacks == 3 and real.hitlist["Zed Q"].kills == 0
+  and real.players["Zed Q"].atk == 3 and #real.feed > 0, "attacked first: on the hitlist with their attacks, no kills")
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Zed Q:ROGUE:60:", conf = "c", assists = "Ass Ist:MAGE:60:" }, "zk1"), "WHISPER", 77)
 check(real.hitlist["Zed Q"] and real.hitlist["Zed Q"].kills == 1 and real.hitlist["Zed Q"].attacks == 3,
   "a kill adds them, carrying over earlier attacks")
@@ -518,9 +518,11 @@ do
   UnitIsUnit = function() return false end
   local HONOR = "You have been awarded 7 Honor."
   FriendsAndFoesCharDB.streak = 0
-  -- 1) dead enemy target
-  enemyUnits.target = { "Corpse", "Target", true }
+  -- 1) dead enemy target (seen alive during the fight, then dead)
+  enemyUnits.target = { "Corpse", "Target", false }
+  ns.PvP.ReadEnemy("target")
   ADVANCE(30)
+  enemyUnits.target[3] = true
   FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
   check(lastFeed():find("Corpse Target", 1, true) ~= nil and ns.caps.honor == "ok", "nameless honor: victim = dead enemy target: " .. lastFeed())
   -- the same corpse isn't credited twice
@@ -544,6 +546,12 @@ do
   check(lastFeed():find("got a kill", 1, true) ~= nil and FriendsAndFoesCharDB.streak == 4, "unknown victim: still a kill, streak counts: " .. lastFeed())
   RUN_TICKERS(4)
   check(#SENT > 0, "unknown-victim kill is still sent to friends")
+  -- 4) an old corpse you never saw alive isn't your kill
+  enemyUnits.target = { "Old", "Corpse", true }
+  ADVANCE(30)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Old Corpse", 1, true) == nil and lastFeed():find("got a kill", 1, true) ~= nil, "an old corpse isn't credited: " .. lastFeed())
+  enemyUnits.target = nil
   -- received from a friend
   ns.S().show.kill = "toast"
   local anonToast = toasted(function()
@@ -711,8 +719,8 @@ ns.UI.SortBy(1)
 check(sortedBy(function(e) return (e.name or ""):lower() end, false), "click Name: A-Z")
 ns.UI.Show("friends")
 ns.UI.SortBy(2)
-ns.UI.Show("enemies")
-check(sortedBy(function(e) return e.lastSeen or 0 end, true), "each view keeps its own sort")
+ns.UI.Show("hitlist")
+check(sortedBy(function(e) return (e.name or ""):lower() end, false), "each view keeps its own sort")
 ns.UI.Show("friends")
 ns.UI.Show("feed")
 check(ns.errors == 0, "no errors in window sort/paging (" .. tostring(ns.lastError) .. ")")
@@ -983,13 +991,13 @@ end
 
 -- counts are never shown as -0 or negative
 check(ns.Count(-0) == 0 and tostring(ns.Count(-0)) == "0" and ns.Count(-3) == 0 and ns.Count(nil) == 0 and ns.Count("5") == 5 and ns.Count(2.7) == 2, "ns.Count")
-real.players["Neg Zero"] = { name = "Neg Zero", enemy = true, k = -0.0, d = -1, a = 0, lastSeen = time() }
-ns.UI.Show("enemies")
+real.hitlist["Neg Zero"] = { name = "Neg Zero", kills = -0.0, attacks = -1, suspect = 0, revenge = 0, victims = {}, lastSeen = time() }
+ns.UI.Show("hitlist")
 ns.UI.SetSearch("neg zero")
 local nz = ns.UI.Rows()[1]
 check(nz and nz.name == "Neg Zero", "test player listed")
 ns.UI.SetSearch("")
-real.players["Neg Zero"] = nil
+real.hitlist["Neg Zero"] = nil
 -- picked sounds play instead of the default
 do
   local lastId
@@ -1505,17 +1513,15 @@ do
   local by = ns.Profile.WantedBy("Rogz Fang")
   check(#by == 2 and by[1] == "Buddy Pal" and by[2] == ns.me, "most wanted by you and Buddy")
 
-  -- Enemies and Friends are their own tabs; the 0.6 names still work
+  -- enemies are on the Hitlist (no Enemies tab); the old names open it
   ns.UI.Show("enemies")
-  local allEnemies = true
-  for _, row in ipairs(ns.UI.Rows()) do if not row.enemy then allEnemies = false end end
-  check(#ns.UI.Rows() > 0 and allEnemies, "Enemies tab lists enemies")
+  check(ns.UI.CurrentTab() == "hitlist", "the old Enemies tab name opens the Hitlist")
   ns.UI.Show("friends")
   local hasBuddy = false
   for _, row in ipairs(ns.UI.Rows()) do if row.name == "Buddy Pal" then hasBuddy = true end end
   check(hasBuddy, "Friends tab lists friends")
   ns.UI.Show("players")
-  check(#ns.UI.Rows() > 0 and ns.UI.Rows()[1].enemy, "old 'players' name opens Enemies")
+  check(ns.UI.CurrentTab() == "hitlist", "old 'players' name opens the Hitlist")
   ns.UI.SetPlayerFilter("friends")
   ns.UI.SetPlayerFilter("enemies")
 
@@ -2026,7 +2032,7 @@ do
 
   -- a friend's kills are counted per victim
   local buddy = rr.players["Buddy Pal"]
-  buddy.slain, buddy.slainRep, buddy.slainRepAt = nil, nil, nil
+  buddy.slain, buddy.slainRep, buddy.slainRepAt, buddy.kx = nil, nil, nil, nil
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vex Morrow", vclass = "MAGE", vlevel = 40, vguild = "", zone = "Duskwood" }, "kl1"), "WHISPER", 77)
   ADVANCE(20)
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vex Morrow", vclass = "MAGE", vlevel = 40, vguild = "", zone = "Hillsbrad Foothills" }, "kl2"), "WHISPER", 77)
@@ -2037,7 +2043,9 @@ do
   check(buddy.slain["Vex Morrow"].n == 2 and buddy.slain["Grim Shade"].n == 1, "kills counted per victim (repeats ignored)")
   check(buddy.slain["Vex Morrow"].zone == "Hillsbrad Foothills", "last kill's zone kept")
   local list = K.List("Buddy Pal")
-  check(#list == 2 and K.Total(list) == 3, "a nameless kill isn't listed: 2 players, 3 kills")
+  local unknownRow = list[#list]
+  check(#list == 3 and K.Total(list) == 4 and unknownRow.unknown and unknownRow.n == 1,
+    "a nameless kill is one 'name not readable' line: 2 players + 1, 4 kills")
   local vex
   for _, r in ipairs(list) do if r.name == "Vex Morrow" then vex = r end end
   check(vex and vex.class == "MAGE" and vex.level == 40, "victim's class and level come from what you know of them")
@@ -2049,7 +2057,7 @@ do
   list = K.List("Buddy Pal")
   local byName = {}
   for _, r in ipairs(list) do byName[r.name] = r end
-  check(byName["Vex Morrow"].n == 5 and byName["Old Foe"].n == 4 and byName["Grim Shade"].n == 1 and #list == 3,
+  check(byName["Vex Morrow"].n == 5 and byName["Old Foe"].n == 4 and byName["Grim Shade"].n == 1 and #list == 4,
     "their own report merged: higher counts win, kills you never saw are added")
   check(buddy.slainRepAt and buddy.slainRepTotal == 3, "when it came and how many in all are noted")
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KLA", { who = "Someone Else", total = 1, list = "Vex Morrow:99:" .. G.B36(T) }, "ka2"), "WHISPER", 77)
@@ -2097,7 +2105,7 @@ do
   ns.UI.ShowKills("Buddy Pal")
   RUN_TICKERS(10)
   check(#sentKinds("KLQ") == 1 and sentKinds("KLQ")[1].f.who == "Buddy Pal", "opening their kill list asks them for it")
-  check(ns.UI.CurrentTab() == "kills" and ns.UI.KillsOf() == "Buddy Pal" and #ns.UI.Rows() == 3, "the kill list view shows their victims")
+  check(ns.UI.CurrentTab() == "kills" and ns.UI.KillsOf() == "Buddy Pal" and #ns.UI.Rows() == 4, "the kill list view shows their victims")
   check(ns.UI.Rows()[1].name == "Vex Morrow", "most kills first")
   SENT = {}
   ns.UI.ShowKills("Buddy Pal")
@@ -2669,7 +2677,7 @@ do
     "a friend on your faction: Friends tab only, never Enemies or Hitlist (even if old data marked them)")
   check(listed("enemies", "Other Side") and listed("hitlist", "Other Side") and not listed("friends", "Other Side"),
     "a friend on the other faction: Enemies and Hitlist, not the Friends tab")
-  check(listed("enemies", "Plain Foe") and not listed("friends", "Plain Foe"), "an enemy is never on the Friends tab")
+  check(not listed("friends", "Plain Foe"), "an enemy is never on the Friends tab")
 
   rr.players["Our Side"], rr.players["Other Side"], rr.players["Plain Foe"] = nil, nil, nil
   rr.hitlist["Other Side"] = nil
@@ -3228,6 +3236,73 @@ do
   BNGetInfo = oldInfo
   ns.UI.SetBoardView("friends")
   check(ns.errors == errs, "no errors with the group window (" .. tostring(ns.lastError) .. ")")
+end
+
+
+-- 1.0 fixes: a friend's simulation, bounties, friends' text, your own profile
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  -- a friend's test alerts go to the simulation store without switching your window to it
+  ns.viewSim = false
+  CHAT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 33 }, "Sx1"), "WHISPER", 77)
+  drainToasts()
+  local told = false
+  for _, l in ipairs(CHAT) do if l:find("test alerts", 1, true) then told = true end end
+  check(not ns.viewSim and FriendsAndFoesDB.sim and FriendsAndFoesDB.sim.players["Buddy Pal"] ~= nil and told,
+    "a friend's simulation is kept apart, your window stays on real data, one chat line says so")
+  -- your real kills collect bounties even while you look at the simulation
+  ns.viewSim = true
+  local streak = FriendsAndFoesCharDB.streak
+  local total0 = ns.Bounty.Mine()
+  ns.Events.Emit("KILL", { victim = "Bount Ee", vclass = "ROGUE", vlevel = 30, vguild = "", zone = "Duskwood" })
+  ns.Bounty.SettleAll()
+  check(ns.Bounty.Mine() > total0, "a real kill collects its bounty while the simulation view is on")
+  FriendsAndFoesCharDB.streak = streak
+  ns.Data.ClearSim()
+
+  -- a most wanted's price is paid once, not on every kill
+  rr.players["Want Ed"] = { name = "Want Ed", enemy = true, k = 0, d = 0, a = 0 }
+  ns.Profile.SetWanted("Want Ed")
+  local first = ns.Bounty.Open("Want Ed")
+  ns.Bounty.OnKill("Buddy Pal", "Want Ed")
+  check(first >= ns.Bounty.WANTED and ns.Bounty.Open("Want Ed") == ns.Bounty.MIN,
+    "most-wanted price paid once: " .. first .. " then " .. ns.Bounty.Open("Want Ed"))
+
+  -- text from friends: plain text, class tokens and real item links only
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Clean Vic", vclass = "ROGUE|T", vlevel = 30,
+    vguild = "|TInterfaceIconsX:0|tGuild", zone = "Duskwood|TInterfaceIconsX:0|t" }, "cl1"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LOOT", { link = "|cffa335ee|Hurl:evil|h[Click me]|h|r", source = "loot" }, "cl2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "cl3", zone = "Duskwood", attackers = "Ev|Til:ROGUE:60:" }, "cl3"), "WHISPER", 77)
+  drainToasts()
+  local cv = rr.players["Clean Vic"]
+  check(cv and cv.class == nil and not (cv.guild or ""):find("|", 1, true) and not (cv.lastZone or ""):find("|", 1, true),
+    "a friend's zone, guild and class can't carry escape codes")
+  local loot
+  for _, e in ipairs(rr.feed) do if e.text:find("Click me", 1, true) then loot = e.text end end
+  check(loot and not loot:find("|Hurl", 1, true), "a link that isn't an item link is shown as plain text: " .. tostring(loot))
+  check(rr.players["Ev|Til"] == nil and rr.hitlist["Ev|Til"] == nil, "a name with escape codes is never recorded")
+  check(ns.SafeLink("|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r") ~= nil
+    and ns.SafeLink("|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r"):find("|Hitem:", 1, true),
+    "a real item link is kept")
+
+  -- your own profile: "You", "killed you", Clear most wanted only when there's one
+  rr.hitlist["Nem Esis"] = { name = "Nem Esis", kills = 2, attacks = 0, suspect = 0, revenge = 0, victims = {}, kv = { [ns.me] = 2 } }
+  local v = ns.UI.ProfileView(ns.me)
+  local nemText
+  for _, l in ipairs(v.lines) do if l[1] == ns.L.PROF_NEMESIS then nemText = tostring(l[2]) end end
+  check(v.sub:sub(1, #ns.L.PROF_ME) == ns.L.PROF_ME and nemText and nemText:find("killed you", 1, true),
+    "your profile says You, and your nemesis 'killed you': " .. tostring(nemText))
+  rr.hitlist["Nem Esis"] = nil
+  ns.UI.Show("profile")
+  local action = ns.UI.Frames().profile.controls.action
+  check(action:IsShown(), "Clear most wanted is there while you have one")
+  ns.Profile.SetWanted(nil)
+  ns.UI.Refresh()
+  check(not action:IsShown(), "no most wanted: no Clear button")
+  rr.players["Want Ed"] = nil
+  check(ns.errors == errs, "no errors in the 1.0 fixes (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

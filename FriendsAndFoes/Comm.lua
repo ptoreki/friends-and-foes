@@ -180,7 +180,8 @@ function Comm.Decode(text)
   if proto ~= ns.PROTOCOL then return nil, proto end
   local schema = SCHEMA[p[2]]
   if not schema or not p[3] or p[3] == "" then return nil end
-  local msg = { kind = p[2], id = p[3], name = ns.CleanName(p[4]), class = p[5], level = tonumber(p[6]), version = p[7], f = {} }
+  local msg = { kind = p[2], id = p[3], name = ns.CleanName(p[4]), class = p[5] and p[5]:match("^%u+$"), level = tonumber(p[6]),
+    version = p[7] and p[7]:match("^[%d%.]+$"), f = {} }
   for i, field in ipairs(schema) do msg.f[field] = p[HEADER + i] or "" end
   return msg
 end
@@ -717,7 +718,9 @@ end
 local HEARD_MAX = 300        -- other friends' events kept to pass on
 local RELAY_NAMES_MAX = 40   -- friends named in one ask
 local SEP = "^"              -- joins an event's own fields inside RLY
-local RELAY_ANSWER_MAX = 100 -- events passed on per ask
+-- events passed on per ask: every online friend who heard them answers, so the asker gets
+-- copies from each; kept low so a login among several friends stays light
+local RELAY_ANSWER_MAX = 30
 
 -- may friends pass on your events? (sent with each event, as "rl")
 function Comm.RelayAllowed()
@@ -863,7 +866,7 @@ function Comm.OnRelay(relayer, f)
   end
   fields.ago = tostring(ago)
   ns.Debug("RELAY-GOT", relayer, origin, kind, oid)
-  ns.Events.Apply({ kind = kind, id = oid, name = origin, class = (f.oclass ~= "" and f.oclass) or nil,
+  ns.Events.Apply({ kind = kind, id = oid, name = origin, class = f.oclass and f.oclass:match("^%u+$") or nil,
     level = tonumber(f.olevel), f = fields, from = origin, ago = ago }, false)
 end
 
