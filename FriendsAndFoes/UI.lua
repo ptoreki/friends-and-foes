@@ -33,6 +33,12 @@ local onlineNow = {} -- friend record name -> true while they are in the roster 
 ---------------------------------------------------------------------------
 -- cell helpers
 ---------------------------------------------------------------------------
+-- a friend (or you) is never shown as an enemy, even if old data marked them as one
+local function isFriendRecord(name) -- on your side (a friend on the other faction is not)
+  -- (exact names: an enemy known by a first name a friend also has stays an enemy)
+  return ns.Data.OnOurSideName(name)
+end
+
 local function sortedValues(tbl, filter)
   local out = {}
   for _, v in pairs(tbl) do
@@ -64,6 +70,15 @@ local function lvl(e)
   return tostring(n)
 end
 local C = ns.Count
+
+-- a number as shown: digits only - never a sign or a symbol in front, and zero is "0" (not "-0")
+local function num(v)
+  v = tonumber(v)
+  if not v or v ~= v or v <= 0 then return "0" end
+  if v == math.floor(v) then return string.format("%d", v) end
+  return tostring(v)
+end
+UI.Num = num -- (for tests)
 local function guild(e) return e.guild and ("<" .. e.guild .. ">") or "" end
 
 -- small class icon, inline (|T path:h:w:x:y:texW:texH:l:r:t:b|t)
@@ -113,16 +128,15 @@ local ENEMY_COLS = {
 }
 
 -- a friend's kills and deaths: the same numbers as on the Leaderboard and their profile (their
--- own report; ~ = counted from their alerts because they don't report yet)
+-- own report, or counted from their alerts while they don't report yet)
 local function friendKD(e)
-  if e.sk then return e.sk, e.sd or 0, false end
-  return C(e.k), C(e.d), true
+  if e.sk then return e.sk, e.sd or 0 end
+  return C(e.k), C(e.d)
 end
 local function kdCell(i)
   return function(e)
     if e.pending then return "" end
-    local v, est = select(i, friendKD(e)), select(3, friendKD(e))
-    return est and ("|cff888888~" .. v .. "|r") or tostring(v)
+    return num((select(i, friendKD(e))))
   end, function(e)
     if e.pending then return -1 end
     return (select(i, friendKD(e)))
@@ -188,15 +202,19 @@ local function fetchFriends()
   return list
 end
 
--- Leaderboard: ~ marks numbers you counted from a friend's alerts (they don't report their own yet)
--- (group boards: "?" for a member whose numbers haven't reached you yet, "-" for an invite)
+-- Leaderboard cells: just the number. Group boards: empty for an invite, or a member whose
+-- numbers haven't reached you yet.
 local function est(r, v)
-  if r.invited then return "|cff888888-|r" end
-  if r.unknown then return "|cff888888?|r" end
-  if r.estimated then return "|cff888888~" .. tostring(v) .. "|r" end
-  return tostring(v)
+  if r.invited or r.unknown then return "" end
+  return type(v) == "string" and v or num(v)
 end
-local function kdText(k, d, kd) return d > 0 and string.format("%.2f", kd) or tostring(k) end
+-- K/D: kills per death with two decimals; no deaths = the kills. Never "-0.00".
+local function kdText(k, d, kd)
+  if (tonumber(d) or 0) <= 0 then return num(k) end
+  kd = tonumber(kd) or 0
+  if kd <= 0 then return "0.00" end
+  return string.format("%.2f", kd)
+end
 
 local GREEN = "|cff33ff33"
 local GREY = "|cff888888"
@@ -239,7 +257,7 @@ local BOARD_COLS = {
 
 local TABS = {
   { key = "hitlist", label = L.TAB_HITLIST, columns = HITLIST_COLS,
-    fetch = function() return sortedValues(R().hitlist) end },
+    fetch = function() return sortedValues(R().hitlist, function(h) return not isFriendRecord(h.name) end) end },
   { key = "board", label = L.TAB_BOARD, columns = BOARD_COLS, defaultSort = { col = 3, desc = true },
     fetch = function()
       local g = boardView ~= "friends" and ns.Groups.Get(boardView)
@@ -250,7 +268,7 @@ local TABS = {
       return ns.Profile.Board(g.id)
     end },
   { key = "enemies", label = L.TAB_ENEMIES, columns = ENEMY_COLS,
-    fetch = function() return sortedValues(R().players, function(p) return p.enemy end) end },
+    fetch = function() return sortedValues(R().players, function(p) return p.enemy and not isFriendRecord(p.name) end) end },
   { key = "friends", label = L.TAB_FRIENDS, columns = FRIEND_COLS, fetch = fetchFriends },
   { key = "feed", label = L.TAB_FEED,
     columns = {
@@ -432,6 +450,8 @@ end
 -- profile page
 ---------------------------------------------------------------------------
 local PROFILE_LINES, RECENT_LINES = 9, 10
+-- your own profile: your character above recent PvP, which then has room for fewer lines
+local MODEL_TOP, MODEL_H, RECENT_LINES_ME = -40, 190, 5
 local PROFILE_TOP = -50 -- where the facts and recent PvP start, below the name lines
 local DASH = "|cff888888-|r"
 
@@ -488,10 +508,9 @@ function UI.ProfileView(name)
   local k = row and row.k or (p.sk or C(p.k))
   local d = row and row.d or (p.sd or C(p.d))
   local estimated = row and row.estimated or (not isMe and p.sk == nil)
-  local function mark(v) return estimated and ("|cff888888~|r" .. v) or tostring(v) end
-  line(L.PROF_KILLS, mark(k))
-  line(L.PROF_DEATHS, mark(d))
-  line(L.PROF_KD, mark(kdText(k, d, ns.Profile.KD(k, d))))
+  line(L.PROF_KILLS, num(k))
+  line(L.PROF_DEATHS, num(d))
+  line(L.PROF_KD, kdText(k, d, ns.Profile.KD(k, d)))
   line(L.PROF_RANK, row and L.PROF_RANK_OF:format(row.rank, #board) or DASH)
   local nem, times = ns.Profile.Nemesis(p.name)
   line(L.PROF_NEMESIS, nem and L.PROF_NEMESIS_TEXT:format(ns.ClassColored(nem.name, nem.class), times) or DASH)
@@ -540,10 +559,30 @@ local function renderProfile()
     profile.labels[i]:SetText(l and l[1] or "")
     profile.values[i]:SetText(l and tostring(l[2]) or "")
   end
+  -- your character, on your own profile
+  local model = profile.model
+  local withModel = model ~= nil and v ~= nil and v.isMe
+  if model then
+    if withModel and not model:IsShown() then
+      model:Show()
+      model.dress(model)
+    elseif not withModel then
+      model:Hide()
+    end
+  end
+  local recentTop = withModel and (MODEL_TOP - MODEL_H - 8) or PROFILE_TOP
+  local recentLines = withModel and RECENT_LINES_ME or RECENT_LINES
+  profile.recentHeader:ClearAllPoints()
+  profile.recentHeader:SetPoint("TOPLEFT", 340, recentTop)
+  for i = 1, RECENT_LINES do
+    profile.recent[i]:ClearAllPoints()
+    profile.recent[i]:SetPoint("TOPLEFT", 340, recentTop - i * 19)
+  end
+
   profile.recentHeader:SetText(v and L.PROF_RECENT or "")
   local recent = v and v.recent or {}
   for i = 1, RECENT_LINES do
-    local e = recent[i]
+    local e = i <= recentLines and recent[i]
     profile.recent[i]:SetText(e and ("|cff888888" .. ns.Ago(e.t) .. "|r  " .. e.text) or "")
   end
   if v and #recent == 0 then profile.recent[1]:SetText("|cff888888" .. L.PROF_RECENT_NONE .. "|r") end
@@ -1372,6 +1411,40 @@ local function build()
     fs:SetWidth(320)
     profile.recent[i] = fs
   end
+  -- your own profile: your character, top of the right column (recent PvP moves below it).
+  -- Drag to turn it. Without model frames in this client, the page is the same as a friend's.
+  local okModel, model = pcall(CreateFrame, "PlayerModel", nil, profile)
+  if okModel and model then
+    model:SetPoint("TOPLEFT", 340, MODEL_TOP)
+    model:SetSize(320, MODEL_H)
+    model:Hide()
+    local function dress(self)
+      pcall(self.SetUnit, self, "player")
+      pcall(self.SetFacing, self, 0)
+    end
+    model.dress = dress
+    model:SetScript("OnShow", dress) -- (the window reopened: a hidden model can lose its unit)
+    model:EnableMouse(true)
+    model:SetScript("OnMouseDown", function(self, mouse)
+      if mouse == "LeftButton" then self.dragX = GetCursorPosition() end
+    end)
+    model:SetScript("OnMouseUp", function(self) self.dragX = nil end)
+    model:SetScript("OnHide", function(self) self.dragX = nil end)
+    model:SetScript("OnUpdate", function(self)
+      if not self.dragX then return end
+      local x = GetCursorPosition()
+      local ok, facing = pcall(self.GetFacing, self)
+      if ok and type(facing) == "number" then pcall(self.SetFacing, self, facing + (x - self.dragX) / 80) end
+      self.dragX = x
+    end)
+    profile.model = model
+    -- new gear or a new look (shapeshift, mount): show it
+    local function changed()
+      if model:IsVisible() then dress(model) end
+    end
+    ns.On("PLAYER_EQUIPMENT_CHANGED", changed)
+    ns.OnUnit("UNIT_MODEL_CHANGED", "player", changed)
+  end
   profile.footnote = text("GameFontDisableSmall")
   profile.footnote:SetPoint("TOPLEFT", 0, PROFILE_TOP - PROFILE_LINES * 19 - 6)
   profile.footnote:SetWidth(320)
@@ -1513,6 +1586,7 @@ end
 
 -- the profile tab's player (for tests)
 function UI.ProfileName() return profileName end
+function UI.ProfileModel() return profile and profile.model end -- (for tests)
 
 -- clicking a toast: that player's profile
 function UI.ShowPlayer(name)

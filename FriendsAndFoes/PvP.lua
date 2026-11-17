@@ -315,18 +315,26 @@ local function readRecap()
   if not events or issecret(events) then return nil end
 
   local result = { players = {} }
-  local best, bestT
+  local best, bestT, anyNamed
   for _, e in ipairs(events) do
     local t = e.timestamp
-    if t and not issecret(t) and (not bestT or t > bestT) then best, bestT = e, t end
     local name = ns.CleanName(e.sourceName)
-    if name and recapSourceIsPlayer(e) == true then
+    anyNamed = anyNamed or name ~= nil
+    -- the killer is the newest event from someone NOT on your side (a friend's heal or shared
+    -- effect in the recap isn't who killed you)
+    local friendly = name and PvP.IsFriendly(name)
+    if not friendly and t and not issecret(t) and (not bestT or t > bestT) then best, bestT = e, t end
+    if name and not friendly and recapSourceIsPlayer(e) == true then
       result.players[name] = true
     end
   end
-  best = best or events[1]
+  if not best and not anyNamed then best = events[1] end
   local name = best and ns.CleanName(best.sourceName)
   if not name then
+    if anyNamed then -- only friends in it: names are readable, just no enemy killer
+      ns.SetCap("deathRecap", "ok")
+      return result
+    end
     ns.SetCap("deathRecap", "secret")
     return result
   end
@@ -350,6 +358,25 @@ local function findByName(tbl, name)
   return nil
 end
 PvP.FindByName = findByName
+
+-- someone on your side: you, a friend (Battle.net, or one the addon knows), or in your party/raid.
+-- The death recap lists every player in it without saying which side they're on (a friend's
+-- heal or shared effect can show up), so these are never named as killer or helper.
+function PvP.IsFriendly(name)
+  if not name then return false end
+  if name == ns.me then return true end
+  if ns.Comm.everyone[name] then return true end
+  -- a friend on your faction (by their record, or a Battle.net friend seen on your faction even
+  -- without the addon); exact names; a friend on the other faction can fight you
+  if ns.Data.OnOurSideName(name) then return true end
+  for _, check in ipairs({ UnitInParty, UnitInRaid }) do
+    if check then
+      local ok, v = pcall(check, name)
+      if ok and not issecret(v) and v then return true end
+    end
+  end
+  return false
+end
 
 local function resolveDeath(deathTime)
   local active = enc and (deathTime - enc.last) <= ENCOUNTER_GAP
@@ -375,11 +402,12 @@ local function resolveDeath(deathTime)
     end
     -- isPlayer == nil and not a known attacker: NPC names ("Twilight Acolyte") look just like
     -- Forever player names ("Kragg Bear"), so don't guess; fall through to the last attacker.
+    if killer and PvP.IsFriendly(killer.name) then killer, conf = nil, nil end -- someone on your side
   end
   if not killer and active then
     local bestName, bestT
     for name, t in pairs(enc.lastHit) do
-      if name ~= "?" and (not bestT or t > bestT) then bestName, bestT = name, t end
+      if name ~= "?" and not PvP.IsFriendly(name) and (not bestT or t > bestT) then bestName, bestT = name, t end
     end
     if bestName then killer, conf = enc.attackers[bestName], "s" end
   end
@@ -387,7 +415,8 @@ local function resolveDeath(deathTime)
 
   local assists, added = {}, {}
   local function addAssist(info)
-    if info.name and (not killer or info.name ~= killer.name) and not added[info.name] then
+    if info.name and not PvP.IsFriendly(info.name)
+      and (not killer or info.name ~= killer.name) and not added[info.name] then
       added[info.name] = true
       assists[#assists + 1] = info
     end

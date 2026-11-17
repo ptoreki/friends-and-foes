@@ -71,7 +71,7 @@ RUN_TICKERS(8) -- drain the profile greeting sent at login
 SENT = {}
 ns.Sim.Run("kill", true)
 RUN_TICKERS(2)
-check(#SENT == 2, "self sim sent on both routes: " .. #SENT)
+check(#SENT == 1 and SENT[1].route == "bn", "self sim sent once, over Battle.net only: " .. #SENT)
 check(SENT[1] and SENT[1].payload:find("^3\tKILL\tS") ~= nil, "payload protocol 3 + sim id")
 
 -- clear sim
@@ -96,9 +96,18 @@ check(ns.Comm.roster["Buddy Pal"] ~= nil and ns.Comm.roster.Buddy == nil, "roste
 SENT = {}
 ns.Comm.SendPayload("ping", "high")
 RUN_TICKERS(2)
-local wt
+local wt, routes = nil, {}
+for _, s in ipairs(SENT) do routes[s.route] = (routes[s.route] or 0) + 1 end
+check(routes.bn == 1 and not routes.whisper, "sent over Battle.net only, no whisper")
+-- only if Battle.net messaging isn't there at all: a whisper, addressed "First Last"
+local realBN = BNSendGameData
+BNSendGameData = nil
+SENT = {}
+ns.Comm.SendPayload("ping", "high")
+RUN_TICKERS(2)
 for _, s in ipairs(SENT) do if s.route == "whisper" then wt = s.target end end
-check(wt == "Buddy Pal", "whispers address First Last: " .. tostring(wt))
+BNSendGameData = realBN
+check(wt == "Buddy Pal", "fallback whisper (no Battle.net messaging) addresses First Last: " .. tostring(wt))
 ns.Comm.RebuildRoster()
 check(ns.Comm.roster["Buddy Pal"] ~= nil, "learned surname survives roster rebuild")
 
@@ -230,16 +239,16 @@ SENT = {}
 FIRE("CHAT_MSG_LOOT", "You receive loot: |cffa335ee|Hitem:12584::::::::60:::::::|h[Sword]|h|r.")
 RUN_TICKERS(2)
 check(real.players["Testme Tester"] and real.players["Testme Tester"].lastText and real.players["Testme Tester"].lastText:find("looted") ~= nil, "own loot recorded")
-check(#SENT == 2 and SENT[1].payload:find("^3\tLOOT\t%w+\tTestme Tester\t") ~= nil, "own loot broadcast")
+check(#SENT == 1 and SENT[1].route == "bn" and SENT[1].payload:find("^3\tLOOT\t%w+\tTestme Tester\t") ~= nil, "own loot broadcast")
 
 -- throttle: 30 events -> at most bucket size sent per route at first
 SENT = {}
 for i = 1, 30 do ns.Comm.SendPayload("x" .. i, "normal") end
 RUN_TICKERS(1)
 local first = #SENT
-check(first <= 16 and first >= 2, "throttle limits initial burst: " .. first)
+check(first <= 8 and first >= 2, "throttle limits initial burst: " .. first)
 RUN_TICKERS(200)
-check(#SENT == 60, "all 60 sends eventually delivered: " .. #SENT)
+check(#SENT == 30, "all 30 sends eventually delivered: " .. #SENT)
 
 -- priority: high goes before bulk
 SENT = {}
@@ -1286,7 +1295,7 @@ SENT = {}
 ns.Comm.SendPayload("ping", "high")
 check(ns.Comm.PumpRunning(), "send pump starts when something is queued")
 RUN_TICKERS(2)
-check(#SENT == 2 and not ns.Comm.PumpRunning(), "queued message sent, pump idle again: " .. #SENT)
+check(#SENT == 1 and not ns.Comm.PumpRunning(), "queued message sent, pump idle again: " .. #SENT)
 -- performance: debug log trimmed in batches, capped at 2000
 local dlog = FriendsAndFoesDB.debugLog
 for i = 1, 2300 do ns.Debug("FILL", i) end
@@ -1422,7 +1431,7 @@ do
   RUN_TICKERS(8)
   local pro = {}
   for _, s in ipairs(SENT) do if s.payload:find("\tPRO\t", 1, true) then pro[#pro + 1] = s.payload end end
-  check(#pro == 2, "one profile update (both routes): " .. #pro)
+  check(#pro == 1, "one profile update (Battle.net only): " .. #pro)
   local decoded = pro[1] and ns.Comm.Decode(pro[1])
   check(decoded and decoded.f.k == "12" and decoded.f.d == "4" and decoded.f.wanted == "Rogz Fang" and decoded.f.motto == nil,
     "profile message carries K/D and most wanted (no free text)")
@@ -1441,7 +1450,7 @@ do
   RUN_TICKERS(8)
   local greet = 0
   for _, s in ipairs(SENT) do if s.payload:find("\tPRO\t", 1, true) then greet = greet + 1 end end
-  check(greet == 2, "friend back online: greeted once on both routes: " .. greet)
+  check(greet == 1, "friend back online: greeted once: " .. greet)
 
   -- receiving a friend's profile
   local buddy = rr.players["Buddy Pal"]
@@ -1520,7 +1529,7 @@ do
   buddy.version = "0.6.3"
   check(ns.UI.ProfileView("Buddy Pal") and lineOf(ns.UI.ProfileView("Buddy Pal"), "Addon"):find("older", 1, true) ~= nil, "outdated addon hinted")
   v = ns.UI.ProfileView("Quiet Friend")
-  check(v.estimated and lineOf(v, "Kills") == "~12", "estimated numbers marked ~")
+  check(v.estimated and lineOf(v, "Kills") == "12", "counted numbers are shown as plain numbers (the footnote explains)")
   v = ns.UI.ProfileView(ns.me)
   check(v and v.isMe and lineOf(v, "Kills") == "12", "your own profile")
   v = ns.UI.ProfileView("Rogz Fang")
@@ -2280,7 +2289,7 @@ do
   local rep = { name = "Report Er", friend = true, k = 4, d = 0, sk = 4, sd = 2, lastSeen = time() }
   local est = { name = "Esti Mate", friend = true, k = 3, d = 1, lastSeen = time() }
   check(cols[4][1] == ns.L.COL_KILLS and cell(4, rep) == "4" and cell(5, rep) == "2", "Friends tab: their own numbers, same as the Leaderboard")
-  check(cell(4, est) == "~3" and cell(5, est) == "~1", "Friends tab: counted numbers marked ~")
+  check(cell(4, est) == "3" and cell(5, est) == "1", "Friends tab: counted numbers shown as plain numbers")
   check(cols[5][4](rep) == 2 and cols[5][4]({ pending = true }) == -1, "Friends tab: sorts by the numbers shown")
 
   -- version: older than yours is flagged too
@@ -2442,6 +2451,290 @@ do
   check(not texts:lower():find("takedown", 1, true) and not texts:lower():find("pick", 1, true), "no 'takedowns' or 'pick' left in those texts")
 
   check(ns.errors == errs, "no errors in click / wording changes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: numbers are just numbers - never a symbol in front, never "-0"
+do
+  local errs = ns.errors
+  local N = ns.UI.Num
+  check(N(0) == "0" and N(-0.0) == "0" and N(-3) == "0" and N(nil) == "0" and N(0 / 0) == "0", "zero, -0, negatives and junk all show as 0")
+  check(N(12) == "12" and N(12.0) == "12", "whole numbers without decimals")
+
+  -- every cell of every list: no "~", "-", "?" or "+" in front of a number, and no "-0"
+  -- (with a friend on an old version in the lists: their numbers used to get a "~")
+  ns.Data.RealRealm().players["Old Version"] = { name = "Old Version", friend = true, k = 2, d = 1, lastSeen = time(), version = "0.5.4" }
+  local bad = {}
+  for _, key in ipairs({ "hitlist", "board", "enemies", "friends", "feed" }) do
+    ns.UI.Show(key)
+    for _, row in ipairs(ns.UI.Rows()) do
+      for c, col in ipairs(ns.UI.TabColumns(key)) do
+        if key ~= "feed" or c == 1 then
+          local ok, val = pcall(col[3], row)
+          local t = ok and ns.Plain(tostring(val)) or ""
+          if t:match("^%s*[~%-%?%+]%s*%d") or t:find("%-0[%.%s]") or t:match("%-0$") then bad[#bad + 1] = key .. ":" .. t end
+        end
+      end
+    end
+  end
+  check(#bad == 0, "no symbol in front of any number on any tab: " .. table.concat(bad, ", "))
+  ns.UI.Show("board")
+  local seen = false
+  for _, r in ipairs(ns.UI.Rows()) do if r.name == "Old Version" and r.estimated then seen = true end end
+  check(seen, "(the sweep did include a friend with counted numbers)")
+  ns.Data.RealRealm().players["Old Version"] = nil
+
+  -- K/D with no kills and some deaths: 0.00, not -0.00
+  local rr = ns.Data.RealRealm()
+  rr.players["Zero Kills"] = { name = "Zero Kills", friend = true, k = 0, d = 0, sk = 0, sd = 3, lastSeen = time() }
+  ns.UI.Show("board")
+  local row
+  for _, r in ipairs(ns.UI.Rows()) do if r.name == "Zero Kills" then row = r end end
+  local kdCol = ns.UI.TabColumns("board")[5]
+  check(row and ns.Plain(kdCol[3](row)) == "0.00", "0 kills, 3 deaths: K/D 0.00")
+  row.kd = -0.0
+  check(ns.Plain(kdCol[3](row)) == "0.00", "a negative-zero K/D still shows 0.00")
+  rr.players["Zero Kills"] = nil
+
+  -- group board: an invite or a member without numbers shows empty cells, no placeholder symbol
+  local killsCol = ns.UI.TabColumns("board")[3]
+  check(ns.Plain(killsCol[3]({ invited = true, k = 0, d = 0 })) == "" and ns.Plain(killsCol[3]({ unknown = true, k = 0, d = 0 })) == "",
+    "invited / not-yet-known members: empty cells")
+
+  check(ns.errors == errs, "no errors in number display (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: a friend fighting next to you is never named as your killer or a helper
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  rr.players["Side Kick"] = { name = "Side Kick", friend = true, k = 5, d = 0, a = 0, lastSeen = time() }
+  local P = ns.PvP
+
+  -- who counts as on your side
+  check(P.IsFriendly(ns.me) and P.IsFriendly("Side Kick") and P.IsFriendly("Buddy Pal"), "you and your friends are on your side")
+  check(not P.IsFriendly("Rogz Fang") and not P.IsFriendly("Total Stranger"), "enemies and strangers aren't")
+  local oldParty = UnitInParty
+  UnitInParty = function(n) return n == "Party Member" end
+  check(P.IsFriendly("Party Member"), "someone in your party is on your side")
+  UnitInParty = oldParty
+
+  -- a death message naming a friend as helper (from an older client): the friend is dropped
+  local nFeed = #rr.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Real Foe:ROGUE:40:",
+    conf = "c", assists = "Side Kick:PRIEST:40:;Other Foe:MAGE:40:" }, "sd1"), "WHISPER", 77)
+  drainToasts()
+  local e = rr.feed[#rr.feed]
+  check(#rr.feed == nFeed + 1 and e.foes[1] == "Real Foe" and e.foes[2] == "Other Foe" and #e.foes == 2,
+    "the friend isn't listed with the enemies")
+  check(not ns.Plain(e.text):find("Side Kick", 1, true), "and isn't in the Feed line")
+  local sk = rr.players["Side Kick"]
+  check(not sk.enemy and sk.a == 0 and sk.k == 5, "the friend isn't marked as an enemy, their numbers untouched")
+  check(rr.players["Other Foe"] and rr.players["Other Foe"].a == 1, "the real enemy helper still counts")
+
+  -- a death message naming a friend (or the dying friend) as the killer: no killer, nobody on the hitlist
+  nFeed = #rr.feed
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Side Kick:PRIEST:40:", conf = "c", assists = "" }, "sd2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Buddy Pal:PRIEST:40:", conf = "c", assists = "" }, "sd3"), "WHISPER", 77)
+  drainToasts()
+  check(rr.hitlist["Side Kick"] == nil and rr.hitlist["Buddy Pal"] == nil and sk.k == 5, "a friend named as killer isn't put on the hitlist")
+  check(#rr.feed == nFeed + 2, "the deaths are still in the Feed")
+
+  -- old data: a friend wrongly marked as an enemy doesn't show on the Enemies tab or the Hitlist
+  sk.enemy = true
+  rr.hitlist["Side Kick"] = { name = "Side Kick", kills = 1, attacks = 0, suspect = 0, revenge = 0, victims = {} }
+  local function listed(tab)
+    ns.UI.Show(tab)
+    for _, r in ipairs(ns.UI.Rows()) do if r.name == "Side Kick" then return true end end
+    return false
+  end
+  check(not listed("enemies") and not listed("hitlist"), "a friend is never listed as an enemy")
+  check(listed("friends"), "they're still on the Friends tab")
+
+  rr.players["Side Kick"], rr.hitlist["Side Kick"] = nil, nil
+  check(ns.errors == errs, "no errors in friend/foe sides (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: your own death recap with a friend in it
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  rr.players["Side Kick"] = { name = "Side Kick", friend = true, k = 0, d = 0, a = 0, lastSeen = time() }
+  local recapId = 1
+  local events
+  C_DeathRecap = {
+    HasRecapEvents = function(id) return id == recapId end,
+    GetRecapEvents = function() return events end,
+  }
+  local function die()
+    local n = #rr.feed
+    FIRE("PLAYER_DEAD")
+    RUN_TIMERS()
+    drainToasts()
+    return #rr.feed > n and rr.feed[#rr.feed] or nil
+  end
+
+  -- the friend's event is the newest in the recap: the enemy is still the killer, the friend not a helper
+  events = {
+    { sourceName = "Real Killer", sourceGUID = "Player-1-0000AAAA", timestamp = 100 },
+    { sourceName = "Enemy Helper", sourceGUID = "Player-1-0000BBBB", timestamp = 99 },
+    { sourceName = "Side Kick", sourceGUID = "Player-1-0000CCCC", timestamp = 101 },
+  }
+  local e = die()
+  check(e and e.kind == "died" and e.foes[1] == "Real Killer", "killer: the newest enemy, not the friend's later event")
+  local named = {}
+  for _, f in ipairs(e and e.foes or {}) do named[f] = true end
+  check(named["Enemy Helper"] and not named["Side Kick"], "helpers: the enemy, never the friend")
+  check(not rr.players["Side Kick"].enemy and rr.hitlist["Side Kick"] == nil, "the friend isn't marked as an enemy anywhere")
+
+  -- only friends in the recap: no PvP death is invented
+  recapId = 2
+  events = { { sourceName = "Side Kick", sourceGUID = "Player-1-0000CCCC", timestamp = 200 } }
+  check(die() == nil, "a recap with only a friend in it isn't a PvP death")
+
+  C_DeathRecap = nil
+  rr.players["Side Kick"] = nil
+  check(ns.errors == errs, "no errors in your own death recap (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: friends and enemies never mix - except a friend playing the other faction
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local D = ns.Data
+  local ours = { name = "Our Side", friend = true, faction = ns.myFaction, k = 3, d = 1, a = 0, lastSeen = time() }
+  local other = { name = "Other Side", friend = true, faction = "Alliance", k = 0, d = 0, a = 0, lastSeen = time() }
+  local foe = { name = "Plain Foe", enemy = true, k = 1, d = 0, a = 0, lastSeen = time() }
+  rr.players["Our Side"], rr.players["Other Side"], rr.players["Plain Foe"] = ours, other, foe
+  check(ns.myFaction == "Horde", "(test setup: you're Horde)")
+
+  check(D.OnOurSide(ours) and not D.OnOurSide(other) and not D.OnOurSide(foe), "on your side: friends on your faction only")
+  check(ns.PvP.IsFriendly("Our Side") and not ns.PvP.IsFriendly("Other Side"), "a friend on the other faction can fight you")
+
+  -- a friend on your faction can't be made an enemy by any message
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "os1", zone = "Duskwood", attackers = "Our Side:ROGUE:40:" }, "os1"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Our Side:ROGUE:40:", conf = "c", assists = "" }, "os2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Our Side", vclass = "", vlevel = "", vguild = "", zone = "Duskwood" }, "os3"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Our Side", class = "", level = "", guild = "", zone = "Duskwood" }, "os4"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "os5", entries = "Our Side:ROGUE:40::0:3:0:1" }, "os5"), "WHISPER", 77)
+  drainToasts(); RUN_TIMERS()
+  local buddy = rr.players["Buddy Pal"]
+  check(not ours.enemy and ours.a == 0 and ours.k == 3 and ours.d == 1 and (ours.atk or 0) == 0,
+    "attacker, killer, victim, sighting, shared hitlist: a friend on your faction is never recorded as an enemy")
+  check(rr.hitlist["Our Side"] == nil, "and never put on the hitlist")
+  check(not (buddy.slain and buddy.slain["Our Side"]), "and never in a kill list as a victim")
+
+  -- a friend on the other faction CAN be an enemy
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Other Side:WARRIOR:40:", conf = "c", assists = "" }, "os6"), "WHISPER", 77)
+  drainToasts()
+  check(other.enemy and other.k == 1 and rr.hitlist["Other Side"] ~= nil, "a friend on the other faction who kills a friend: enemy and hitlist")
+  check(ns.Profile.KindOf("Other Side") == "enemy" and ns.Profile.KindOf("Our Side") == "friend", "profiles: the other-faction friend you fought opens as an enemy")
+
+  -- the lists
+  local function listed(tab, name)
+    ns.UI.Show(tab)
+    for _, r in ipairs(ns.UI.Rows()) do if r.name == name then return true end end
+    return false
+  end
+  ours.enemy = true -- (as if old data had marked them)
+  check(listed("friends", "Our Side") and not listed("enemies", "Our Side") and not listed("hitlist", "Our Side"),
+    "a friend on your faction: Friends tab only, never Enemies or Hitlist (even if old data marked them)")
+  check(listed("enemies", "Other Side") and listed("hitlist", "Other Side") and not listed("friends", "Other Side"),
+    "a friend on the other faction: Enemies and Hitlist, not the Friends tab")
+  check(listed("enemies", "Plain Foe") and not listed("friends", "Plain Foe"), "an enemy is never on the Friends tab")
+
+  rr.players["Our Side"], rr.players["Other Side"], rr.players["Plain Foe"] = nil, nil, nil
+  rr.hitlist["Other Side"] = nil
+  check(ns.errors == errs, "no errors in friend/enemy separation (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: a friend Battle.net reports with no character name and game version 0 (seen live:
+-- "BN-DROP other WoW version | nil | ... | 0" and "WHISPER-DROP not a (picked) friend")
+do
+  local errs = ns.errors
+  local o = { info = C_BattleNet.GetFriendGameAccountInfo, byId = C_BattleNet.GetGameAccountInfoByID, num = BNGetNumFriends,
+    acct = C_BattleNet.GetFriendAccountInfo }
+  WOW_PROJECT_ID = 18
+  local blank = { isOnline = true, clientProgram = "WoW", characterName = "", realmName = nil, realmID = 0,
+    wowProjectID = 0, factionName = nil, gameAccountID = 91 }
+  BNGetNumFriends = function() return 1, 1 end
+  C_BattleNet.GetFriendGameAccountInfo = function() return blank end
+  C_BattleNet.GetGameAccountInfoByID = function(id) if id == 91 then return blank end end
+  C_BattleNet.GetFriendAccountInfo = function() return { battleTag = "Blank#9191" } end
+  check(ns.Comm.SameWorld(blank), "game version 0 means 'not said', not 'a different game'")
+  ns.Comm.RebuildRoster()
+  check(ns.Comm.roster["Blank Name"] == nil, "(no name yet: not in the roster until we hear from them)")
+
+  -- their messages are accepted, under the name in the message
+  local rr = ns.Data.RealRealm()
+  local p = ns.Comm.Encode({ kind = "LVL", id = "bl1", name = "Blank Name", class = "MAGE", level = 20, f = { level = 20 } })
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", p, "WHISPER", 91)
+  check(rr.players["Blank Name"] and rr.players["Blank Name"].level == 20, "a friend with no name from Battle.net: their messages still arrive")
+  ns.Comm.RebuildRoster()
+  check(ns.Comm.roster["Blank Name"] ~= nil and ns.Comm.TagFor("Blank Name") == "Blank#9191",
+    "after their first message they're in the roster (you send to them too), BattleTag known")
+
+  -- a real other game version is still kept out
+  local other = { isOnline = true, clientProgram = "WoW", characterName = "Retail Guy", wowProjectID = 1, gameAccountID = 92 }
+  check(not ns.Comm.SameWorld(other), "a friend playing another WoW version is still left out")
+
+  BNGetNumFriends, C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetGameAccountInfoByID, C_BattleNet.GetFriendAccountInfo = o.num, o.info, o.byId, o.acct
+  WOW_PROJECT_ID = nil
+  rr.players["Blank Name"] = nil
+  ns.Comm.RebuildRoster()
+  check(ns.errors == errs, "no errors with a nameless Battle.net friend (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.7.3: a Battle.net friend without the addon (seen online on your faction) is on your side too
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local tags = FriendsAndFoesDB.friendTags
+  tags["Tag Friend"] = "Tagfriend#2523"
+  rr.players["Tag Friend"] = nil
+
+  check(ns.PvP.IsFriendly("Tag Friend"), "a Battle.net friend seen on your faction counts, even without the addon")
+
+  -- named as a helper in a death: dropped
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Real Foe:ROGUE:40:", conf = "c", assists = "Tag Friend:MAGE:40:" }, "tf1"), "WHISPER", 77)
+  drainToasts()
+  local e = rr.feed[#rr.feed]
+  check(e.foes[1] == "Real Foe" and #e.foes == 1, "not listed as a helper")
+  check(rr.players["Tag Friend"] == nil, "and no enemy record made for them")
+
+  -- already marked as an enemy by an older version: not on the Enemies tab, profile opens as a friend
+  rr.players["Tag Friend"] = { name = "Tag Friend", enemy = true, k = 0, d = 0, a = 1, lastSeen = time() }
+  ns.UI.Show("enemies")
+  local listed = false
+  for _, r in ipairs(ns.UI.Rows()) do if r.name == "Tag Friend" then listed = true end end
+  check(not listed, "a Battle.net friend wrongly marked as an enemy isn't on the Enemies tab")
+  check(ns.Profile.KindOf("Tag Friend") == "friend", "their profile opens as a friend")
+
+  -- the same friend later seen playing the other faction: can be an enemy
+  rr.players["Tag Friend"].faction = "Alliance"
+  check(not ns.PvP.IsFriendly("Tag Friend"), "seen on the other faction: can fight you")
+
+  tags["Tag Friend"], rr.players["Tag Friend"] = nil, nil
+  check(ns.errors == errs, "no errors with Battle.net friends without the addon (" .. tostring(ns.lastError) .. ")")
+end
+
+-- your own character on your own profile
+do
+  local errs = ns.errors
+  ns.UI.Show("profile")
+  local m = ns.UI.ProfileModel()
+  check(m ~= nil, "the profile page has a model")
+  local unit
+  m.SetUnit = function(_, u) unit = u end
+  m:Hide()
+  ns.UI.ShowProfile(ns.me)
+  check(m:IsShown() and unit == "player", "your own profile shows your character")
+  ns.UI.ShowProfile("Buddy Pal")
+  check(not m:IsShown(), "a friend's profile doesn't")
+  ns.UI.ShowProfile(ns.me)
+  check(m:IsShown(), "and yours again")
+  ns.UI.Show("hitlist")
+  m.SetUnit = nil
+  check(ns.errors == errs, "no errors with the profile model (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

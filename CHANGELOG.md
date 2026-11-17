@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.7.3
+- **Your character on your own profile:** the Profile tab shows your character model above
+  your recent PvP (drag it to turn it). Friends' and enemies' profiles are unchanged.
+- **No more addon whispers:** everything goes over Battle.net only, so half as many messages
+  (less load on the realm). Whispers are only used if Battle.net messaging isn't available at all.
+  Whispers from friends on older versions are still accepted.
+- **Fix: a friend could be ignored completely.** For some friends Battle.net reports their game
+  without a character name and with game version 0. The add-on took that as "a different WoW
+  game" and dropped everything they sent (a group invite answer, alerts, everything), and never
+  sent them anything. Version 0 now means "not said", and their name comes from their own
+  messages. Seen in a live debug log.
+- **A friend fighting next to you is never named as your killer or a helper.** The death recap
+  lists everyone in it without saying whose side they're on, so a friend could show up as "killed
+  by Enemy (with Bob)" and even be counted as an enemy. Now:
+  - the dying player's client takes the newest *enemy* in the recap as the killer, and leaves out
+    friends, party and raid members, and themselves;
+  - every client also drops its own friends from a death's killer and helpers (this fixes
+    messages from friends who haven't updated yet);
+  - a friend wrongly marked as an enemy by older data no longer shows on the Enemies tab or the
+    Hitlist.
+- **Friends and enemies never mix:** a friend playing your faction is never recorded or listed as
+  an enemy (attacker, killer, helper, victim, sighting, shared hitlist), and an enemy is never on
+  the Friends tab. The one exception: a friend playing the *other* faction can fight you, so
+  their character can be on the Enemies tab and Hitlist (and stays off the Friends tab).
+  "Friend" includes Battle.net friends who don't run the addon, once the addon has seen them
+  online on your faction (a friend like that was showing up on the Enemies list).
+- **Numbers are just numbers:** no symbol in front of any number anywhere (the "~" that marked
+  numbers counted from a friend's alerts could look like a minus sign, "-0"). Zero always shows
+  as 0, K/D as 0.00 (the game saves zeros as -0, which used to show up as "-0"). Members of a group who are only invited, or whose numbers haven't reached
+  you yet, show empty cells instead of "-" or "?". Their profile still says, in words, when
+  numbers were counted from their alerts.
+
 ## 0.7.2
 Compatible with 0.3.x to 0.7.1.
 Fixes from the first live tests, and clearer wording and clicks:

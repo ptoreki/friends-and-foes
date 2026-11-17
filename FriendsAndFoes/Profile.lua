@@ -388,7 +388,9 @@ function Profile.KindOf(name)
   if name == ns.me then return "me" end
   local realm = ns.Data.ViewRealm()
   local p = realm.players[ns.Data.Resolve(realm.players, name)]
-  if p and p.friend then return "friend" end -- (your alts too)
+  if p and ns.Data.OnOurSide(p) then return "friend" end -- (your alts too)
+  if ns.Data.OnOurSideName(p and p.name or name) then return "friend" end -- a Battle.net friend without the addon
+  if p and p.friend and not p.enemy then return "friend" end -- a friend on the other faction you never fought
   if p or realm.hitlist[ns.Data.Resolve(realm.hitlist, name)] then return "enemy" end
   return nil
 end

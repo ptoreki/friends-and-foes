@@ -107,7 +107,14 @@ local function suppressAttackToast(name)
   return inCombat and true or false
 end
 
+-- Someone on your side (you, or a friend playing your faction) is never recorded as an enemy:
+-- whatever a message says, they get a throwaway record that isn't saved anywhere.
+local function scratch(name)
+  return { name = name, k = 0, d = 0, a = 0, atk = 0, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, scratch = true }
+end
+
 local function enemyTouch(u, zone)
+  if ns.PvP.IsFriendly(u.name) then return scratch(u.name) end
   local e = ns.Data.Player(u.name)
   e.enemy = true
   ns.Data.Touch(e, { class = u.class, level = u.level, guild = u.guild, zone = zone })
@@ -117,6 +124,7 @@ end
 -- Only a kill puts someone on the hitlist. Attacks before that are counted on their enemy
 -- record (e.atk) and carried over when the kill adds them.
 local function hitTouch(u, zone, victim)
+  if ns.PvP.IsFriendly(u.name) then return scratch(u.name) end
   local isNew = ns.Data.FindHit(u.name) == nil
   local h = ns.Data.Hit(u.name)
   ns.Data.Touch(h, { class = u.class, level = u.level, guild = u.guild, zone = zone })
@@ -331,7 +339,11 @@ end
 
 H.DIE = function(msg, isSelf, p, f)
   p.d = p.d + 1
+  -- nobody on your side is ever a killer or helper (older clients could name a friend who was in
+  -- the death recap): such names are dropped here too
+  local function onYourSide(name) return name == msg.from or ns.PvP.IsFriendly(name) end
   local killer = ns.DecodeUnit(f.killer)
+  if killer and killer.name and onYourSide(killer.name) then killer = nil end
   if isSelf and not msg.id:find("^S") then
     Events.WeeklyAdd("d", killer and killer.name)
     ns.Profile.Changed() -- friends' leaderboards
@@ -348,7 +360,7 @@ H.DIE = function(msg, isSelf, p, f)
   end
   local helpers, foes = {}, { killer and killer.name }
   for _, u in ipairs(ns.DecodeUnits(f.assists)) do
-    if u.name then
+    if u.name and not onYourSide(u.name) then
       foes[#foes + 1] = u.name
       helpers[#helpers + 1] = ns.ClassColored(u.name, u.class)
       local e = enemyTouch(u, f.zone)
@@ -373,6 +385,8 @@ H.KILL = function(msg, isSelf, p, f)
     ns.Profile.Changed()
   end
   local name = ns.CleanName(f.victim)
+  -- someone on your side is never a victim (it can only be a misread): a kill without a name
+  if name and ns.PvP.IsFriendly(name) then name = nil end
   p.k = p.k + 1
   local streak = tonumber(f.streak)
   if not name then
@@ -439,7 +453,7 @@ local shareSeen = {}
 H.SIGHT = function(msg, isSelf, p, f)
   if isSelf then return end
   local name = ns.CleanName(f.name)
-  if not name then return end
+  if not name or ns.PvP.IsFriendly(name) then return end -- (never a friend on your side)
   local u = { name = name, class = f.class ~= "" and f.class or nil, level = f.level, guild = f.guild ~= "" and f.guild or nil }
   enemyTouch(u, f.zone)
   local h = hitUpdate(u, f.zone)
@@ -505,7 +519,8 @@ H.HIT = function(msg, isSelf, p, f)
     local forget = tonumber(ns.S().forgetAfter) or 0
     local tooOld = isNew and forget > 0 and hours and hours / 24 > forget
     -- older clients also share attack-only entries; only someone with kills is added
-    if name and not tooOld and (not isNew or (tonumber(e[6]) or 0) > 0) then
+    -- (never someone on your side, even if they are on the sharer's list)
+    if name and not tooOld and not ns.PvP.IsFriendly(name) and (not isNew or (tonumber(e[6]) or 0) > 0) then
       local h = ns.Data.Hit(name)
       if e[2] and e[2] ~= "" then h.class = h.class or e[2] end
       local lvl = tonumber(e[3])

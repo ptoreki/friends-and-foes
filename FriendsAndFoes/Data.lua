@@ -145,6 +145,34 @@ function Data.Player(name)
   end)
 end
 
+-- On your side: you, or a friend playing your faction. Such a player is never recorded or shown
+-- as an enemy. A friend playing the OTHER faction can fight you, so they count as an enemy there
+-- (and aren't listed with your friends). Unknown faction = your faction.
+function Data.OnOurSide(p)
+  if not p then return false end
+  if p.self or p.name == ns.me then return true end
+  if not p.friend then return false end
+  local other = p.faction and ns.myFaction and p.faction ~= "Neutral" and p.faction ~= ns.myFaction
+  return not other
+end
+
+-- Is this name on your side? A record that says so (above), or a Battle.net friend's character
+-- the addon has seen online on your faction - even if they don't run the addon (their BattleTag
+-- is remembered then, see Comm). Exact names only.
+function Data.OnOurSideName(name)
+  if not name then return false end
+  if name == ns.me then return true end
+  local p = Data.Realm().players[name]
+  if p and Data.OnOurSide(p) then return true end
+  local tags = FriendsAndFoesDB and FriendsAndFoesDB.friendTags
+  if tags and tags[name] then
+    -- unless we've since seen that character playing the other faction
+    local other = p and p.faction and ns.myFaction and p.faction ~= "Neutral" and p.faction ~= ns.myFaction
+    return not other
+  end
+  return false
+end
+
 function Data.FindPlayer(name)
   local map = Data.Realm().players
   return map[resolve(map, name)]

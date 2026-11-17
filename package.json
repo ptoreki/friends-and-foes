@@ -1,6 +1,6 @@
 {
   "name": "friends-and-foes",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "Dev tooling for the Friends & Foes WoW Forever addon (tests run the Lua in a mocked WoW API).",

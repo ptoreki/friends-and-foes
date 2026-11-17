@@ -179,7 +179,8 @@ local lastRebuild = 0
 function Comm.SameWorld(g)
   if ns.ForeverNames() then
     local proj = g.wowProjectID
-    if proj and WOW_PROJECT_ID and not issecret(proj) and proj ~= WOW_PROJECT_ID then
+    -- 0 (or nothing) means Battle.net didn't say: not a different game
+    if proj and proj ~= 0 and WOW_PROJECT_ID and not issecret(proj) and proj ~= WOW_PROJECT_ID then
       return false, "other WoW version"
     end
     return true
@@ -218,12 +219,15 @@ function Comm.RebuildRoster()
       if g and g.clientProgram == wowClient then
         local why
         local same, notWhy = Comm.SameWorld(g)
+        -- Battle.net sometimes gives a friend's game account without a character name; the name
+        -- learned from their own messages still works
+        local known = fullByGid[g.gameAccountID] or ns.CleanName(g.characterName)
         if not g.isOnline then why = "offline"
-        elseif not g.characterName then why = "no character name"
+        elseif not known then why = "no character name"
         elseif not same then why = notWhy
         elseif Comm.OtherFaction(g.factionName) then why = "other faction"
         end
-        local name = not why and (fullByGid[g.gameAccountID] or ns.CleanName(g.characterName))
+        local name = not why and known
         if not why and (not name or name == ns.me) then why = "self" end
         if not why and not tagRead then
           -- BattleTag only for friends who are actually eligible (saves a table per friend)
@@ -452,17 +456,16 @@ Comm.PumpRunning = function() return ticker ~= nil end
 ---------------------------------------------------------------------------
 -- broadcast
 ---------------------------------------------------------------------------
--- broadcasts go to the roster; group messages may go to any eligible friend.
--- bnOnly: no whisper copy when Battle.net can carry it (group traffic isn't urgent, and every
--- copy is load on the realm; the whisper route only exists as a backup for live alerts)
-local function sendTo(name, payload, prio, bnOnly)
+-- Broadcasts go to the roster; group messages may go to any eligible friend.
+-- Everything goes over Battle.net only (0.7.3). An addon whisper is sent only if Battle.net
+-- messaging isn't available at all - every friend in the roster comes from your Battle.net list,
+-- so Battle.net can always reach them. Whispers from older versions are still accepted.
+local function sendTo(name, payload, prio)
   local r = roster[name] or everyone[name]
   if not r then return end
-  local viaBN = BNSendGameData and r.gid
-  if viaBN then
+  if BNSendGameData and r.gid then
     enqueue("bn", prio, { target = r.gid, payload = payload })
-  end
-  if (not bnOnly or not viaBN) and r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
+  elseif r.faction == ns.myFaction and C_ChatInfo and C_ChatInfo.SendAddonMessage then
     enqueue("whisper", prio, { target = name, payload = payload })
   end
 end
@@ -471,11 +474,11 @@ function Comm.SendPayload(payload, prio)
   for name in pairs(roster) do sendTo(name, payload, prio) end
 end
 
--- one message to one friend (group messages: Battle.net only)
+-- one message to one friend
 function Comm.SendTo(name, msg)
   local payload = Comm.Fit(msg)
   if not payload then return end
-  sendTo(name, payload, PRIORITY_OF[msg.kind] or "normal", GROUP_KINDS[msg.kind])
+  sendTo(name, payload, PRIORITY_OF[msg.kind] or "normal")
   ns.Debug("SEND", msg.kind, msg.id, "to " .. tostring(name))
 end
 
@@ -915,7 +918,7 @@ end
 ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
   if issecret(prefix) or prefix ~= ns.PREFIX or issecret(senderID) then return end
   local g = C_BattleNet.GetGameAccountInfoByID(senderID)
-  if not (g and g.characterName) then
+  if not g then
     ns.Debug("BN-DROP", "no game info", senderID)
     return
   end
@@ -928,8 +931,17 @@ ns.On("BN_CHAT_MSG_ADDON", function(prefix, text, _, senderID)
     ns.Debug("BN-DROP", "other faction", g.characterName, g.factionName)
     return
   end
-  local name = ns.CleanName(g.characterName)
-  if not name then return end
+  -- the character, as Battle.net names it; if it doesn't (it sometimes leaves the name out), the
+  -- name we learned from them before, else the one in the message (it comes from this friend's
+  -- own game account, so it's theirs)
+  local name = ns.CleanName(g.characterName) or fullByGid[g.gameAccountID]
+  if not name and type(text) == "string" and not issecret(text) then
+    name = ns.CleanName(text:match("^%d+\t%u+\t[^\t]*\t([^\t]*)\t"))
+  end
+  if not name then
+    ns.Debug("BN-DROP", "no character name", senderID)
+    return
+  end
   local kind = type(text) == "string" and not issecret(text) and text:match("^%d+\t(%u+)\t")
   if Comm.GroupActive() and not GROUP_KINDS[kind] then
     if tagByGid[g.gameAccountID] == nil then Comm.RebuildRoster() end
