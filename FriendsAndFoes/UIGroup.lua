@@ -132,8 +132,20 @@ function UI.RefreshGroupWindow()
   win.buttons:Layout()
 end
 
+-- above the main window AND its buttons: as a child of the main window it would otherwise sit
+-- just above the window's background, under its buttons wherever the two overlap (a window near
+-- the screen's right edge pushes this one back over it). Same strata, so the game's yes/no
+-- pop-ups still come out on top.
+local ABOVE_MAIN = 50
+local function raise(main)
+  local base = main and main.GetFrameLevel and main:GetFrameLevel() or 1
+  win:SetFrameLevel(base + ABOVE_MAIN)
+  if win.SetToplevel then win:SetToplevel(true) end -- (a click brings it to the front)
+end
+
 function UI.ShowGroupWindow(main)
   win = win or build(main)
+  raise(main)
   win:Show()
   UI.RefreshGroupWindow()
 end

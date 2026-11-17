@@ -638,7 +638,6 @@ function UI.Refresh()
   if not isProfile then UI.ResetProfileCount() end -- (back to a profile later: count up again)
   rowsFrame:SetShown(not isProfile)
   profile:SetShown(isProfile)
-  if not isProfile then UI.HidePoster() end -- (the poster window belongs to the profile page)
   if currentTab == "board" then UI.RefreshGroupWindow() else UI.HideGroupWindow() end
   searchBox:SetShown(not isProfile)
   -- Back: on the Profile page and the Kill list, if there's somewhere to go back to

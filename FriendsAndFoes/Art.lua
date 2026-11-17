@@ -41,9 +41,10 @@ local WORN = { 0.38, 0.25, 0.11 } -- the darkened edges: bands that fade towards
 local WORN_BANDS = { { 3, 0.35 }, { 8, 0.18 }, { 16, 0.08 } } -- { width, alpha }
 
 -- ink colours for text on the paper
-Art.INK = { 0.24, 0.13, 0.06 }
-Art.INK_SOFT = { 0.36, 0.24, 0.13 }
-Art.INK_GOLD = { 0.5, 0.32, 0.02 }
+-- (dark enough to read on the light paper; the game fonts' drop shadow is taken off poster text)
+Art.INK = { 0.16, 0.08, 0.03 }
+Art.INK_SOFT = { 0.22, 0.12, 0.05 }
+Art.INK_RED = { 0.55, 0.06, 0.03 } -- the bounty, in red like a real wanted poster
 
 -- owner: the frame it's drawn on (behind that frame's own text); area: the part it covers
 -- (default: all of owner). Returns a handle with :SetShown(bool).

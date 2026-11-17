@@ -18,10 +18,14 @@ local profile -- the page's frame
 local PROFILE_LINES, RECENT_LINES = 10, 10
 -- your own profile: your character above recent PvP, which then has room for fewer lines
 local MODEL_TOP, MODEL_H, RECENT_LINES_ME = -40, 190, 5
--- an enemy's Wanted poster: its own window beside the main one, shaped like a poster
-local POSTER_W, POSTER_H = 300, 440
-local PORTRAIT_W, PORTRAIT_H = 220, 170
-local FACE, SYMBOL = 156, 110 -- the painted face fills the portrait; a symbol sits smaller in it
+-- an enemy's profile: their Wanted poster in the left column, their facts and recent PvP beside it
+local POSTER_W = 290
+local POSTER_RIGHT = 300 -- where the column beside the poster starts
+local RECENT_LINES_POSTER = 7
+local PORTRAIT_W, PORTRAIT_H = 170, 124
+local FACE, SYMBOL = 112, 92 -- the painted face fills the portrait; a symbol sits smaller in it
+local SEPIA = { 0.50, 0.38, 0.24, 1 } -- the portrait's print
+local INK_PRINT = { 1, 0.84, 0.58 } -- the picture in it, tinted to match
 local FACTION_CREST = 26 -- their faction (always the other one): small, in the corner
 local countedFor -- whose profile numbers have counted up already (once per visit)
 local PROFILE_TOP = -50 -- where the facts and recent PvP start, below the name lines
@@ -145,10 +149,24 @@ function UI.RenderProfile()
   local v = UI.ProfileView(profileName)
   profile.empty:SetShown(v == nil)
 
-  -- an enemy: their Wanted poster opens beside the window (unless you closed it for them)
+  -- an enemy: their Wanted poster on the left; their facts and recent PvP in the column beside it
   local enemy = v ~= nil and v.kind == "enemy"
-  local poster = enemy and profile.posterClosedFor ~= profileName
+  local poster = enemy
   profile.ShowPoster(poster)
+  -- the facts: under the name, or beside the poster at the top of the right-hand column (the
+  -- name is on the poster then)
+  local factsX = poster and POSTER_RIGHT or 0
+  local factsTop = poster and 0 or PROFILE_TOP
+  profile.title:SetShown(not poster)
+  profile.sub:SetShown(not poster)
+  for i = 1, PROFILE_LINES do
+    local y = factsTop - (i - 1) * 19
+    profile.labels[i]:ClearAllPoints()
+    profile.labels[i]:SetPoint("TOPLEFT", factsX, y)
+    profile.values[i]:ClearAllPoints()
+    profile.values[i]:SetPoint("TOPLEFT", factsX + 104, y)
+    profile.values[i]:SetWidth(poster and 250 or 220)
+  end
   if poster then
     profile.factionIcon:SetShown(ns.Art.SetFactionIcon(profile.factionIcon, v.faction))
     profile.posterName:SetText(v.name or "")
@@ -169,6 +187,9 @@ function UI.RenderProfile()
       icon:SetTexCoord(c[1], c[2], c[3], c[4])
     end
     icon:SetShown(raceShown or classAsPortrait)
+    -- printed in the poster's sepia ink, not a bright game icon pasted on
+    if icon.SetDesaturated then pcall(icon.SetDesaturated, icon, true) end
+    icon:SetVertexColor(INK_PRINT[1], INK_PRINT[2], INK_PRINT[3])
     profile.badge:SetShown(c ~= nil and not classAsPortrait)
     if c then
       profile.badgeIcon:SetTexture(CLASS_ICONS)
@@ -179,7 +200,7 @@ function UI.RenderProfile()
   end
 
   profile.title:SetText(v and v.title or "")
-  profile.sub:SetText(v and (enemy and (v.posterSub .. (v.guild and ("  <" .. v.guild .. ">") or "")) or v.sub) or "")
+  profile.sub:SetText(v and v.sub or "")
   -- numbers count up once each time you open someone's profile
   local count = v ~= nil and countedFor ~= profileName
   if count then countedFor = profileName end
@@ -203,14 +224,16 @@ function UI.RenderProfile()
       model:Hide()
     end
   end
-  -- recent PvP: right-hand column; on yours, below your character
-  local recentTop = withModel and (MODEL_TOP - MODEL_H - 8) or PROFILE_TOP
-  local recentLines = withModel and RECENT_LINES_ME or RECENT_LINES
+  -- recent PvP: right-hand column; below your character on yours, below the facts beside a poster
+  local recentX = poster and POSTER_RIGHT or 340
+  local recentTop = (withModel and (MODEL_TOP - MODEL_H - 8)) or (poster and -(PROFILE_LINES * 19 + 12)) or PROFILE_TOP
+  local recentLines = (withModel and RECENT_LINES_ME) or (poster and RECENT_LINES_POSTER) or RECENT_LINES
   profile.recentHeader:ClearAllPoints()
-  profile.recentHeader:SetPoint("TOPLEFT", 340, recentTop)
+  profile.recentHeader:SetPoint("TOPLEFT", recentX, recentTop)
   for i = 1, RECENT_LINES do
     profile.recent[i]:ClearAllPoints()
-    profile.recent[i]:SetPoint("TOPLEFT", 340, recentTop - i * 19)
+    profile.recent[i]:SetPoint("TOPLEFT", recentX, recentTop - i * 19)
+    profile.recent[i]:SetWidth(poster and 360 or 320)
   end
 
   profile.recentHeader:SetText(v and L.PROF_RECENT or "")
@@ -229,7 +252,6 @@ function UI.RenderProfile()
   local editable = v.kind == "enemy" and v.onHitlist
   c.editLabel:SetShown(editable)
   c.edit:SetShown(editable)
-  c.posterBtn:SetShown(v.kind == "enemy")
   c.save:SetShown(editable)
   c.row:Layout()
   if editable and not c.edit:HasFocus() then c.edit:SetText(v.note or "") end
@@ -295,78 +317,83 @@ function UI.BuildProfile(win)
     fs:SetWordWrap(wrap and true or false)
     return fs
   end
-  -- an enemy's Wanted poster: its own window, tall like a real poster, docked to the right of
-  -- the main window (drag it anywhere; it hides with the main window). Light worn paper, all
-  -- centred: WANTED / a framed portrait / DEAD OR ALIVE / their name / level, race, class,
-  -- guild / their bounty. Their faction: a small crest in the corner (it's always the other one).
-  local INK, SOFT, GOLD = ns.Art.INK, ns.Art.INK_SOFT, ns.Art.INK_GOLD
-  local pw = CreateFrame("Frame", "FriendsAndFoesPoster", win)
-  pw:SetSize(POSTER_W, POSTER_H)
-  pw:SetPoint("TOPLEFT", win, "TOPRIGHT", 6, -10)
-  pw:SetFrameStrata("DIALOG")
-  pw:SetMovable(true)
-  pw:SetClampedToScreen(true)
-  pw:EnableMouse(true)
-  pw:RegisterForDrag("LeftButton")
-  pw:SetScript("OnDragStart", pw.StartMoving)
-  pw:SetScript("OnDragStop", pw.StopMovingOrSizing)
+  -- an enemy's Wanted poster: the left column of their profile page, above the note box. Light
+  -- worn paper, all centred: WANTED / a framed portrait / DEAD OR ALIVE / their name / level,
+  -- race, class, guild / their bounty. Their faction: a small crest in the corner (it's always
+  -- the other one).
+  local INK, SOFT, RED = ns.Art.INK, ns.Art.INK_SOFT, ns.Art.INK_RED
+  local pw = CreateFrame("Frame", nil, profile)
+  pw:SetPoint("TOPLEFT", -8, 8)
+  pw:SetPoint("BOTTOMLEFT", -8, 32)
+  pw:SetWidth(POSTER_W)
   ns.Art.Parchment(pw)
-  local close = CreateFrame("Button", nil, pw, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", 2, 2)
-  close:SetScript("OnClick", function()
-    profile.posterClosedFor = UI.ProfileName() -- stays closed for them (the Poster button opens it)
-    pw:Hide()
-    UI.Refresh()
-  end)
   -- top to bottom, each a set gap below the one before (UI.Column), centred on the poster
   local col = UI.Column(pw, "TOP", 0, 0)
   local function inked(font, size, color, gap)
     local fs = pw:CreateFontString(nil, "OVERLAY", font)
     if size then ns.Art.UseTitleFont(fs, size) end
     fs:SetTextColor(color[1], color[2], color[3])
+    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, 0) end -- (a shadow smudges on light paper)
     col:Add(fs, gap)
-    fs:SetWidth(POSTER_W - 24)
+    fs:SetWidth(POSTER_W - 20)
     fs:SetJustifyH("CENTER")
     fs:SetWordWrap(false)
     return fs
   end
-  profile.wanted = inked("GameFontNormalLarge", 40, INK, 14)
+  profile.wanted = inked("GameFontNormalLarge", 34, INK, 10)
   profile.wanted:SetText(L.PROF_WANTED_POSTER)
 
-  -- the portrait: a dark frame with an ink border; the game's painted face for their race in
-  -- it (or their race symbol, or their class crest if you haven't seen their race)
+  -- the portrait, printed on the poster: back to front, a soft shadow, a thick ink frame, a
+  -- strip of paper, a fine ink line, then the picture - an old sepia print, darker towards its
+  -- edges. In it: the game's painted face for their race, in the same sepia (or their race
+  -- symbol, or their class crest if you haven't seen their race).
   local portrait = CreateFrame("Frame", nil, pw)
   portrait:SetSize(PORTRAIT_W, PORTRAIT_H)
-  col:Add(portrait, 10)
+  col:Add(portrait, 12)
   profile.portrait = portrait
-  local function box(sub, inset, color)
+  -- a rectangle centred on the picture, `grow` px bigger on each side (dx, dy: shifted)
+  local function box(sub, grow, color, dx, dy)
     local t = pw:CreateTexture(nil, "BORDER", nil, sub)
     t:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
-    t:SetPoint("CENTER", portrait, "CENTER")
-    t:SetSize(PORTRAIT_W - 2 * inset, PORTRAIT_H - 2 * inset)
+    t:SetPoint("CENTER", portrait, "CENTER", dx or 0, dy or 0)
+    t:SetSize(PORTRAIT_W + 2 * grow, PORTRAIT_H + 2 * grow)
     return t
   end
-  box(1, -3, { INK[1], INK[2], INK[3], 0.9 })
-  box(2, 0, { 0.16, 0.12, 0.08, 1 })
+  box(0, 7, { 0.12, 0.07, 0.02, 0.35 }, 3, -4) -- shadow on the paper
+  box(1, 7, { INK[1], INK[2], INK[3], 0.95 }) -- thick frame
+  box(2, 4, { 0.80, 0.69, 0.48, 1 }) -- paper between the lines
+  box(3, 1, { INK[1], INK[2], INK[3], 0.9 }) -- fine line
+  box(4, 0, SEPIA) -- the print
+  -- darker towards the print's edges (bands, strongest at the edge)
+  for i, band in ipairs({ { 4, 0.30 }, { 10, 0.16 }, { 20, 0.08 } }) do
+    for _, side in ipairs({ { "TOPLEFT", "TOPRIGHT", true }, { "BOTTOMLEFT", "BOTTOMRIGHT", true },
+      { "TOPLEFT", "BOTTOMLEFT", false }, { "TOPRIGHT", "BOTTOMRIGHT", false } }) do
+      local e = pw:CreateTexture(nil, "BORDER", nil, 4 + i)
+      e:SetColorTexture(0.18, 0.10, 0.04, band[2])
+      e:SetPoint(side[1], portrait, side[1])
+      e:SetPoint(side[2], portrait, side[2])
+      if side[3] then e:SetHeight(band[1]) else e:SetWidth(band[1]) end
+    end
+  end
   profile.portraitIcon = pw:CreateTexture(nil, "ARTWORK")
   profile.portraitIcon:SetPoint("CENTER", portrait, "CENTER")
   -- their class crest, pinned to the portrait's corner
   local badge = CreateFrame("Frame", nil, portrait)
-  badge:SetSize(34, 34)
-  badge:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 9, -9)
+  badge:SetSize(30, 30)
+  badge:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 8, -8)
   badge:SetFrameLevel((portrait:GetFrameLevel() or 1) + 5)
   profile.badgeIcon = badge:CreateTexture(nil, "ARTWORK")
   profile.badgeIcon:SetAllPoints()
   profile.badge = badge
 
-  profile.deadOrAlive = inked("GameFontNormal", 16, INK, 12)
+  profile.deadOrAlive = inked("GameFontNormal", 15, INK, 16) -- (clear of the frame and its shadow)
   profile.deadOrAlive:SetText(L.PROF_DEAD_OR_ALIVE)
-  profile.posterName = inked("GameFontNormalLarge", 24, INK, 8)
-  profile.posterSub = inked("GameFontHighlightSmall", nil, SOFT, 6)
-  profile.posterGuild = inked("GameFontHighlightSmall", nil, SOFT, 4)
-  profile.bountyLabel = inked("GameFontNormalSmall", 14, SOFT, 14)
+  profile.posterName = inked("GameFontNormalLarge", 22, INK, 7)
+  profile.posterSub = inked("GameFontHighlight", nil, SOFT, 6)
+  profile.posterGuild = inked("GameFontHighlight", nil, SOFT, 3)
+  profile.bountyLabel = inked("GameFontNormalSmall", 13, SOFT, 12)
   profile.bountyLabel:SetText(L.PROF_BOUNTY)
-  profile.bounty = inked("GameFontNormalLarge", 30, GOLD, 3)
+  profile.bounty = inked("GameFontNormalLarge", 26, RED, 3)
   -- hover the bounty: how it's worked out
   local bountyTip = CreateFrame("Frame", nil, pw)
   bountyTip:SetPoint("TOPLEFT", profile.bountyLabel, "TOPLEFT")
@@ -493,24 +520,10 @@ function UI.BuildProfile(win)
     ns.Art.Sound("save")
     UI.ProfileSave(c.edit:GetText())
   end
-  -- an enemy: open their poster again after closing it, or close it
-  c.posterBtn = c.row:Add(button(c, 110, L.BTN_POSTER, function() UI.TogglePoster() end), 8)
   c.save = c.row:Add(button(c, 60, L.SAVE, saveEdit), 16)
   c.edit:SetPoint("RIGHT", c.save, "LEFT", -10, 0)
   c.edit:SetScript("OnEnterPressed", saveEdit)
   c.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   profile.controls = c
   return profile
-end
-
--- the Wanted poster button on an enemy's profile: close their poster, or open it again
-function UI.TogglePoster()
-  local name = UI.ProfileName()
-  if profile.posterClosedFor == name then profile.posterClosedFor = nil else profile.posterClosedFor = name end
-  UI.Refresh()
-end
-
--- leaving the profile page (another tab, Back to a list): the poster goes with it
-function UI.HidePoster()
-  if profile and profile.poster then profile.poster:Hide() end
 end

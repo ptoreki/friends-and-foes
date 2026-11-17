@@ -2797,6 +2797,7 @@ do
   check(fr.rows.ledger == nil, "the Hitlist has no parchment")
 
   -- an enemy's profile is a Wanted poster; a friend's and yours aren't
+  ns.UI.Show("enemies") -- (from the Hitlist the poster waits for its button)
   ns.UI.ShowPlayer("Rogz Fang")
   local P = fr.profile
   check(ns.UI.CurrentTab() == "profile" and P.poster:IsShown(), "an enemy's profile: Wanted poster")
@@ -3170,28 +3171,21 @@ do
   check(c.points[1][2] == a, "a column closes up around a hidden line")
 end
 
--- 0.9: the Wanted poster is its own window beside the main one
+-- 0.9.1: the Wanted poster is part of the enemy's profile page (left column), not a window
 do
   local errs = ns.errors
   local P = ns.UI.Frames().profile
-  ns.UI.Show("hitlist")
-  ns.UI.ShowPlayer("Rogz Fang")
-  check(P.poster:IsShown(), "an enemy's profile opens their poster window")
-  check(P.labels[1]:GetText() == "Murders", "and their facts fill the profile page")
-  ns.UI.Back()
-  check(not P.poster:IsShown(), "Back to the list: the poster goes too")
-  ns.UI.ShowPlayer("Rogz Fang")
-  ns.UI.TogglePoster()
-  check(not P.poster:IsShown(), "closed")
-  ns.UI.Refresh()
-  check(not P.poster:IsShown(), "and it stays closed for them, even when the page updates")
-  check(P.controls.posterBtn:IsShown(), "the Wanted poster button is there to open it again")
-  ns.UI.TogglePoster()
-  check(P.poster:IsShown(), "opened again")
+  for _, tab in ipairs({ "hitlist", "enemies" }) do
+    ns.UI.Show(tab)
+    ns.UI.ShowPlayer("Rogz Fang")
+    check(P.poster:IsShown(), "an enemy's profile has their poster (from the " .. tab .. ")")
+  end
+  check(not P.title:IsShown() and P.labels[1]:GetText() == "Murders", "their name is on the poster; their facts beside it")
+  check(P.controls.posterBtn == nil and ns.UI.TogglePoster == nil, "no separate poster window, no button for one")
   ns.UI.ShowProfile(ns.me)
-  check(not P.poster:IsShown() and not P.controls.posterBtn:IsShown(), "your own profile: no poster, no button")
+  check(not P.poster:IsShown(), "your own profile: no poster")
   ns.UI.Show("hitlist")
-  check(ns.errors == errs, "no errors with the poster window (" .. tostring(ns.lastError) .. ")")
+  check(ns.errors == errs, "no errors with the poster (" .. tostring(ns.lastError) .. ")")
 end
 
 -- 0.9: the group window - members, totals and the buttons that apply, beside the Leaderboard
@@ -3208,6 +3202,12 @@ do
   ns.UI.ShowGroupWindow(FriendsAndFoesFrame)
   local w = ns.UI.GroupWindow()
   check(w:IsShown() and w.title:GetText() == "Window Crew", "the group window: its name on top")
+  local levelSet
+  w.SetFrameLevel = function(_, n) levelSet = n end
+  local fakeMain = { GetFrameLevel = function() return 5 end }
+  ns.UI.ShowGroupWindow(fakeMain)
+  check(levelSet == 55, "the group window sits well above the main window and its buttons: " .. tostring(levelSet))
+  w.SetFrameLevel = nil
   check(w.sub:GetText() == ns.L.GROUPWIN_YOU_LEAD, "you made it, so you lead it")
   check(w.leave:IsShown() and w.invite:IsShown() and not w.join:IsShown(), "a member: Invite and Leave")
   local mine = g.members[G.MyKey()]

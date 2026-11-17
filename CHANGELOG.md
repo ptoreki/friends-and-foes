@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.1
+- **The Wanted poster is back inside the enemy's profile**, not a separate window: the poster on
+  the left, their facts and recent PvP beside it. No window popping up, nothing to close.
+- **Easier to read poster:** darker ink, no drop shadow on the light paper, the level and guild
+  lines a size bigger, and the bounty in red ink (gold on parchment was hard to see).
+- **Fix: the main window's buttons showed through the group window** where the two overlapped
+  (main window near the right edge of the screen). It now sits above the main window and its
+  buttons, and comes to the front when clicked.
+- **The poster's portrait looks printed on it:** a sepia print, darker towards its edges, in a
+  double ink frame with a soft shadow; the face or symbol in it is in the same sepia ink instead
+  of a bright icon on a flat dark box.
+
 ## 0.9.0
 - **Bounties.** Every enemy's Wanted poster shows their open bounty in gold (just for fun, not
   real gold): 100 for every murder and 25 for every attack on you and your friends since someone
