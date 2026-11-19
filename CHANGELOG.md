@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.3
+- **New: the Bounty board.** Put your own bounty on an enemy player, in gold, silver and copper,
+  open for as many days as you pick (1-30): target them and click **Post bounty** on the new
+  Bounty board tab, use the button on their profile, or type `/fnf bounty 10g 50s 3d`. It goes
+  on your hitlist and on your friends' Bounty board and hitlist, with a toast. When you or a
+  friend kills them, it's done, with a toast: whoever posted it pays the killer by trade in the
+  game, then right-clicks it to mark it paid. Finished bounties stay on the board with who
+  closed them. It's a promise between friends; the add-on never moves gold. Up to 5 open
+  bounties each, up to 10,000 gold. The toasts are a new alert in Options (Bounty board).
+  Friends need this version to see them.
+- **"Bounties" are now "Notoriety":** the just-for-fun number on Wanted posters, the
+  Leaderboard and profiles is points, not gold, so it isn't mixed up with real bounties. Nothing
+  else about it changed, and your total carries over.
+- **Minimap button:** on by default again (it was hidden where the minimap has an add-on menu),
+  sits on the edge of the minimap at any size or shape instead of inside it, and the icon is
+  centred in its ring. Drag it round the minimap, Shift-drag it anywhere, and
+  `/fnf minimap reset` puts it back.
+- **No number is ever shown with a minus sign.** A bounty could show as "-,250", and a level or
+  streak from a friend's message could come through negative. Every number from friends is now
+  checked, and a test fills the add-on with broken numbers and checks every tab, profile, kill
+  list, tooltip, toast and chat line.
+- **Icons next to numbers sit level with them:** the bounty coin, the Leaderboard medals and the
+  tooltip skull are now as tall as the text around them.
+- **No more "*" or "+" stuck to numbers:** a Hitlist kill count is just the number, and the row's
+  tooltip says how many were likely rather than certain. An old level stays grey without the
+  "+", and the tooltip says it's probably higher now.
+- **Your profile's character model** is framed a little wider, so the top of the head isn't cut
+  off.
+
 ## 0.9.2
 - **Your profile shows your character from the chest up** (head and shoulders) instead of the
   whole body with the top of the head cut off.

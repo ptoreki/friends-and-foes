@@ -172,6 +172,15 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     else
       print(prefix .. L.DURATION_USAGE:format(tonumber(ns.S().toastDuration) or 3))
     end
+  elseif msg == "minimap reset" then
+    local mm = ns.S().minimap
+    mm.free, mm.x, mm.y, mm.angle, mm.hide = false, nil, nil, 210, false
+    if ns.Minimap then ns.Minimap.Place(); ns.Minimap.Update() end
+    print(prefix .. L.MINIMAP_RESET)
+  elseif msg == "bounty" or msg:find("^bounty ") then
+    local amount = strtrim(msg:sub(7))
+    if amount == "" then print(prefix .. L.BOUNTY_USAGE) end
+    if ns.PvP.ReadEnemy("target") then UI.PostBounty(nil, amount) elseif amount ~= "" then why("CONTRACT_NEED_TARGET") end
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end

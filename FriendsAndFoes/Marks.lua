@@ -82,7 +82,7 @@ local function onUnitTooltip(tt)
   local line = L.TOOLTIP_HIT:format(ns.Count(h.kills))
   local victims = victimsText(h)
   if victims ~= "" then line = line .. " - " .. L.TOOLTIP_VICTIMS:format(victims) end
-  tt:AddLine("|T" .. SKULL .. ":0|t " .. line, 1, 0.35, 0.3, true)
+  tt:AddLine(ns.Art.Icon(SKULL) .. " " .. line, 1, 0.35, 0.3, true)
   if h.note then tt:AddLine(h.note, 1, 1, 1, true) end
 end
 

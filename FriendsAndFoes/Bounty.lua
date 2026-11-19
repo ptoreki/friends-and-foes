@@ -1,7 +1,9 @@
 local _, ns = ...
 local L = ns.L
 
--- Bounties (0.9): just for fun, in gold.
+-- Notoriety (0.9, called "bounties" until 1.0 - the code, saved data and messages keep that
+-- name; players see "Notoriety"). Just for fun: points, not gold. Real gold promises are the
+-- Bounty board (Contracts.lua).
 -- Every enemy has an open bounty on their Wanted poster: what they've done to you and your
 -- friends since someone last collected on them (per murder, per attack), plus a price
 -- for every friend who has them as most wanted (paid out once per friend). Killing them collects it: everyone who got the
@@ -88,8 +90,8 @@ local function settle(name, claim)
   local others = {}
   for k in pairs(claim.killers) do if k ~= ns.me then others[#others + 1] = ns.ClassColored(k) end end
   local enemy = ns.ClassColored(name, (ns.Data.FindPlayer(name) or {}).class)
-  local line = #others == 0 and L.BOUNTY_COLLECTED:format(ns.Art.Gold(share), enemy)
-    or L.BOUNTY_COLLECTED_SHARED:format(ns.Art.Gold(share), enemy, ns.JoinNames(others))
+  local line = #others == 0 and L.BOUNTY_COLLECTED:format(ns.Art.Points(share), enemy)
+    or L.BOUNTY_COLLECTED_SHARED:format(ns.Art.Points(share), enemy, ns.JoinNames(others))
   ns.Toast.Chat(line)
   ns.Debug("BOUNTY", name, claim.amount, claim.n, share)
   ns.Profile.Changed() -- your new total goes to your friends

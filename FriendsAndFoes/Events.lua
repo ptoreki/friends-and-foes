@@ -210,12 +210,18 @@ local PLACE_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, SIGHT = t
 -- or a real item link gets through (a modified client can't slip in textures or other links)
 local TEXT_FIELDS = { zone = true, guild = true, vguild = true }
 local CLASS_FIELDS = { class = true, vclass = true }
+-- numbers that get shown: whole and never negative
+local NUMBER_FIELDS = { level = true, vlevel = true, streak = true, ended = true, count = true, epics = true,
+  k = true, d = true, bt = true, added = true }
+
 function Events.Clean(msg)
+  if msg.level then msg.level = ns.Count(msg.level) end
   local f = msg.f
   for k, v in pairs(f) do
     if type(v) == "string" and v ~= "" then
       if TEXT_FIELDS[k] then f[k] = ns.Profile.CleanText(v, 64) or ""
       elseif CLASS_FIELDS[k] then f[k] = v:match("^%u+$") or ""
+      elseif NUMBER_FIELDS[k] and tonumber(v) then f[k] = tostring(ns.Count(v))
       elseif k == "link" then f[k] = ns.SafeLink(v) or "" end
     end
   end
@@ -268,7 +274,7 @@ end
 
 H.LVL = function(_, isSelf, p, f)
   local lvl = tonumber(f.level)
-  if not lvl then return end
+  if not lvl or lvl < 1 then return end -- (a broken level - 0, or negative before cleaning - is dropped)
   p.level = ns.past and math.max(tonumber(p.level) or 0, lvl) or lvl
   local line = L.FEED_LEVEL:format(who(p), lvl)
   feed(p, "level", line)
@@ -465,6 +471,7 @@ H.KILL = function(msg, isSelf, p, f)
   -- their bounty: collected by everyone who got the kill (never in the simulation)
   if not msg.id:find("^S") and e.enemy then
     ns.Bounty.OnKill(isSelf and ns.me or p.name, e.name)
+    ns.Contracts.OnKill(isSelf and ns.me or p.name, e.name) -- the bounty board: contracts on them are done
   end
 
   local hit = ns.Data.FindHit(name)
@@ -534,6 +541,12 @@ H.PRO = function(_, isSelf, p, f)
 end
 
 -- shared groups: membership, and stats passed along by members
+-- a friend's contract on the bounty board (Contracts.lua)
+H.BTY = function(msg, isSelf, _, f)
+  if isSelf or msg.id:find("^S") then return end
+  ns.Contracts.OnMessage(msg.from, f)
+end
+
 H.GRP = function(msg, isSelf, _, f)
   if isSelf then return end
   ns.Groups.OnGroup(msg.from, f)

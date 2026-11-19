@@ -111,6 +111,10 @@ local SCHEMA = {
   -- fields joined by "^" in `data`
   RLQ  = { "window", "names" },
   RLY  = { "origin", "oclass", "olevel", "okind", "oid", "ago", "data" },
+  -- the bounty board (0.9.3, Contracts.lua): one of the sender's contracts. target is a unit,
+  -- amount in copper, state open|done|paid|cancelled, killer who did it, age/updage: seconds
+  -- since it was posted / last changed
+  BTY  = { "cid", "target", "amount", "state", "killer", "age", "updage", "days" }, -- days: how long it's open
 }
 Comm.SCHEMA = SCHEMA
 
@@ -124,11 +128,12 @@ Comm.KINDS = {
   HIT = { since = "0.2.0" }, SIGHT = { since = "0.6.0" }, ENG = { since = "0.6.1", relay = true },
   REQ = { since = "0.6.3" }, PRO = { since = "0.7.0" }, GRP = { since = "0.7.0" }, GST = { since = "0.7.0" },
   KLQ = { since = "0.7.1" }, KLA = { since = "0.7.1" }, RLQ = { since = "0.7.1" }, RLY = { since = "0.7.1" },
+  BTY = { since = "0.9.3" },
 }
 
 -- Features and the first version that has them, for "does this friend's add-on do X?"
 Comm.FEATURES = {
-  profiles = "0.7.0", groups = "0.7.0", killLists = "0.7.1", relay = "0.7.1", bounties = "0.9.0",
+  profiles = "0.7.0", groups = "0.7.0", killLists = "0.7.1", relay = "0.7.1", bounties = "0.9.0", contracts = "0.9.3",
 }
 
 -- true if this version of the add-on has the feature (nil version: unknown, so no)
@@ -145,9 +150,9 @@ function Comm.Supports(name, feature)
 end
 -- asked for, not broadcast: group traffic and kill lists also flow with friends you didn't
 -- pick for alerts, and only over Battle.net (no whisper copy)
-local GROUP_KINDS = { GRP = true, GST = true, KLQ = true, KLA = true }
+local GROUP_KINDS = { GRP = true, GST = true, KLQ = true, KLA = true, BTY = true }
 
-local PRIORITY_OF = { RLQ = "normal", RLY = "bulk", KLQ = "normal", KLA = "bulk", GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { BTY = "normal", RLQ = "normal", RLY = "bulk", KLQ = "normal", KLA = "bulk", GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -333,6 +338,7 @@ function Comm.GreetNew()
   if #profile > 0 and ns.Profile then ns.Profile.Greet(profile) end
   for _, name in ipairs(profile) do Comm.AskCatchUpFrom(name) end -- what they did while you were away
   if #groups > 0 and ns.Groups then ns.Groups.Greet(groups) end
+  if #groups > 0 and ns.Contracts then ns.Contracts.Greet(groups) end -- your bounty board contracts
 end
 
 function Comm.RosterNames()

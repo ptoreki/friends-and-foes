@@ -30,7 +30,7 @@ L.THEME_NAMES = { minimal = "Modern", achievement = "Classic", alliance = "Allia
 L.HEADER = {
   attacked = "Friend under attack", engage = "Friend on the attack", died = "Friend killed", kill = "Friend's kill",
   level = "Level up", loot = "Epic loot", gear = "New gear", sighting = "Hitlist sighting",
-  share = "Hitlist shared",
+  share = "Hitlist shared", contract = "Bounty board",
 }
 L.HEADER_MILESTONE = { level = "Max level!", loot = "Epic BoE!" }
 L.HEADER_REVENGE = "Revenge!"
@@ -111,7 +111,6 @@ L.NOTE = "Note:"
 L.SAVE = "Save"
 L.REMOVE = "Remove"
 L.NONE_SELECTED = "Click a hitlist entry to edit its note, double-click for their profile. Right-click to remove."
-L.SUSPECT_HINT = "* = includes suspected kills"
 L.EMPTY = "Nothing here yet."
 
 -- settings
@@ -138,7 +137,7 @@ L.OPT_DIED = "Friend killed"
 L.OPT_KILL = "Friend got a kill"
 L.OPT_SIGHTING = "Hitlist sighting"
 L.OPT_MINIMAP = "Minimap button (also in the minimap addon menu)"
-L.MINIMAP_TIP = "Left-click: open  |  Right-click: options  |  Drag: move"
+L.MINIMAP_TIP = "Left-click: open  |  Right-click: options\nDrag: move round the minimap  |  Shift-drag: anywhere"
 L.OPT_DEBUG = "Debug logging"
 L.BTN_UNLOCK = "Move toasts"
 L.BTN_TEST = "Test toasts"
@@ -164,7 +163,7 @@ L.TOAST_NEWER_VERSION = "Friends & Foes update available"
 L.TOAST_NEWER_VERSION_TEXT = "%s has %s (you have %s)"
 L.TOAST_NEWER_PROTOCOL_TEXT = "%s uses a newer, incompatible version - please update"
 L.TOAST_OLDER_VERSION = "Friend needs to update Friends & Foes"
-L.CHAT_OLDER_VERSIONS = "On an older Friends & Foes: %s. You have %s - newer things (like bounties) won't sync with them until they update."
+L.CHAT_OLDER_VERSIONS = "On an older Friends & Foes: %s. You have %s - newer things (like the Bounty board) won't sync with them until they update."
 L.TOAST_OLDER_PROTOCOL_TEXT = "%s runs an old, incompatible version - send them the new one"
 L.TOAST_SHARE = "%s shared their hitlist"
 L.TOAST_SHARE_TEXT = "%d new entries added"
@@ -201,7 +200,7 @@ L.SIM_HELP = "/fnf sim <level|loot|gear|attacked|engage|died|kill|sighting|all> 
 L.SIM_CLEARED = "simulation data cleared"
 
 -- slash
-L.HELP = "/fnf [board | groups | profile | wanted | alerts | options | unlock | lock | test | status | chat | size | duration | share | sim | debug | debug clear | report | tour | minimap]"
+L.HELP = "/fnf [board | groups | profile | wanted | alerts | options | unlock | lock | test | status | chat | size | duration | share | sim | debug | debug clear | report | tour | minimap | minimap reset | bounty]"
 
 -- native options panel (Options.lua): pages, choices and hover tooltips
 L.PAGE_APPEARANCE = "Appearance"
@@ -316,9 +315,9 @@ L.WELCOME_2 = "Type /fnf for the window, or open Options -> AddOns -> Friends & 
 L.TOUR_1_TITLE = "Friends & Foes"
 L.TOUR_1_TEXT = "Your Battle.net friends who have Friends & Foes share their level-ups, loot and world PvP with you, and you with them. Fights, kills and deaths pop up as alerts; everything is kept here in this window."
 L.TOUR_2_TITLE = "Foes"
-L.TOUR_2_TEXT = "Anyone who kills one of you, or attacks one of you first, goes on your Hitlist, with a skull on their nameplate. Click a name for their Wanted poster: what they've done, and the bounty on their head. Kill them to collect it - shared with the friends who help."
+L.TOUR_2_TEXT = "Anyone who kills one of you, or attacks one of you first, goes on your Hitlist, with a skull on their nameplate. Click a name for their Wanted poster: what they've done, and their notoriety. Kill them to claim it - shared with the friends who help. Want to pay real gold for a kill? Post a bounty on the Bounty board."
 L.TOUR_3_TITLE = "Friends"
-L.TOUR_3_TEXT = "Your friends need the add-on too: it's on CurseForge and Wago. The Leaderboard ranks your kills and bounties; start a group there to compete with friends of friends. What pops up and what you share: the Options button, top right."
+L.TOUR_3_TEXT = "Your friends need the add-on too: it's on CurseForge and Wago. The Leaderboard ranks your kills and notoriety; start a group there to compete with friends of friends. What pops up and what you share: the Options button, top right."
 L.TOUR_STEP = "%d of %d"
 L.TOUR_NEXT = "Next"
 L.TOUR_BACK = "Back"
@@ -356,6 +355,8 @@ L.HIT_TIP_KILLED = "Killed:"
 L.HIT_TIP_TIMES = "%dx"
 L.HIT_TIP_EARLIER = "before counting began"
 L.HIT_TIP_LAST = "Last seen %s"
+L.HIT_TIP_LIKELY = "%d of them likely, not certain (the death recap couldn't name the killer)"
+L.HIT_TIP_LEVEL_OLD = "Level seen a while ago (grey): probably higher now."
 -- old data
 L.OPT_FORGET = "Forget hitlist players not seen for"
 L.TIP_FORGET = "Removes hitlist players nobody has seen for this long. Entries you wrote a note on are always kept. Players not seen for 90 days are already shown greyed out at the bottom of the list."
@@ -396,7 +397,7 @@ L.COL_NOW = "Now"
 L.YOU = "(you)"
 L.STATUS_AFK = "AFK"
 L.STATUS_FIGHT = "in a fight"
-L.BOARD_HINT = "World PvP kills, deaths and bounties collected, all-time. Click a name for their profile."
+L.BOARD_HINT = "World PvP kills, deaths and notoriety claimed, all-time. Click a name for their profile."
 L.PROFILE_EMPTY = "Nothing known about this player yet. Click a name on any list to see their profile."
 L.PROFILE_HINT = "Back to the list: click its tab below."
 L.PROF_KILLS = "Kills"
@@ -410,13 +411,13 @@ L.PROF_NEMESIS_ME = "%s (killed you %dx)"
 L.PROF_WANTED = "Most wanted"
 L.PROF_WANTED_POSTER = "WANTED"
 L.PROF_DEAD_OR_ALIVE = "DEAD OR ALIVE"
-L.PROF_BOUNTY = "Bounty"
-L.TIP_BOUNTY = "Just for fun, not real gold: %d for every murder and %d for every attack since someone last collected it, plus %d for every friend who has them as their most wanted. Kill them to collect it: everyone who gets the kill shares it."
-L.COL_BOUNTY = "Bounties"
-L.PROF_BOUNTIES = "Bounties"
-L.PROF_BOUNTIES_N = "(%d collected)"
-L.BOUNTY_COLLECTED = "You collected the %s bounty on %s."
-L.BOUNTY_COLLECTED_SHARED = "You collected %s, your share of the bounty on %s (with %s)."
+L.PROF_BOUNTY = "Notoriety"
+L.TIP_BOUNTY = "Just for fun, points not gold: %d for every murder and %d for every attack since someone last claimed it, plus %d for every friend who has them as their most wanted. Kill them to claim it: everyone who gets the kill shares it."
+L.COL_BOUNTY = "Notoriety"
+L.PROF_BOUNTIES = "Notoriety"
+L.PROF_BOUNTIES_N = "(%d claimed)"
+L.BOUNTY_COLLECTED = "You claimed %s notoriety from %s."
+L.BOUNTY_COLLECTED_SHARED = "You claimed %s notoriety from %s, shared with %s."
 L.PROF_NOW = "Now"
 L.PROF_LAST_SEEN = "Last seen"
 L.PROF_ADDON = "Addon"
@@ -454,7 +455,7 @@ L.BTN_GROUP_DECLINE = "Decline"
 L.BTN_GROUP_OPEN = "Group"
 L.BTN_GROUP_INVITATION = "Invitation"
 L.BTN_GROUP_REMOVE = "Remove"
-L.GROUPWIN_INVITED = "You're invited. Join to share your kills, deaths and bounties with this group."
+L.GROUPWIN_INVITED = "You're invited. Join to share your kills, deaths and notoriety with this group."
 L.GROUPWIN_YOU_LEAD = "You lead this group (whoever has been in longest leads)."
 L.GROUPWIN_LED_BY = "Led by %s (whoever has been in longest leads)."
 L.GROUP_INVITED_TAG = "(invited)"
@@ -534,8 +535,13 @@ L.PROF_SHARED_BY = "Shared by"
 -- 0.9: what a number means, on hover. Column headers (by tab: "Kills" means different things on
 -- different tabs) and profile labels.
 L.COLUMN_TIPS = {
+  contracts = {
+    ["Reward"] = "What the poster promised whoever gets the kill. They pay it by trade in the game; the add-on never moves gold.",
+    ["Status"] = "Open: how long it has left (the poster picks 1-30 days). Done: someone got the kill; until it's paid, the poster still owes them.",
+    ["Closed by"] = "Who got the kill. Finished bounties stay on the board.",
+  },
   hitlist = {
-    [L.COL_KILLS] = "How many times they killed you or a friend. * = includes suspected kills (likely, not certain).",
+    [L.COL_KILLS] = "How many times they killed you or a friend. Hover a row to see how many were best guesses.",
     [L.COL_VICTIMS] = "Which of you they killed, and how often.",
   },
   board = {
@@ -543,7 +549,7 @@ L.COLUMN_TIPS = {
     [L.COL_KILLS] = "World PvP kills, all-time, as each player's own add-on reports them.",
     [L.COL_DEATHS] = "World PvP deaths, all-time.",
     [L.COL_KD] = "Kills per death. With no deaths yet, just the kills.",
-    [L.COL_BOUNTY] = "Gold collected from bounties on enemies, all-time (just for fun, not real gold). Empty: they're on a version before 0.9.",
+    [L.COL_BOUNTY] = "Notoriety claimed from enemies they killed, all-time (just for fun: points, not gold). Empty: they're on a version before 0.9.",
   },
 }
 L.PROFILE_TIPS = {
@@ -551,12 +557,12 @@ L.PROFILE_TIPS = {
   [L.PROF_DEATHS] = "World PvP deaths, all-time.",
   [L.PROF_KD] = "Kills per death. With no deaths yet, just the kills.",
   [L.PROF_RANK] = "Place on your friends' Leaderboard, by kills.",
-  [L.PROF_BOUNTIES] = "Gold collected from bounties on enemies, all-time (just for fun, not real gold).",
+  [L.PROF_BOUNTIES] = "Notoriety claimed from enemies they killed, all-time (just for fun: points, not gold).",
   [L.PROF_KILLS_ON_US] = "How many times they killed you or a friend.",
   [L.PROF_DIED_TO_US] = "How many times you or a friend killed them.",
   [L.PROF_ATTACKS] = "How many fights they started with you or a friend.",
   [L.PROF_REVENGE] = "How many times one of you killed them while they were on your hitlist.",
-  [L.PROF_WANTED_BY] = "Friends who have them as their most wanted: each adds to their bounty.",
+  [L.PROF_WANTED_BY] = "Friends who have them as their most wanted: each adds to their notoriety.",
   [L.PROF_NEMESIS] = "The enemy who killed them most.",
 }
 
@@ -564,3 +570,49 @@ L.PROFILE_TIPS = {
 L.SUSPECT_TAG = " (likely)" -- after a killer's name when it's a best guess (the last attacker)
 L.KILLS_UNKNOWN = "Name not readable" -- kill list row: kills whose victim couldn't be named
 L.SIM_FROM_FRIEND = "%s sent test alerts (simulation). They're kept apart from your real data: /fnf sim view to look, /fnf sim clear to remove."
+
+-- the Bounty board (contracts: promises between friends, paid by trade in the game)
+L.TAB_CONTRACTS = "Bounty board"
+L.COL_TARGET = "Target"
+L.COL_REWARD = "Reward"
+L.COL_POSTED_BY = "Posted by"
+L.COL_STATUS = "Status"
+L.COL_POSTED = "Posted"
+L.COL_CLOSED_BY = "Closed by"
+L.CONTRACT_OPEN = "Open, %s left"
+L.CONTRACT_DONE = "Done, not paid yet"
+L.CONTRACT_PAID = "Done, paid"
+L.CONTRACT_SELF = "Done by the poster"
+L.CONTRACT_EXPIRED = "Ran out"
+L.CONTRACT_CLOSED = "Closed %s" -- "Closed 2d ago": the Status of a finished bounty, hover text
+L.BTN_POST_BOUNTY = "Post bounty"
+L.CONTRACT_HINT = "A bounty is a promise to your friends, paid by trade in the game: Friends & Foes never moves gold. Target an enemy player and click Post bounty. Right-click your own to cancel it, or to mark it paid."
+L.CONTRACT_PROMPT = "Bounty on %s: how much, and for how many days? (like 10g 50s 3d; 1-30 days, 7 if you leave it out)"
+L.CONTRACT_NEED_TARGET = "Target an enemy player first, or open their profile."
+L.CONTRACT_NOT_ENEMY = "Bounties are for enemy players only."
+L.CONTRACT_BAD_AMOUNT = "That's not an amount: try 10g, 50s or 10g 50s 3c (up to 10,000 gold)."
+L.CONTRACT_BAD_DAYS = "A bounty stays open for 1 to 30 days: like 10g 3d."
+L.CONTRACT_TOO_MANY = "You have %d open bounties: cancel one first."
+L.CONTRACT_NOT_READY = "Not ready yet: try again in a moment."
+L.CONTRACT_POSTED_YOU = "You put a bounty of %s on %s, open for %d days. Your friends see it on their Bounty board."
+L.CONTRACT_POSTED = "%s put a bounty of %s on %s."
+L.CONTRACT_FEED_POSTED = "%s put a bounty of %s on %s"
+L.CONTRACT_TOAST_DAYS = "Open for %d days"
+L.HEADER_CONTRACT_POSTED = "Bounty posted"
+L.HEADER_CONTRACT_DONE = "Bounty done"
+L.CONTRACT_YOURS_DONE_TITLE = "%s is down: %s fulfilled your bounty"
+L.CONTRACT_YOURS_DONE_TEXT = "Pay them %s by trade, then mark it paid on the Bounty board"
+L.CONTRACT_YOU_DID_TITLE = "You fulfilled %s's bounty on %s"
+L.CONTRACT_YOU_DID_TEXT = "%s, promised: they pay you by trade"
+L.CONTRACT_DONE_TITLE = "%s fulfilled %s's bounty on %s"
+L.OPT_CONTRACT = "Bounty board"
+L.TIP_CONTRACT = "A friend posts a bounty, or a bounty is done: who got the kill, and who pays whom."
+L.CONTRACT_PAID_YOU = "%s marked the %s for %s as paid."
+L.CONTRACT_FEED_DONE = "%s fulfilled %s's bounty on %s (%s)"
+L.CONTRACT_CONFIRM_CANCEL = "Cancel your bounty of %s on %s?"
+L.CONTRACT_CONFIRM_PAID = "Have you paid %s the %s for %s? It's marked paid for everyone."
+L.CONTRACT_CANCELLED = "Bounty cancelled."
+L.CONTRACT_BY = "%s from %s"
+L.PROF_CONTRACTS = "Bounties posted"
+L.BOUNTY_USAGE = "/fnf bounty <amount> [days] - put a bounty on your target, like /fnf bounty 10g 50s 3d (1-30 days, 7 if you leave it out)"
+L.MINIMAP_RESET = "Minimap button back on the minimap."

@@ -72,6 +72,12 @@ function UI.ProfileView(name)
     local by = {}
     for _, n in ipairs(ns.Profile.WantedBy(e.name)) do by[#by + 1] = ns.ClassColored(n) end
     line(L.PROF_WANTED_BY, #by > 0 and ns.JoinNames(by) or DASH)
+    -- the bounty board: open contracts on them (only when there are any)
+    local posted = {}
+    for _, ct in ipairs(ns.Contracts.On(e.name)) do
+      posted[#posted + 1] = L.CONTRACT_BY:format(ns.Contracts.MoneyText(ct.amount), ct.by == ns.me and L.PROF_ME or ns.ClassColored(ct.by))
+    end
+    if #posted > 0 then line(L.PROF_CONTRACTS, table.concat(posted, ", ")) end
     line(L.PROF_LAST_SEEN, lastText(e))
     view.note = h and h.note
     view.onHitlist = h ~= nil
@@ -103,9 +109,9 @@ function UI.ProfileView(name)
   -- bounties collected: yours with how many; a friend's as they report it (0.9 and later)
   if isMe then
     local total, n = ns.Bounty.Mine()
-    line(L.PROF_BOUNTIES, ns.Art.Gold(total) .. (n > 0 and ("  |cff888888" .. L.PROF_BOUNTIES_N:format(n) .. "|r") or ""))
+    line(L.PROF_BOUNTIES, ns.Art.Points(total) .. (n > 0 and ("  |cff888888" .. L.PROF_BOUNTIES_N:format(n) .. "|r") or ""))
   else
-    line(L.PROF_BOUNTIES, p.sbt and ns.Art.Gold(p.sbt) or DASH)
+    line(L.PROF_BOUNTIES, p.sbt and ns.Art.Points(p.sbt) or DASH)
   end
   local nem, times = ns.Profile.Nemesis(p.name)
   line(L.PROF_NEMESIS, nem and (isMe and L.PROF_NEMESIS_ME or L.PROF_NEMESIS_TEXT):format(ns.ClassColored(nem.name, nem.class), times) or DASH)
@@ -196,7 +202,7 @@ function UI.RenderProfile()
       profile.badgeIcon:SetTexCoord(c[1], c[2], c[3], c[4])
     end
     ns.Art.StopCount(profile.bounty)
-    profile.bounty:SetText(ns.Art.Gold(v.bounty or 0))
+    profile.bounty:SetText(ns.Art.Points(v.bounty or 0))
   end
 
   profile.title:SetText(v and v.title or "")
@@ -212,7 +218,7 @@ function UI.RenderProfile()
     profile.values[i]:SetText(value)
     if count and value:match("^%d+$") then ns.Art.CountUp(profile.values[i], tonumber(value)) end
   end
-  if count and poster then ns.Art.CountUp(profile.bounty, v.bounty, ns.Art.Gold) end
+  if count and poster then ns.Art.CountUp(profile.bounty, v.bounty, ns.Art.Points) end
   -- your character, on your own profile
   local model = profile.model
   local withModel = model ~= nil and v ~= nil and v.isMe
@@ -258,6 +264,7 @@ function UI.RenderProfile()
   -- Kill list (n): who they killed, how many in all
   UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Total(ns.Kills.List(profileName))))
   c.kills:Show()
+  c.post:SetShown(v.kind == "enemy" and not ns.viewSim)
   local action = c.action
   action:Show()
   action:Enable()
@@ -481,7 +488,7 @@ function UI.BuildProfile(win)
     -- head-and-shoulders framing (0 = whole body, 1 = face only); set again once the model
     -- has loaded, since the client resets the camera when a unit's model finishes loading
     local function frame(self)
-      pcall(self.SetPortraitZoom, self, 0.6)
+      pcall(self.SetPortraitZoom, self, 0.45)
     end
     local function dress(self)
       pcall(self.SetUnit, self, "player")
@@ -529,6 +536,8 @@ function UI.BuildProfile(win)
   c.row = UI.Row(c, "BOTTOMRIGHT", 0, 0)
   c.action = c.row:Add(button(c, 130, L.BTN_WANTED_SET, function() UI.ProfileAction() end))
   c.kills = c.row:Add(button(c, 90, L.BTN_KILL_LIST, function() UI.ShowKills(UI.ProfileName()) end), 8)
+  -- an enemy: put a bounty on them (the Bounty board)
+  c.post = c.row:Add(button(c, 100, L.BTN_POST_BOUNTY, function() UI.PostBounty(UI.ProfileName()) end), 8)
   c.editLabel = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.editLabel:SetPoint("BOTTOMLEFT", 0, 4)
   c.editLabel:SetText(L.NOTE)

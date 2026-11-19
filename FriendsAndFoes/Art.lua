@@ -205,12 +205,28 @@ end
 -- stop counting (the text is about to be replaced)
 function Art.StopCount(fs) counting[fs] = nil end
 
--- 12500 -> "12,500" with a gold coin after it
-function Art.Gold(n)
-  local s = tostring(math.floor(tonumber(n) or 0))
+-- an icon inside a line of text. Height 0 = the font height, so the icon is as tall as the
+-- line and sits level with the numbers whatever the font size. ICON_Y nudges every icon up (+)
+-- or down (-) by the same amount if the game draws them off-centre.
+Art.ICON_Y = 0
+function Art.Icon(path)
+  return "|T" .. path .. ":0:0:0:" .. Art.ICON_Y .. "|t"
+end
+
+-- 12500 -> "12,500" (never negative): notoriety points
+function Art.Points(n)
+  local s = tostring(ns.Count(n))
   local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
   if out:sub(1, 1) == "," then out = out:sub(2) end
-  return out .. " |TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t"
+  return out
+end
+
+-- 12500 -> "12,500" with a gold coin after it (never negative)
+function Art.Gold(n)
+  local s = tostring(ns.Count(n))
+  local out = s:reverse():gsub("(%d%d%d)", "%1,"):reverse()
+  if out:sub(1, 1) == "," then out = out:sub(2) end
+  return out .. " " .. Art.Icon("Interface\\MoneyFrame\\UI-GoldIcon")
 end
 
 ---------------------------------------------------------------------------
@@ -245,5 +261,5 @@ function Art.RankText(rank)
   if not rank then return "" end
   local m = MEDALS[rank]
   if not m then return tostring(rank) end
-  return m[1] .. rank .. "|r |T" .. m[2] .. ":12:12|t"
+  return m[1] .. rank .. "|r " .. Art.Icon(m[2])
 end

@@ -633,7 +633,7 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 28, "9 alerts + level-ups + gear + 3 places + 9 sounds + style + stacking + message style + chat tab + forget (" .. dropdowns .. ")")
+  check(dropdowns == 30, "10 alerts + level-ups + gear + 3 places + 10 sounds + style + stacking + message style + chat tab + forget (" .. dropdowns .. ")")
   -- one dropdown per event = show + sound
   local kill = settings.FNF_display_kill
   check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
@@ -2817,7 +2817,8 @@ do
   check(not ns.Plain(v.posterSub):find("Enemy", 1, true), "no \"Enemy\" under the name: " .. v.posterSub)
   -- the bounty: 100 per murder, 25 per attack, 250 per friend who has them as most wanted, at least 10
   check(ns.Bounty.Price(0, 0, 0) == 10 and ns.Bounty.Price(4, 4, 0) == 500 and ns.Bounty.Price(1, 0, 2) == 600, "bounty sums")
-  check(ns.Plain(P.bounty:GetText()) == ns.Plain(ns.Art.Gold(v.bounty)), "the bounty shown in gold: " .. ns.Plain(P.bounty:GetText()))
+  check(P.bounty:GetText() == ns.Art.Points(v.bounty) and not P.bounty:GetText():find("|T", 1, true) and P.bountyLabel:GetText() == "Notoriety",
+    "notoriety on the poster: points, no gold coin: " .. ns.Plain(P.bounty:GetText()))
   check(ns.Plain(ns.Art.Gold(12500)):match("^12,500") and ns.Plain(ns.Art.Gold(950)):match("^950") and ns.Plain(ns.Art.Gold(1000000)):match("^1,000,000"), "gold with thousands separators")
   check(P.factionIcon:IsShown(), "the faction crest in the corner")
   -- the portrait: race unknown -> their class crest fills it (no corner badge then)
@@ -3144,7 +3145,7 @@ end
 -- 0.9: hover explanations - the numbers that need it have one, on every tab and profile
 do
   check(ns.UI.ColumnTip("board", ns.L.COL_KD) and ns.UI.ColumnTip("board", ns.L.COL_BOUNTY), "Leaderboard: K/D and Bounties explained")
-  check(ns.UI.ColumnTip("hitlist", ns.L.COL_KILLS):find("*", 1, true), "Hitlist: Kills explains the *")
+  check(ns.UI.ColumnTip("hitlist", ns.L.COL_KILLS):find("best guesses", 1, true), "Hitlist: Kills says where the best guesses are")
   check(ns.UI.ColumnTip("hitlist", ns.L.COL_KILLS) ~= ns.UI.ColumnTip("board", ns.L.COL_KILLS), "the same header means different things on different tabs")
   check(ns.UI.ColumnTip("feed", "Time") == nil, "and nothing where there's nothing to explain")
   local missing = {}
@@ -3303,6 +3304,326 @@ do
   check(not action:IsShown(), "no most wanted: no Clear button")
   rr.players["Want Ed"] = nil
   check(ns.errors == errs, "no errors in the 1.0 fixes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0: no number is ever shown with a minus in front, even from broken or odd saved data
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local future = time() + 900
+  rr.players["Neg Friend"] = { name = "Neg Friend", friend = true, class = "MAGE", level = -5, k = -3, d = -0.0, a = -4,
+    sk = -2, sd = -1, sbt = -250, kx = -1, lastSeen = future, version = ns.VERSION,
+    slain = { ["Neg Vic"] = { n = -2, t = future } }, slainRep = { ["Neg Vic"] = { n = -6, t = future } } }
+  rr.players["Neg Foe"] = { name = "Neg Foe", enemy = true, class = "ROGUE", level = -1, k = -1, d = -2, a = -1, lastSeen = future }
+  rr.hitlist["Neg Foe"] = { name = "Neg Foe", class = "ROGUE", level = -1, kills = -2, attacks = -5, suspect = -1,
+    revenge = -1, victims = { ["Neg Friend"] = true }, kv = { ["Neg Friend"] = -3 }, lastSeen = future, bk0 = 99, ba0 = 99 }
+  local bounty = FriendsAndFoesDB.profile.bounty
+  FriendsAndFoesDB.profile.bounty = { total = -100, count = -2, best = -50 }
+  SHOWN = {}
+  for _, key in ipairs({ "hitlist", "contracts", "board", "friends", "feed", "profile" }) do ns.UI.Show(key) end
+  for _, who in ipairs({ "Neg Friend", "Neg Foe", ns.me }) do
+    ns.UI.ShowPlayer(who)
+    ns.UI.ShowKills(who)
+  end
+  ns.UI.HitTooltip(UIParent, rr.hitlist["Neg Foe"])
+  ns.Minimap.ShowTooltip(UIParent)
+  for _ = 1, 10 do RUN_TICKERS(1) end
+  -- a friend sending odd numbers: toasts, chat lines and the Feed
+  CHAT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = -5 }, "ng1"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Neg Foe", vclass = "ROGUE", vlevel = -1, vguild = "", zone = "Duskwood", streak = -3 }, "ng2"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Neg Foe:ROGUE:-1:", conf = "c", assists = "", ended = -7 }, "ng3"), "WHISPER", 77)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "[Odd Boots]", count = -4, epics = -1 }, "ng4"), "WHISPER", 77)
+  drainToasts()
+  ns.UI.Show("feed")
+  for _, l in ipairs(CHAT) do SHOWN[#SHOWN + 1] = l end
+  local lvl0 = false
+  for _, e in ipairs(ns.Data.RealRealm().feed) do if e.text:find("reached level 0", 1, true) then lvl0 = true end end
+  check(not lvl0, "a level-up with a broken level is dropped, not shown as level 0")
+  local bad, n = {}, 0
+  for _, s in ipairs(SHOWN) do
+    if type(s) == "string" then
+      n = n + 1
+      local p = " " .. ns.Plain(s)
+      if p:find("[^%w]%-[%s,%.]*%d") then bad[#bad + 1] = p end
+    end
+  end
+  SHOWN = nil
+  -- no symbols stuck to numbers either: "2*" and "24+" are plain, the tooltip explains
+  local stuck = {}
+  for _, key in ipairs({ "hitlist", "board", "friends" }) do
+    ns.UI.Show(key)
+    for _, row in ipairs(ns.UI.Rows()) do
+      for _, col in ipairs(ns.UI.TabColumns(key)) do
+        local ok, val = pcall(col[3], row)
+        local s = ok and ns.Plain(tostring(val)) or ""
+        if s:find("%d[%*%+~]") or s:find("[%*%+~]%d") then stuck[#stuck + 1] = key .. ":" .. s end
+      end
+    end
+  end
+  check(#stuck == 0, "no * + or ~ next to a number in any list: " .. table.concat(stuck, ", "))
+  SHOWN = {}
+  rr.hitlist["Neg Foe"].kills, rr.hitlist["Neg Foe"].suspect = 3, 2
+  rr.players["Neg Foe"].level, rr.players["Neg Foe"].lastSeen = 24, time() - 400 * 86400
+  ns.UI.HitTooltip(UIParent, rr.hitlist["Neg Foe"])
+  local tip = table.concat(SHOWN, " / ")
+  check(tip:find("2 of them likely", 1, true) and tip:find("probably higher now", 1, true),
+    "the hitlist tooltip says how many kills were likely, and that an old level is probably higher: " .. tip)
+  check(n > 50 and #bad == 0, "no minus in front of any number (" .. n .. " texts): " .. table.concat(bad, " || "))
+  FriendsAndFoesDB.profile.bounty = bounty
+  rr.players["Neg Friend"], rr.players["Neg Foe"], rr.hitlist["Neg Foe"] = nil, nil, nil
+  ns.UI.Show("hitlist")
+  check(ns.errors == errs, "no errors showing odd numbers (" .. tostring(ns.lastError) .. ")")
+end
+
+-- the Bounty board: contracts are promises in gold, silver and copper, paid by trade
+do
+  local errs = ns.errors
+  local C = ns.Contracts
+  local rr = ns.Data.RealRealm()
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  check(showWas == "toast" and ns.S().sound.contract == true, "Bounty board alerts: toasts with sound by default")
+  ns.S().show.contract = "chat" -- (so the tests can read them)
+  -- days: the poster picks how long it stays open
+  local a1, d1 = C.ParseOffer("10g 50s 3d")
+  local a2, d2 = C.ParseOffer("10g for 3 days")
+  local a3, d3 = C.ParseOffer("10g")
+  local a4, d4 = C.ParseOffer("5s 1 day")
+  check(a1 == 100000 + 5000 and d1 == 3 and a2 == 100000 and d2 == 3 and a3 == 100000 and d3 == 7 and a4 == 500 and d4 == 1,
+    "amount and days: 10g 50s 3d, 10g for 3 days, 10g (7 days), 5s 1 day")
+  check(select(2, C.ParseOffer("10g 31d")) == "CONTRACT_BAD_DAYS" and select(2, C.ParseOffer("10g 0d")) == "CONTRACT_BAD_DAYS"
+    and select(2, C.ParseOffer("3d")) == "CONTRACT_BAD_AMOUNT", "1 to 30 days, and an amount is needed")
+  -- money
+  check(C.ParseMoney("10g 50s 3c") == 105003 and C.ParseMoney("10") == 100000 and C.ParseMoney("50s") == 5000
+    and C.ParseMoney("1.5g") == 15000 and C.ParseMoney("10 g") == 100000 and C.ParseMoney("2G 5S") == 20500,
+    "amounts: 10g 50s 3c, 10 (gold), 50s, 1.5g, 10 g, 2G 5S")
+  check(C.ParseMoney("abc") == nil and C.ParseMoney("0") == nil and C.ParseMoney("-5g") == nil and C.ParseMoney("") == nil
+    and C.ParseMoney("10x") == nil, "not amounts: abc, 0, -5g, empty, 10x")
+  local mt = ns.Plain(C.MoneyText(105003))
+  check(mt:find("10 ", 1, true) and mt:find("50 ", 1, true) and mt:find("3", 1, true) and ns.Plain(C.MoneyText(100000)) == "10 ",
+    "money shows as 10 gold 50 silver 3 copper, and 10 gold alone: " .. mt)
+
+  -- posting: an enemy only, on your hitlist, sent to every friend with the add-on
+  SENT = {}
+  local c, why = C.Post({ name = "Bad Guy", class = "ROGUE", level = 60 }, 100000, 3)
+  RUN_TICKERS(40) -- (sent at the normal pace, behind anything already queued)
+  local sent = false
+  for _, s in ipairs(SENT) do if s.payload:find("^3\tBTY\t") and s.payload:find("Bad Guy", 1, true) then sent = true end end
+  check(c and c.state == "open" and c.days == 3 and rr.hitlist["Bad Guy"] ~= nil and sent, "a bounty: open, target on your hitlist, sent to friends (" .. tostring(why) .. ")")
+  check(select(2, C.Post({ name = "Buddy Pal" }, 100)) == "CONTRACT_NOT_ENEMY" and select(2, C.Post({ name = ns.me }, 100)) == "CONTRACT_NOT_ENEMY",
+    "no bounties on friends or yourself")
+  check(select(2, C.Post({ name = "Bad Guy" }, 0)) == "CONTRACT_BAD_AMOUNT" and select(2, C.Post({ name = "Bad Guy" }, C.AMOUNT_MAX + 1)) == "CONTRACT_BAD_AMOUNT",
+    "no bounty of nothing or over 10,000 gold")
+  local again = C.Post({ name = "Bad Guy" }, 50000)
+  check(again == c and c.amount == 50000 and C.MineOpen() == 1, "posting again on the same enemy changes the amount")
+  for i = 1, 4 do C.Post({ name = "Extra" .. i .. " Foe" }, 100) end
+  check(select(2, C.Post({ name = "Extra5 Foe" }, 100)) == "CONTRACT_TOO_MANY", "at most 5 open bounties")
+
+  -- a friend gets the kill: done, and you are told to pay
+  CHAT = {}
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Bad Guy", vclass = "ROGUE", vlevel = 60, vguild = "", zone = "Duskwood" }, "ct1"), "WHISPER", 77)
+  drainToasts()
+  local told = false
+  for _, l in ipairs(CHAT) do if l:find("fulfilled your bounty", 1, true) then told = true end end
+  check(c.state == "done" and c.killer == "Buddy Pal" and told, "a friend kills the target: done, and you are told to pay them")
+  local k = ns.me .. "/" .. c.id
+  check(C.Cancel(k) == false and C.MarkPaid(k) and c.state == "paid", "a done bounty can't be cancelled; you mark it paid")
+
+  -- a friend's bounty reaches you
+  CHAT = {}
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+  bty({ cid = "abc1", target = "Their Mark:MAGE:50:", amount = 5000, state = "open", killer = "", age = 60, updage = 60, days = 2 }, "bt1")
+  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/abc1"]
+  check(theirs and theirs.days == 2 and C.TimeLeft(theirs) == "1d", "a friend's bounty keeps the days they picked: " .. tostring(theirs and C.TimeLeft(theirs)))
+  local postedLine = false
+  for _, l in ipairs(CHAT) do if l:find("put a bounty of", 1, true) then postedLine = true end end
+  check(theirs and theirs.by == "Buddy Pal" and theirs.amount == 5000 and rr.hitlist["Their Mark"] and rr.hitlist["Their Mark"].sharedBy == "Buddy Pal" and postedLine,
+    "a friend's bounty: on your board and hitlist (shared by them), one chat line")
+  bty({ cid = "abc2", target = "Buddy Pal:PRIEST:31:", amount = 5000, state = "open", killer = "", age = 1, updage = 1 }, "bt2")
+  bty({ cid = "abc3", target = "Odd One:MAGE:50:", amount = -5, state = "open", killer = "", age = 1, updage = 1 }, "bt3")
+  bty({ cid = "abc4", target = "Odd Two:MAGE:50:", amount = 500, state = "weird", killer = "", age = 1, updage = 1 }, "bt4")
+  bty({ cid = "abc5", target = "Sim Mark:MAGE:50:", amount = 500, state = "open", killer = "", age = 1, updage = 1 }, "Sbt5")
+  check(not FriendsAndFoesDB.contracts["Buddy Pal/abc2"] and not FriendsAndFoesDB.contracts["Buddy Pal/abc3"]
+    and not FriendsAndFoesDB.contracts["Buddy Pal/abc4"] and not FriendsAndFoesDB.contracts["Buddy Pal/abc5"],
+    "ignored: a bounty on one of us, a negative amount, an unknown state, a simulated one")
+
+  -- you get the kill on their target: done, you're told you'll be paid
+  CHAT = {}
+  ns.Events.Emit("KILL", { victim = "Their Mark", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" })
+  local youDid = false
+  for _, l in ipairs(CHAT) do if l:find("You fulfilled", 1, true) then youDid = true end end
+  check(theirs.state == "done" and theirs.killer == ns.me and youDid, "your kill on a friend's target: done, they pay you")
+  -- an older "open" from them doesn't undo it; their "paid" does go through
+  bty({ cid = "abc1", target = "Their Mark:MAGE:50:", amount = 5000, state = "open", killer = "", age = 60, updage = 50 }, "bt6")
+  check(theirs.state == "done", "an older message doesn't reopen a done bounty")
+  CHAT = {}
+  bty({ cid = "abc1", target = "Their Mark:MAGE:50:", amount = 5000, state = "paid", killer = ns.me, age = 60, updage = 0 }, "bt7")
+  local paidLine = false
+  for _, l in ipairs(CHAT) do if l:find("as paid", 1, true) then paidLine = true end end
+  check(theirs.state == "paid" and paidLine, "they mark it paid: you're told")
+
+  -- cancelled ones leave the board; the board tab and profiles show the rest
+  C.Cancel(ns.me .. "/" .. C.On("Extra1 Foe")[1].id)
+  local listed = {}
+  for _, r in ipairs(C.List()) do listed[r.name] = r.state end
+  check(listed["Extra1 Foe"] == nil and listed["Extra2 Foe"] == "open" and listed["Bad Guy"] == "paid", "cancelled bounties leave the board")
+  -- finished ones stay, with who closed them (even long after)
+  c.doneAt, c.upd = time() - 60 * 86400, time() - 60 * 86400
+  C.Tidy()
+  local closed
+  for _, r in ipairs(C.List()) do if r.name == "Bad Guy" then closed = r end end
+  local closedCell
+  for _, col in ipairs(ns.UI.TabColumns("contracts")) do
+    if col[1] == ns.L.COL_CLOSED_BY then closedCell = ns.Plain(col[3](closed)) end
+  end
+  check(closed and closedCell == "Buddy Pal", "a finished bounty stays on the board, closed by who got the kill: " .. tostring(closedCell))
+  ns.UI.Show("contracts")
+  check(ns.UI.CurrentTab() == "contracts" and #ns.UI.Rows() >= 4 and ns.UI.Rows()[1].state == "open", "Bounty board tab: open bounties first")
+  local view = ns.UI.ProfileView("Extra2 Foe")
+  local line
+  for _, l in ipairs(view.lines) do if l[1] == ns.L.PROF_CONTRACTS then line = ns.Plain(tostring(l[2])) end end
+  check(line and line:find("from You", 1, true), "an enemy's profile lists the bounties on them: " .. tostring(line))
+  -- old ones run out
+  C.On("Extra2 Foe")[1].t = time() - 8 * 86400
+  C.Tidy()
+  check(#C.On("Extra2 Foe") == 0, "an open bounty runs out after 7 days")
+
+  -- toasts (the default): a friend's bounty going up, and one being done
+  ns.S().show.contract = "toast"
+  local pushed = {}
+  local push = ns.Toast.Push
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  bty({ cid = "abc8", target = "Toast Mark:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4 }, "bt8")
+  ns.Events.Emit("KILL", { victim = "Toast Mark", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" })
+  ns.Toast.Push = push
+  local up, done
+  for _, sp in ipairs(pushed) do
+    if sp.kind == "contract" and sp.header == ns.L.HEADER_CONTRACT_POSTED then up = sp end
+    if sp.kind == "contract" and sp.header == ns.L.HEADER_CONTRACT_DONE then done = sp end
+  end
+  check(up and up.category == "bounty" and up.player == "Toast Mark" and ns.Plain(up.text):find("4 days", 1, true),
+    "a toast when a friend posts a bounty, with how long it's open")
+  check(done and done.player == "Toast Mark" and ns.Plain(done.title):find("You fulfilled", 1, true) and ns.Plain(done.text):find("they pay you", 1, true),
+    "a toast when you fulfil a friend's bounty: they pay you")
+  rr.hitlist["Toast Mark"], rr.players["Toast Mark"] = nil, nil
+  ns.S().show.contract = showWas
+
+  for _, name in ipairs({ "Bad Guy", "Their Mark", "Extra1 Foe", "Extra2 Foe", "Extra3 Foe", "Extra4 Foe" }) do
+    rr.hitlist[name], rr.players[name] = nil, nil
+  end
+  FriendsAndFoesDB.contracts = saved
+  ns.UI.Show("hitlist")
+  check(ns.errors == errs, "no errors on the Bounty board (" .. tostring(ns.lastError) .. ")")
+end
+
+-- the minimap button: shown by default; one hidden automatically before (0.6-0.9) comes back
+do
+  local mm = { hide = true, compartmentDefaulted = true, angle = 210 }
+  ns.Saved.STEPS[8]({ settings = { minimap = mm } })
+  check(mm.hide == false and mm.compartmentDefaulted == nil, "a minimap button hidden automatically before is shown again")
+  check(ns.S().minimap.hide == false, "the minimap button is on by default")
+end
+
+-- the Bounty board: edge cases
+do
+  local errs = ns.errors
+  local C = ns.Contracts
+  local rr = ns.Data.RealRealm()
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+  local function chatHas(text)
+    for _, l in ipairs(CHAT) do if l:find(text, 1, true) then return true end end
+    return false
+  end
+
+  -- junk amounts and days
+  check(C.ParseMoney("inf") == nil and C.ParseMoney("nan") == nil and select(2, C.Post({ name = "Edge Foe" }, 0 / 0)) == "CONTRACT_BAD_AMOUNT"
+    and select(2, C.Post({ name = "Edge Foe" }, 100, 0 / 0)) == "CONTRACT_BAD_DAYS", "no inf or nan amounts or days")
+  check(C.DaysOf({ days = 0 / 0 }) == 7 and C.DaysOf({ days = 99 }) == 7 and C.DaysOf({ days = 3 }) == 3, "odd saved days count as 7")
+
+  -- a kill caught up on at login that happened before the bounty was posted doesn't count
+  local c = C.Post({ name = "Edge Foe", class = "ROGUE" }, 500, 3)
+  ns.eventTime = c.t - 3600
+  check(C.OnKill("Buddy Pal", "Edge Foe") == 0 and c.state == "open", "a kill from before the bounty doesn't fulfil it")
+  -- one from while it was open does, even if it has run out since
+  c.t = time() - 4 * 86400
+  C.Tidy()
+  check(c.state == "expired", "(ran out)")
+  ns.eventTime = c.t + 86400
+  check(C.OnKill("Buddy Pal", "Edge Foe") == 1 and c.state == "done" and c.doneAt == ns.eventTime,
+    "a kill caught up on later, from while it was open, fulfils it at the time it happened")
+  ns.eventTime = nil
+
+  -- posting again starts the days again from now
+  local c2 = C.Post({ name = "Edge Two" }, 500, 2)
+  c2.t = time() - 86400 * 1.9
+  C.Post({ name = "Edge Two" }, 900, 3)
+  check(c2.amount == 900 and c2.days == 3 and C.TimeLeft(c2) == "3d",
+    "posting again: the new amount, open for the new days from now: " .. C.TimeLeft(c2))
+  check(time() - c2.t < 5, "posting again counts from now")
+
+  -- a bounty on a bare first name matches the full name of who died, and takes it
+  local c3 = C.Post({ name = "Firstonly" }, 500, 3)
+  check(c3 and C.OnKill("Buddy Pal", "Firstonly Fullname") == 1 and c3.target == "Firstonly Fullname" and c3.state == "done",
+    "a bounty on a first name is fulfilled by a kill of that first name's full name")
+
+  -- a friend's bounty: the poster's word on who got it wins; a cancel never undoes a kill
+  bty({ cid = "e1", target = "Edge Three:MAGE:50:", amount = 700, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "edg1")
+  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/e1"]
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Edge Three", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" }, "edg2"), "WHISPER", 77)
+  check(theirs.state == "paid" and theirs.killer == "Buddy Pal", "(the poster got them: closed, nothing to pay)")
+  bty({ cid = "e2", target = "Edge Four:MAGE:50:", amount = 700, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "edg3")
+  local four = FriendsAndFoesDB.contracts["Buddy Pal/e2"]
+  ns.Events.Emit("KILL", { victim = "Edge Four", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" })
+  check(four.state == "done" and four.killer == ns.me, "(you got them)")
+  bty({ cid = "e2", target = "Edge Four:MAGE:50:", amount = 700, state = "cancelled", killer = "", age = 60, updage = 0, days = 5 }, "edg4")
+  check(four.state == "done", "a cancel from the poster (who hadn't heard of the kill) doesn't undo it")
+  bty({ cid = "e2", target = "Edge Four:MAGE:50:", amount = 700, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 5 }, "edg5")
+  check(four.killer == "Alice Wonder", "two of you got honor for the same death: the poster's word on who closed it wins")
+
+  -- a friend coming online sends all their bounties again: no toasts for old news
+  ns.S().show.contract = "toast"
+  local pushed = 0
+  local push = ns.Toast.Push
+  ns.Toast.Push = function(spec) if spec.kind == "contract" then pushed = pushed + 1 end end
+  bty({ cid = "e3", target = "Edge Five:MAGE:50:", amount = 700, state = "open", killer = "", age = 3 * 86400, updage = 3 * 86400, days = 5 }, "edg6")
+  ns.Toast.Push = push
+  check(pushed == 0 and FriendsAndFoesDB.contracts["Buddy Pal/e3"] ~= nil, "an old bounty from a friend who just came online: on the board, no toast")
+  ns.S().show.contract = "chat"
+
+  -- a friend who ran out here, then the poster posts it again: open again
+  bty({ cid = "e4", target = "Edge Six:MAGE:50:", amount = 700, state = "open", killer = "", age = 3 * 86400, updage = 3 * 86400, days = 2 }, "edg7")
+  local six = FriendsAndFoesDB.contracts["Buddy Pal/e4"]
+  C.Tidy()
+  check(six.state == "expired", "(ran out here)")
+  bty({ cid = "e4", target = "Edge Six:MAGE:50:", amount = 900, state = "open", killer = "", age = 0, updage = 0, days = 2 }, "edg8")
+  check(six.state == "open" and six.amount == 900, "posted again by the poster: open again here too")
+
+  -- greeting a friend: open, unpaid and recently finished ones only
+  local old = C.Post({ name = "Edge Seven" }, 100, 1)
+  old.state, old.killer, old.upd = "paid", "Buddy Pal", time() - 30 * 86400
+  RUN_TICKERS(80) -- (what was sent when it was posted)
+  SENT = {}
+  ns.Contracts.Greet({ "Buddy Pal" })
+  RUN_TICKERS(80)
+  local sentOld, sentOpen = false, false
+  for _, s in ipairs(SENT) do
+    if s.payload:find("Edge Seven", 1, true) then sentOld = true end
+    if s.payload:find("Edge Two", 1, true) then sentOpen = true end
+  end
+  check(sentOpen and not sentOld, "a friend coming online gets your open bounties, not long-finished ones")
+
+  for _, name in ipairs({ "Edge Foe", "Edge Two", "Firstonly", "Firstonly Fullname", "Edge Three", "Edge Four", "Edge Five", "Edge Six", "Edge Seven" }) do
+    rr.hitlist[name], rr.players[name] = nil, nil
+  end
+  FriendsAndFoesDB.contracts = saved
+  ns.S().show.contract = showWas
+  check(ns.errors == errs, "no errors in the Bounty board edge cases (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

@@ -43,7 +43,7 @@ WoW Forever add-on (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`
 - **Throttle:** one token bucket per route (8 tokens, 1 per second) with three priorities: PvP,
   then normal, then bulk. The queue holds at most 400; bulk is dropped first, PvP never.
 - **Simulation:** IDs starting with `S` are simulated. They go to a separate store
-  (`FriendsAndFoesDB.sim`), never to real data and never to bounties. Your own `/fnf sim` switches
+  (`FriendsAndFoesDB.sim`), never to real data, notoriety or the Bounty board. Your own `/fnf sim` switches
   the window to it. A friend's simulated events don't; one chat line says they arrived.
 - **Text from friends** is cleaned before use (`Events.Clean`, `ns.SafeLink`, `ns.CleanName`):
   zones and guilds become plain text, classes must be class tokens, names with escape codes are
@@ -66,6 +66,7 @@ WoW Forever add-on (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`
 | GRP / GST | shared groups: membership / relayed stats | see Groups |
 | KLQ / KLA | kill list request / answer | who / who, total, list |
 | RLQ / RLY | relayed catch-up request / one relayed event | window, names / origin, …, data |
+| BTY | one of your bounty board contracts (posted, changed, done; and to each friend who comes online) | cid, target, amount (copper), state, killer, age, updage, days |
 
 LVL, LOOT, GEAR, ATK, ENG, DIE and KILL also end with `ago` (seconds since it happened, when
 replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:guild`.
@@ -129,17 +130,35 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
   lists 250 victims each, debug log 2,000 lines (it switches off after 7 days), error log 50.
 - **Upgrades:** `Saved.STEPS` run once each, in order (`dataVersion`).
 
-## Profiles, Leaderboard, bounties
+## Profiles, Leaderboard, notoriety
 - **PRO:** each client is the authority on its own numbers. It sends the current character's
   all-time kills and deaths (if it shares PvP), most wanted, zone and status (if it shares
-  "where I am"), and bounties collected. Friends keep the latest one.
+  "where I am"), and notoriety claimed. Friends keep the latest one.
 - **Leaderboard:** you and your friends (your picks, if any), one row per character, ranked by
   kills, then fewer deaths.
-- **Bounties (just for fun):** an enemy's open bounty is 100 per murder + 25 per attack since the
+- **Notoriety (just for fun, points not gold; called "bounty" in the code, saved data and
+  messages):** an enemy's notoriety is 100 per murder + 25 per attack since the
   last collection, + 250 for each friend who has them as most wanted (paid once per friend), at
   least 10. Any kill of them by you or a friend collects it. Kills within 60 s share it equally;
   your share is settled after 15 s. Each client counts on its own, so the split is best-effort.
   Totals are account-wide and self-reported, like K/D.
+
+## Bounty board (`Contracts.lua`)
+- A contract is a player's own promise: a price in gold, silver and copper on an enemy player.
+  The add-on never moves gold; the poster pays by trade in the game and marks it paid. In-game
+  gold only, between Battle.net friends.
+- Enemy players only (never anyone on your side). Posting puts the target on your hitlist, and on
+  each friend's when it reaches them (shared by the poster).
+- Up to 5 open per player, at most 10,000 gold each, open for the days the poster picks (1-30,
+  default 7). Finished ones (someone got the kill) stay on the board with who closed them (the
+  oldest go past 200); cancelled and run-out ones leave after 14 days.
+- Toasts (alert kind "contract", Options -> Alerts): a friend posts one; one is done (yours:
+  pay them; theirs and you got it: they pay you; otherwise who got it).
+- Sent to every friend with the add-on (not only the alert list), like groups and kill lists.
+  Keyed by poster and id, so only the poster can change one. States only move forward: open,
+  done, paid (or cancelled). Every client marks a contract done when it hears of a kill on the
+  target by you or a friend; the poster's client confirms it to everyone. A kill by the poster
+  closes it with nothing to pay.
 
 ## Shared groups (`Groups.lua`)
 - Named groups whose stats members follow together. Members are Battle.net **accounts** (keyed by
@@ -168,12 +187,14 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
 - **Hitlist marks:** a skull on hitlist players' nameplates and their record in the tooltip.
 
 ## Window
-- Tabs: **Hitlist**, **Leaderboard**, **Friends**, **Feed**, **Profile** (always yours). Clicking
+- Tabs: **Hitlist**, **Bounty board**, **Leaderboard**, **Friends**, **Feed**, **Profile** (always yours). Clicking
   any name opens their profile inside the current tab, with Back. A friend's profile has their
   numbers, nemesis, where they are now and recent PvP. An enemy's is their Wanted poster with
   bounty, note and most wanted. Kill lists open from a profile.
 - The old tab names `players` and `enemies` open the Hitlist.
 - **Group window:** members, invites, Join/Leave, opened from the Leaderboard.
+- **Minimap button:** on by default, on the rim of the minimap (sized to it, square minimaps
+  too). Drag it round; Shift-drag it anywhere; `/fnf minimap reset` puts it back.
 - **Options:** the game's Settings panel (Alerts, Where, Sounds, Appearance, Friends & sharing,
   Advanced), with a fallback panel if that API is missing.
 - Slash commands: see the README.

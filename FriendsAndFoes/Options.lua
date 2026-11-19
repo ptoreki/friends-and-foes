@@ -13,7 +13,7 @@ local beta, capsText, modeText
 local EVENTS = {
   { "attacked", L.OPT_ATTACKED }, { "engage", L.OPT_ENGAGE }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL },
   { "sighting", L.OPT_SIGHTING }, { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT },
-  { "gear", L.OPT_GEAR }, { "share", L.OPT_SHARE },
+  { "gear", L.OPT_GEAR }, { "share", L.OPT_SHARE }, { "contract", L.OPT_CONTRACT },
 }
 
 -- what you share with friends: { key in settings.share, label, tooltip }
@@ -253,6 +253,7 @@ local EVENT_ROWS = {
   { "kill", L.OPT_KILL, L.TIP_KILL }, { "sighting", L.OPT_SIGHTING, L.TIP_SIGHTING },
   { "level", L.OPT_LEVEL, L.TIP_LEVEL }, { "loot", L.OPT_LOOT, L.TIP_LOOT },
   { "gear", L.OPT_GEAR, L.TIP_GEAR }, { "share", L.OPT_SHARE, L.TIP_SHARE },
+  { "contract", L.OPT_CONTRACT, L.TIP_CONTRACT },
 }
 
 -- one dropdown per event = show + sound together
@@ -382,7 +383,7 @@ function Options.BuildNative()
   checkbox(snd, "sound_ui", S().sound, "ui", L.OPT_UI_SOUNDS, D.sound.ui, L.TIP_UI_SOUNDS)
   header(sndLayout, L.SOUNDS_HEADER, L.TIP_SOUNDS_HEADER)
   local CATEGORY = { attacked = "pvp", engage = "pvp", died = "pvp", kill = "pvp", sighting = "sighting",
-    level = "progress", loot = "progress", gear = "progress", share = "progress" }
+    level = "progress", loot = "progress", gear = "progress", share = "progress", contract = "bounty" }
   for _, row in ipairs(EVENT_ROWS) do
     local kind = row[1]
     local list = { { "default", L.SND_DEFAULT } }

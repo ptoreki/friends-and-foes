@@ -18,6 +18,7 @@ local EDGE = {
   pvp = { 0.9, 0.2, 0.15 },       -- red
   progress = { 1.0, 0.8, 0.1 },   -- gold
   sighting = { 0.7, 0.3, 1.0 },   -- purple
+  bounty = { 0.95, 0.6, 0.15 },   -- old gold: the Bounty board
 }
 
 -- soft, familiar game sounds
@@ -26,6 +27,7 @@ local SOUNDS = {
   pvp = SK.UI_RAID_BOSS_WHISPER_WARNING or 37666, -- short alert, quieter than the raid-warning horn
   progress = SK.UI_BNET_TOAST or 18019,          -- the Battle.net friend toast chime
   sighting = SK.TELL_MESSAGE or 3081,            -- the whisper ping
+  bounty = SK.LOOT_WINDOW_COIN_SOUND or 120,      -- coins
 }
 
 -- Sounds a player can pick per event (Options -> Sounds). Built-in game sounds only.
@@ -191,7 +193,7 @@ THEMES.minimal = {
 -- Achievement: WoW's own achievement-alert artwork. A small header says what kind of news it
 -- is, then who did what, then the details. Tinted red for PvP and purple for sightings.
 local ACH_W, ACH_H = 300, 80
-local ACH_TINT = { pvp = { 1, 0.62, 0.55 }, progress = { 1, 1, 1 }, sighting = { 0.85, 0.7, 1 } }
+local ACH_TINT = { pvp = { 1, 0.62, 0.55 }, progress = { 1, 1, 1 }, sighting = { 0.85, 0.7, 1 }, bounty = { 1, 0.85, 0.55 } }
 
 local function artOrFallback(tex, file, l, r, top, b, fallback)
   -- SetTexture returns false when the file doesn't exist in this client

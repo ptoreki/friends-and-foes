@@ -15,11 +15,17 @@ epic loot and world PvP fights, and put a bounty on everyone who ganks your grou
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
   - Entries fade after 90 days unseen.
-- **Wanted posters & bounties:** an enemy's profile is a Wanted poster: their face (once you've
-  seen them), what they've done to your group, and a bounty in gold (just for fun). It grows with
-  every murder and attack; whoever kills them collects it, shared equally with the friends who
-  get the kill too.
-- **Leaderboard:** world PvP kills, deaths, K/D and bounties collected for you and your friends,
+- **Wanted posters & notoriety:** an enemy's profile is a Wanted poster: their face (once you've
+  seen them), what they've done to your group, and their notoriety (points, just for fun). It
+  grows with every murder and attack; whoever kills them claims it, shared equally with the
+  friends who get the kill too.
+- **Bounty board:** put a bounty on an enemy player yourself, in gold, silver and copper, open
+  for as many days as you pick (1-30). It goes on your hitlist and your friends' Bounty board,
+  with a toast. It's a promise between friends: when one of you kills them, everyone gets a
+  toast, you pay whoever did it by trade in the game, then mark it paid. Finished bounties stay
+  on the board with who closed them. The add-on never moves gold, and it's only ever in-game
+  gold. Up to 5 open at a time.
+- **Leaderboard:** world PvP kills, deaths, K/D and notoriety claimed for you and your friends,
   all-time. Each player reports their own numbers.
 - **Shared groups:** named groups whose stats you follow together, with group totals. Members
   pass each other's numbers along, so not everyone needs to be friends with everyone.
@@ -48,7 +54,8 @@ Everything is set up in **Options → AddOns → Friends & Foes**:
 - **By hand:** download the zip from [Releases](https://github.com/ptoreki/friends-and-foes/releases)
   and extract it into `World of Warcraft\_forever_\Interface\AddOns\`.
 
-Then log in and type `/fnf`, or use the minimap's addon menu.
+Then log in and type `/fnf`, or click the minimap button (drag it round the minimap, or
+Shift-drag it anywhere).
 
 **Your friends need the addon too.** It works with Battle.net friends who are online in WoW Forever
 on your faction. You don't need to group, share a server, or be in the same zone.
@@ -56,7 +63,9 @@ on your faction. You don't need to group, share a server, or be in the same zone
 ## Commands
 | Command | What it does |
 |---|---|
-| `/fnf` | Open or close the window (Hitlist, Leaderboard, Friends, Feed, Profile) |
+| `/fnf` | Open or close the window (Hitlist, Bounty board, Leaderboard, Friends, Feed, Profile) |
+| `/fnf bounty <amount> [days]` | Put a bounty on your target, like `/fnf bounty 10g 50s 3d` (7 days if you leave it out) |
+| `/fnf minimap reset` | Put the minimap button back on the minimap |
 | `/fnf board` | Open the Leaderboard |
 | `/fnf groups [new\|invite\|join\|decline\|leave\|remove ...]` | List your shared groups, or manage one (see `/fnf groups`) |
 | `/fnf profile [name]` | Open a profile (yours if no name) |

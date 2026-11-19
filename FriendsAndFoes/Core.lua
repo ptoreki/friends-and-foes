@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.9.2"
+ns.VERSION = "0.9.3"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -15,7 +15,7 @@ local DEFAULTS = {
   -- where: zone, AFK, in a fight; relay: friends may pass your events on to your other friends
   share = { level = true, loot = true, gear = true, pvp = true, where = true, relay = true },
   -- how each kind shows: "toast" | "chat" | "off"
-  show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", share = "chat" },
+  show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", share = "chat", contract = "toast" },
   milestones = true, -- level 60, looted epic BoE, revenge and kill streaks always pop up as a toast
   levelEvery = 1,    -- show friends' level-ups: every level (1), every 5, every 10, or only 60
   gearMin = 3,       -- "new gear" alerts from this quality up: 3 = blue, 4 = epic
@@ -30,18 +30,18 @@ local DEFAULTS = {
   weekly = true,     -- weekly PvP summary in chat
   -- which sound each event plays ("default" = the built-in choice for that kind of event)
   soundPick = { attacked = "alarm", engage = "default", died = "raidwarning", kill = "levelup", sighting = "mapping",
-    level = "default", loot = "default", gear = "default", share = "default" },
+    level = "default", loot = "default", gear = "default", share = "default", contract = "default" },
   mark = true,        -- skull next to hitlist players' nameplates
   markTooltip = true, -- hitlist record in hitlist players' tooltips
   forgetAfter = 0, -- days unseen before a hitlist entry (without a note) is removed; 0 = never
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
-  sound = { enabled = true, ui = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false },
+  sound = { enabled = true, ui = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false, contract = true },
   dnd = { combat = false },
   -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
   where = { party = "hold", raid = "hold", pvp = "hold" },
   -- where your own PvP (attacks, deaths, kills, sightings) is tracked
   track = { world = true, pvp = false },
-  minimap = { hide = false, angle = 210 }, -- hidden by default where the minimap addon menu exists
+  minimap = { hide = false, angle = 210 }, -- shown; drag round the rim, Shift-drag anywhere
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
 }
@@ -409,7 +409,7 @@ function ns.DecodeUnit(s)
   return {
     name = ns.CleanName(p[1]),
     class = p[2] and p[2]:match("^%u+$") or nil,
-    level = tonumber(p[3]),
+    level = tonumber(p[3]) and ns.Count(p[3]),
     guild = p[4] and ns.Profile and ns.Profile.CleanText(p[4], 64) or nil,
   }
 end

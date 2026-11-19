@@ -88,6 +88,16 @@ local STEPS = {
       end
     end
   end,
+  -- 8 (1.0): the minimap button is on by default; 0.6-0.9 hid it once where the minimap's addon
+  -- menu exists, so that automatic hiding is undone (a button you hid yourself before that stays
+  -- hidden only if it was never auto-hidden)
+  function(db)
+    local mm = db.settings and db.settings.minimap
+    if mm and mm.compartmentDefaulted then
+      mm.hide = false
+      mm.compartmentDefaulted = nil
+    end
+  end,
 }
 Saved.STEPS = STEPS
 

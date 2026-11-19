@@ -12,6 +12,7 @@ local ROWS, ROW_H = 15, 20
 local MAX_COLS = 7
 
 local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, prevPage, nextPage
+local contractBar -- the Bounty board's bottom row
 local groupBar -- Leaderboard: board picker + group buttons
 local pageRow -- bottom right: [<] 1-15 of 40 [>] (arrows only when there's more than a page)
 -- Back (Profile page and Kill list): the places you came through, newest last
@@ -67,11 +68,11 @@ local function lastText(e)
   return ns.Ago(e.lastSeen) .. (e.lastZone and (" - " .. e.lastZone) or "")
 end
 
--- a level seen long ago is probably higher now: "24+" in grey
+-- a level seen long ago is probably higher now: in grey (the hitlist tooltip says so)
 local function lvl(e)
   local n = ns.Count(e.level)
   if n <= 0 then return "?" end
-  if not e.pending and not e.friend and ns.Data.LevelIsOld(e) then return "|cff888888" .. n .. "+|r" end
+  if not e.pending and not e.friend and ns.Data.LevelIsOld(e) then return "|cff888888" .. n .. "|r" end
   return tostring(n)
 end
 local C = ns.Count
@@ -96,9 +97,9 @@ local function classIcon(class)
 end
 local function nameCol(e) return classIcon(e.class) .. ns.ClassColored(e.name, e.class) end
 
+-- just the number (how many of them were best guesses is in the row tooltip)
 local function hitKills(e)
   local s = tostring(C(e.kills))
-  if C(e.suspect) > 0 then s = s .. "*" end
   if C(e.revenge) > 0 then s = s .. "  |cff33ff33" .. L.REVENGE_SHORT:format(C(e.revenge)) .. "|r" end
   return s
 end
@@ -253,14 +254,39 @@ local BOARD_COLS = {
   -- bounties collected, in gold (empty: invited, or a friend on a version before 0.9)
   { L.COL_BOUNTY, 90, function(r)
     if r.invited or r.bounty == nil then return "" end
-    return ns.Art.Gold(r.bounty)
+    return ns.Art.Points(r.bounty)
   end, function(r) return r.bounty or -1 end },
   { L.COL_NOW, 146, boardNow, function(r) return r.me and math.huge or (r.lastSeen or 0) end },
+}
+
+-- Bounty board: contracts you and your friends put on enemy players (Contracts.lua)
+local STATE_ORDER = { open = 4, done = 3, paid = 2, expired = 1 }
+local function contractStatus(r)
+  if r.state == "open" then return "|cff33ff33" .. L.CONTRACT_OPEN:format(ns.Contracts.TimeLeft(r)) .. "|r" end
+  if r.state == "done" then return "|cffffd100" .. L.CONTRACT_DONE .. "|r" end
+  if r.state == "paid" and r.killer and r.killer == r.by then return GREY .. L.CONTRACT_SELF .. "|r" end
+  if r.state == "paid" then return GREY .. L.CONTRACT_PAID .. "|r" end
+  return GREY .. L.CONTRACT_EXPIRED .. "|r"
+end
+-- who got the kill (finished bounties stay on the board with it)
+local function closedBy(r)
+  if not r.killer or (r.state ~= "done" and r.state ~= "paid") then return "" end
+  return r.killer == ns.me and L.PROF_ME or (classIcon((ns.Data.FindPlayer(r.killer) or {}).class) .. ns.ClassColored(r.killer))
+end
+local CONTRACT_COLS = {
+  { L.COL_TARGET, 150, nameCol, byName },
+  { L.COL_REWARD, 110, function(r) return ns.Contracts.MoneyText(r.amount) end, function(r) return r.amount or 0 end },
+  { L.COL_POSTED_BY, 120, function(r) return r.mine and L.PROF_ME or ns.ClassColored(r.by) end, function(r) return (r.by or ""):lower() end },
+  { L.COL_CLOSED_BY, 120, closedBy, function(r) return (r.killer or ""):lower() end },
+  { L.COL_STATUS, 115, contractStatus, function(r) return (STATE_ORDER[r.state] or 0) * 1e10 + (r.doneAt or r.t or 0) end },
+  { L.COL_POSTED, 55, function(r) return GREY .. ns.Ago(r.t) .. "|r" end, function(r) return r.t or 0 end },
 }
 
 local TABS = {
   { key = "hitlist", label = L.TAB_HITLIST, columns = HITLIST_COLS,
     fetch = function() return sortedValues(R().hitlist, function(h) return not isFriendRecord(h.name) end) end },
+  { key = "contracts", label = L.TAB_CONTRACTS, columns = CONTRACT_COLS, defaultSort = { col = 5, desc = true },
+    fetch = function() return ns.viewSim and {} or ns.Contracts.List() end },
   { key = "board", label = L.TAB_BOARD, columns = BOARD_COLS, defaultSort = { col = 3, desc = true },
     fetch = function()
       local g = boardView ~= "friends" and ns.Groups.Get(boardView)
@@ -356,6 +382,10 @@ function UI.HitTooltip(owner, h)
   GameTooltip:SetOwner(owner, "ANCHOR_CURSOR")
   GameTooltip:AddLine(ns.ClassColored(h.name, h.class) .. (h.guild and ("  |cff888888<" .. h.guild .. ">|r") or ""))
   GameTooltip:AddLine(L.HIT_TIP_RECORD:format(ns.Count(h.kills)), 1, 1, 1)
+  local likely = math.min(ns.Count(h.suspect), ns.Count(h.kills))
+  if likely > 0 then GameTooltip:AddLine(L.HIT_TIP_LIKELY:format(likely), 0.7, 0.7, 0.7, true) end
+  local p = ns.Data.ViewRealm().players[h.name]
+  if ns.Count((p or h).level) > 0 and ns.Data.LevelIsOld(p or h) then GameTooltip:AddLine(L.HIT_TIP_LEVEL_OLD, 0.7, 0.7, 0.7, true) end
   local kills = ns.Data.KillsOn(h)
   if #kills > 0 then
     GameTooltip:AddLine(" ")
@@ -447,13 +477,18 @@ local function refreshShareStatus()
 end
 
 local function refreshDetail()
+  contractBar:SetShown(currentTab == "contracts")
+  if currentTab == "contracts" then
+    contractBar.post:SetEnabled(not ns.viewSim)
+    contractBar.label:SetText(L.CONTRACT_HINT)
+  end
   if currentTab ~= "hitlist" then
     detail:Hide()
     return
   end
   detail:Show()
   refreshShareStatus()
-  detail.label:SetText(L.HITLIST_HINT .. "  |cff888888" .. L.SUSPECT_HINT .. "|r")
+  detail.label:SetText(L.HITLIST_HINT)
 end
 
 
@@ -994,6 +1029,8 @@ local function build()
           UI.RemovePlayer(e.name)
         elseif e and currentTab == "board" and currentGroup() then
           UI.RemoveFromGroup(e.key, e.name)
+        elseif e and currentTab == "contracts" and e.mine then
+          UI.ContractAction(e)
         end
         return
       end
@@ -1058,6 +1095,20 @@ local function build()
   detail.label:SetJustifyH("LEFT")
   if detail.label.SetMaxLines then detail.label:SetMaxLines(2) end
 
+  -- Bounty board bottom row: what it is on the left, [Post bounty] on the right
+  contractBar = CreateFrame("Frame", nil, win)
+  contractBar:SetPoint("BOTTOMLEFT", 16, 30)
+  contractBar:SetPoint("BOTTOMRIGHT", -16, 30)
+  contractBar:SetHeight(46)
+  local contractRow = UI.Row(contractBar, "BOTTOMRIGHT", 0, 0)
+  contractBar.post = contractRow:Add(button(contractBar, 120, L.BTN_POST_BOUNTY, function() UI.PostBounty() end))
+  contractBar.label = contractBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  contractBar.label:SetPoint("BOTTOMLEFT", 0, 4)
+  contractBar.label:SetPoint("RIGHT", contractBar.post, "LEFT", -16, 0)
+  contractBar.label:SetJustifyH("LEFT")
+  if contractBar.label.SetMaxLines then contractBar.label:SetMaxLines(3) end
+  contractBar:Hide()
+
   profile = UI.BuildProfile(win)
 
 
@@ -1065,6 +1116,65 @@ local function build()
   C_Timer.NewTicker(1, function()
     if win:IsShown() and currentTab == "hitlist" then ns.Try("share-status", refreshShareStatus) end
   end)
+end
+
+---------------------------------------------------------------------------
+-- the Bounty board: post a bounty, cancel yours, mark it paid
+---------------------------------------------------------------------------
+-- the enemy to put a bounty on: name (an enemy you know, e.g. from their profile), or your target
+local function bountyTarget(name)
+  if name then
+    local e = ns.Data.FindPlayer(name) or ns.Data.FindHit(name) or { name = name }
+    return { name = e.name, class = e.class, level = e.level, guild = e.guild }
+  end
+  local info = ns.PvP.ReadEnemy("target")
+  if info and info.name then return info end
+end
+
+-- amountText: the amount already typed (/fnf bounty 10g); otherwise you're asked for it
+function UI.PostBounty(name, amountText)
+  if ns.viewSim then return false end
+  local u = bountyTarget(name)
+  if not u then
+    why("CONTRACT_NEED_TARGET")
+    return false
+  end
+  local function post(text)
+    local amount, days = ns.Contracts.ParseOffer(text)
+    if not amount then
+      why(days)
+      return
+    end
+    local c, reason = ns.Contracts.Post(u, amount, days)
+    if not c then
+      say((L[reason] or tostring(reason)):format(ns.Contracts.OPEN_MAX))
+      return
+    end
+    say(L.CONTRACT_POSTED_YOU:format(ns.Contracts.MoneyText(c.amount), ns.ClassColored(c.target, c.class), ns.Contracts.DaysOf(c)))
+    UI.Refresh()
+  end
+  if amountText and amountText ~= "" then
+    post(amountText)
+  else
+    UI.Prompt(L.CONTRACT_PROMPT:format(ns.ClassColored(u.name, u.class)), post)
+  end
+  return true
+end
+
+-- right-click on your own bounty: cancel it (open), or mark it paid (done)
+function UI.ContractAction(r)
+  local money, target = ns.Contracts.MoneyText(r.amount), ns.ClassColored(r.name, r.class)
+  if r.state == "open" then
+    UI.Confirm(L.CONTRACT_CONFIRM_CANCEL:format(money, target), function()
+      if ns.Contracts.Cancel(r.key) then say(L.CONTRACT_CANCELLED) end
+      UI.Refresh()
+    end)
+  elseif r.state == "done" then
+    UI.Confirm(L.CONTRACT_CONFIRM_PAID:format(ns.ClassColored(r.killer or "?"), money, target), function()
+      ns.Contracts.MarkPaid(r.key)
+      UI.Refresh()
+    end)
+  end
 end
 
 function UI.ShareHitlist()
