@@ -7,7 +7,7 @@ ns.Toast = Toast
 -- Compact, quiet toasts: one line, a thin coloured edge, gone in a few seconds.
 -- toasts on screen at once: Options -> Appearance (1-4)
 local function maxVisible() return math.max(1, math.min(4, tonumber(ns.S().toastMax) or 2)) end
-local DURATION, DURATION_PVP = 3, 5
+local PVP_EXTRA = 2 -- PvP toasts stay this much longer than the base (Core.lua: DEFAULT_TOAST_DURATION)
 local FADE_IN, FADE = 0.2, 0.5
 local HEIGHT, WIDTH, GAP = 26, 420, 4 -- HEIGHT is the one-line minimum; long text wraps
 local MAX_LINES = 3
@@ -48,14 +48,24 @@ Toast.SOUND_CHOICES = {
 local SOUND_BY_KEY = {}
 for _, c in ipairs(Toast.SOUND_CHOICES) do SOUND_BY_KEY[c[1]] = c[3] end
 
--- the sound an event plays: the player's pick, else the default for its kind
+-- the sound an alert plays: the pick for its kind of sound. Fights have two: a friend in trouble
+-- (attacked, killed: urgent) and a friend's kill (good news), so the urgent ones never sound like
+-- good news. On "Default", attacked, killed and a kill each keep their own built-in sound; the
+-- other kinds play their category's.
+local SOUND_OF_KIND = { attacked = "trouble", died = "trouble", engage = "trouble", kill = "victory" }
+local KIND_SOUND = { attacked = "alarm", died = "raidwarning", kill = "levelup" }
 function Toast.SoundFor(kind, category)
-  local pick = kind and ns.S().soundPick and ns.S().soundPick[kind]
+  local key = (kind and SOUND_OF_KIND[kind]) or category
+  local pick = key and ns.S().soundPick and ns.S().soundPick[key]
+  if (not pick or pick == "default") and kind then pick = KIND_SOUND[kind] end
   return (pick and SOUND_BY_KEY[pick]) or SOUNDS[category] or SOUNDS.progress
 end
+Toast.SOUND_OF_KIND = SOUND_OF_KIND
 
-function Toast.PlayChoice(key, category)
-  local id = SOUND_BY_KEY[key] or SOUNDS[category] or SOUNDS.progress
+-- key: a sound choice; group: which sound it's for (its "Default" is the built-in one)
+local GROUP_DEFAULT = { trouble = "alarm", victory = "levelup" }
+function Toast.PlayChoice(key, group)
+  local id = SOUND_BY_KEY[key] or SOUND_BY_KEY[GROUP_DEFAULT[group] or ""] or SOUNDS[group] or SOUNDS.progress
   ns.Try("sound", PlaySound, id, "Master")
 end
 
@@ -181,7 +191,7 @@ THEMES.minimal = {
   render = function(f, spec)
     f.icon:SetTexture(spec.icon or ns.ICON.fallback)
     local text = (spec.text and spec.text ~= "") and ("  |cffbbbbbb" .. spec.text .. "|r") or ""
-    f.label:SetText((spec.sim and "|cff999999[SIM]|r " or "") .. (spec.title or "") .. text)
+    f.label:SetText((spec.title or "") .. text)
     -- grow to fit wrapped text (up to MAX_LINES) instead of cutting it off
     local textH = tonumber(f.label:GetStringHeight()) or 0
     f:SetHeight(math.max(HEIGHT, math.ceil(textH) + 12))
@@ -255,7 +265,7 @@ function Toast.HeaderFor(spec)
   local header = spec.header
     or (spec.milestone and L.HEADER_MILESTONE[spec.kind])
     or (spec.kind and L.HEADER[spec.kind]) or L.ADDON
-  return (spec.sim and "[SIM] " or "") .. header
+  return header
 end
 
 -- Alliance / Horde: a dark faction-coloured panel with metal trim, a faded faction crest behind
@@ -348,8 +358,8 @@ end
 local function render(f)
   THEMES[f.theme].render(f, f.spec)
   -- Options -> Appearance: how long toasts stay; PvP ones 2 seconds longer
-  local d = math.max(2, math.min(10, tonumber(ns.S().toastDuration) or DURATION))
-  f.duration = f.spec.category == "pvp" and d + (DURATION_PVP - DURATION) or d
+  local d = math.max(2, math.min(10, tonumber(ns.S().toastDuration) or ns.DEFAULT_TOAST_DURATION))
+  f.duration = f.spec.category == "pvp" and d + PVP_EXTRA or d
   f.remaining = f.duration
   f:SetAlpha(0)
 end
@@ -427,10 +437,9 @@ local function playSound(spec)
   local id
   if spec.kind and s[spec.kind] then
     id = Toast.SoundFor(spec.kind, spec.category)
-  elseif spec.milestone and ns.S().milestones ~= false then
-    -- a milestone chimes even when its event is silent: its picked sound, else the chime
-    local pick = ns.S().soundPick and ns.S().soundPick[spec.kind]
-    id = (pick and pick ~= "default" and SOUND_BY_KEY[pick]) or SOUNDS.progress
+  elseif spec.milestone then
+    -- a milestone chimes even when its alert is silent
+    id = Toast.SoundFor(spec.kind, spec.category)
   end
   if id then ns.Try("sound", PlaySound, id, "Master") end
 end
@@ -449,7 +458,7 @@ end
 
 -- why a queued toast has to wait, or nil if it can show now
 local function heldBecause(spec)
-  if not spec.force and ns.S().where[ns.InstanceType()] == "hold" then
+  if not spec.force and ns.InInstance() and ns.S().instances == "hold" then
     return "waiting: in " .. ns.InstanceType() .. " (Where it works)"
   end
   if ns.S().dnd.combat and spec.category ~= "pvp" and spec.category ~= "sighting" then
@@ -506,12 +515,9 @@ function Toast.Mode(spec)
   if spec.force or not spec.kind then return "toast", "always shown" end
   local mode = ns.S().show[spec.kind] or "toast"
   if mode == "off" then return "off", "your alert setting" end
-  -- inside an instance, its rule wins (Options -> Where it works)
-  local where = ns.InstanceType()
-  local rule = ns.S().where[where]
-  if rule == "off" then return "off", "in " .. where .. " (Where it works)" end
-  if rule == "chat" then return "chat", "in " .. where .. " (Where it works)" end
-  if spec.milestone and ns.S().milestones ~= false then return "toast", "milestone" end
+  -- inside a dungeon, raid or battleground: Options -> Where it works
+  if ns.InInstance() and ns.S().instances == "off" then return "off", "in " .. ns.InstanceType() .. " (Where it works)" end
+  if spec.milestone then return "toast", "milestone" end
   if spec.far and mode == "toast" then return "chat", "friend is in another zone" end
   return mode, "your alert setting"
 end
@@ -522,24 +528,13 @@ local function chatFrame()
 end
 
 -- one line in chat, in the colour of guild achievement announcements
-function Toast.Chat(text, sim)
+function Toast.Chat(text)
   local frame = chatFrame()
   if not (frame and text) then return end
   local info = ChatTypeInfo and ChatTypeInfo.GUILD_ACHIEVEMENT
   local r, g, b = 1, 1, 0
   if info and info.r then r, g, b = info.r, info.g, info.b end
-  frame:AddMessage("|cff33ff99" .. L.CHAT_PREFIX .. "|r " .. (sim and "|cff999999[SIM]|r " or "") .. text, r, g, b)
-end
-
--- remove simulated toasts, queued and on screen
-function Toast.DropSim()
-  for i = #queue, 1, -1 do
-    if queue[i].sim then Toast.Log(table.remove(queue, i), "dismissed: simulation stopped") end
-  end
-  for i = #active, 1, -1 do
-    local f = active[i]
-    if f.spec and f.spec.sim then release(f) end
-  end
+  frame:AddMessage("|cff33ff99" .. L.CHAT_PREFIX .. "|r " .. text, r, g, b)
 end
 
 function Toast.Push(spec)
@@ -556,10 +551,10 @@ function Toast.Push(spec)
     Toast.Log(spec, "off: " .. why)
     return
   end
-  spec.sim = spec.sim or ns.simulating or nil
   if mode == "chat" then
+    if spec.mergeOnly then return end -- (only ever folds into a toast: no second chat line)
     if not spec.quiet then
-      Toast.Chat(spec.chat or spec.title, spec.sim)
+      Toast.Chat(spec.chat or spec.title)
       playSound(spec)
       Toast.Log(spec, "chat line: " .. why)
     end
@@ -568,7 +563,8 @@ function Toast.Push(spec)
   if spec.milestone then spec.collapseKey = nil end -- a milestone gets its own toast
   -- flavor off: the toast is the same one short line as the chat/Feed line
   if ns.S().flavor == false and spec.chat and not spec.force then
-    spec.title, spec.text, spec.collapseKey = spec.chat, nil, nil
+    spec.title, spec.text = spec.chat, nil
+    if not spec.keepKey then spec.collapseKey = nil end
   end
   spec.created = GetTime()
   if spec.collapseKey and spec.merge then
@@ -588,6 +584,10 @@ function Toast.Push(spec)
         return
       end
     end
+  end
+  if spec.mergeOnly then
+    Toast.Log(spec, "not shown: the first toast for this death is gone already")
+    return
   end
   queue[#queue + 1] = spec
   while #queue > QUEUE_MAX do
@@ -620,7 +620,8 @@ function Toast.Sighting(name, class, zone, hit, by)
   return line
 end
 
--- one of each toast style, worded like the real thing
+-- /fnf test (and /fnf sim): a quick look at the alerts, worded like the real thing. Standalone:
+-- nothing is recorded, nothing is sent, nothing else in the add-on knows it happened.
 function Toast.Test()
   local friend = ns.ClassColored("Testfriend", "PALADIN")
   local enemy = ns.ClassColored("Testenemy", "ROGUE")
@@ -636,6 +637,12 @@ function Toast.Test()
     title = L.SHORT_DIED:format(friend, enemy), text = "Southshore" })
   Toast.Push({ force = true, kind = "kill", category = "pvp", icon = ns.ICON.kill,
     title = L.KILL_OWNS:format(friend, enemy, "3rd"), text = L.TODAY:format("5th") .. SEP .. "Stranglethorn Vale" })
+  Toast.Push({ force = true, kind = "sighting", category = "sighting", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
+    title = L.SIGHTING_BY:format(enemy, friend), text = "Arathi Highlands" })
+  Toast.Push({ force = true, kind = "contract", category = "bounty", icon = "Interface\\Icons\\INV_Scroll_03",
+    header = L.HEADER_CONTRACT_POSTED, title = L.CONTRACT_POSTED:format(friend, "10 " .. ns.Art.Icon("Interface\\MoneyFrame\\UI-GoldIcon"), enemy),
+    text = L.CONTRACT_TOAST_DAYS:format(3) })
+  Toast.Chat(L.TEST_CHAT)
 end
 
 ns.OnReady(createAnchor)

@@ -1,5 +1,63 @@
 # Changelog
 
+## 1.0.0
+
+Friends & Foes is out of beta.
+
+### What's new popup
+- **Patch notes:** the first time you open the window after an update, a small popup lists what's new in this version, once (`FriendsAndFoesDB.seenVersion`, per account). Not shown in combat (it waits for the next open), not on a brand-new account (the tour covers that), and never together with the tour. `/fnf new` (or `whatsnew`, `changes`) shows it any time.
+
+### Kills & credit
+- **One toast per death:** when several friends (or you and a friend) kill the same enemy together, you get one toast and one Feed line naming them all ("Rogz Fang and Buddy Pal killed Bob Gank", "You and Buddy Pal killed Bob Gank"), not one each. If the enemy really dies again (the same friend reports them again, they got back up in between by Reincarnation, a soulstone or a resurrection, or it was more than a minute later), that is a new toast. Kill counts, victims lists, notoriety and bounties still count every killer.
+- **Killing blows:** when the game reports that you (or your pet: hunter pet, warlock demon...) landed the killing blow on a player, your kill names them exactly (even from a DoT, out of range or without a target) and is marked "(killing blow)" or "(pet's killing blow)", for you and your friends. If the game doesn't report it, kills are named from what's on screen, as before. The debug log records what the game reports.
+- **The killing blow gets the credit:** that player closes the bounty and is the one to be paid. When nobody's killing blow is reported (a guard's last hit, say), the credit goes to whoever attacked the victim most recently (spells, auto-attack or shot, or their pet). Only when nothing at all is known (an older version) does the first to report the kill close it.
+- **Kills in long fights get their name:** an enemy you're fighting (your target, focus or a nameplate) stays "seen alive" while their health changes, so a long fight that ends in a kill is no longer left without a name (and without bounty or notoriety). This also covers enemies killed by a damage-over-time spell you never targeted, as long as their nameplate is on screen.
+- **Healers count too:** a friend who heals or buffs you during a fight (without being in your party) shares the notoriety and any bounty when you get the kill. It is not a kill for them: no kill count, streak or victims list.
+
+### Notoriety
+- **Reworked:** an enemy who never hurt you or a friend is worth 10. An enemy on your Hitlist is worth 100 per murder and 25 per attack since the last claim (at least 50), 1.5 times that on a rampage (3 kills on your group within an hour), and a little less for every quiet day since their last offence.
+- **No camping:** killing the same enemy again within 30 minutes of the last time is worth less each time: the base value (10 for a random, the 50 minimum for a hitlist enemy) drops to half, a quarter, then nothing, and the chain keeps going as long as they are killed again within 30 minutes. Points they earned by killing or attacking you or a friend are never reduced, and doing so makes them worth full value again. Wanted posters show the reduced number. Kills still count in your stats.
+- **Level matters:** your share is scaled by the victim's level against yours at the kill: a grey (trivial) player pays nothing, 6 or more levels below you x0.25, 3 to 5 below x0.5, within 2 x1, 3 to 5 above x1.25, 6 or more above (or "??") x1.5. Unknown levels count x1. Wanted posters still show the base value; kills still count in your stats.
+- **Ranks and titles:** enemies get a rank on their Wanted poster (Nuisance, Menace, Wanted, Most Wanted, Public Enemy). You get a title from your notoriety (Tracker, Hunter, Bounty Hunter, Manhunter, Legend), with a toast when you earn a higher one.
+- **Shared equally:** everyone who gets the kill (within a minute of the first) shares the notoriety equally; alone you get all of it. The killing blow doesn't change the split.
+- **It fades:** you lose 10% of your notoriety for each full week without a claim. Your profile also shows everything you ever claimed, and what you claimed this week (the weekly summary mentions it too).
+- **Takedowns:** a claim of 300 or more gives everyone who saw it a toast.
+
+### Bounty board
+- **Shared bounties:** several players who got the kill (within a minute of the first) complete a bounty together, and the gold is shared equally; the poster pays each of them their share by trade and marks it paid once for everyone. A poster who was in on the kill doesn't pay themselves. The board's Closed by column lists everyone, and the Bounties column on the Friends tab counts each person's share.
+- **Bounties travel further:** you also pass on your friends' open bounties (and ones done but not paid yet), up to 10 at a time, so a friend sees a bounty even when its poster is offline. Only the poster can change it, and a bounty is only ever passed on once.
+- **Most wanted is gone**, and so are hitlist notes: the Bounty board does that job. The Make/Clear most wanted button, the Most wanted lines on profiles, `/fnf wanted` and the note box on enemy profiles are removed, and notoriety no longer adds anything for friends who wanted someone. Saved most-wanted picks and notes are cleared.
+
+### Hitlist
+- **How long players stay on the hitlist:** three options in Friends & sharing, one for each kind of player: "Forget attackers after" (attacked you or a friend, never killed anyone), "Forget one-time killers after" and "Forget repeat killers after". Each can be 1 week, 2 weeks, 1 month, 3 months, 6 months, 1 year or Forever. Attackers are forgotten after 2 weeks unseen by default; killers are kept forever. Someone with an open bounty is never forgotten, and seeing them again starts the time over. Entries grey out after 30 days unseen (was 90). Choosing a shorter time asks first if it would remove anyone right away, and a line in chat tells you when players were removed at login.
+- **Victims:** kill lists are now called Victims.
+- **Enemy profiles are shorter:** the Revenge taken, On your hitlist and Killed lines are gone (the Victims button shows who they killed). The Revenge toast stays; the green "R" next to Hitlist kill counts is gone.
+- **No more Share hitlist button:** friends' fights already fill your hitlist live and when you log in, and bounties bring their targets. A share from a friend on an older version still arrives.
+
+### Friends tab
+- **The Leaderboard is part of the Friends tab now:** one list of you and your friends, ranked by kills, with deaths, K/D, notoriety, Bounty board gold collected and where they are. Shared groups are picked above it, as before. `/fnf board` opens it. The add-on version column is gone (it's on each profile).
+- **Only friends with the add-on:** Battle.net friends who don't run Friends & Foes are no longer listed ("nothing received from them yet" rows are gone).
+- **Fewer alts:** friends' characters below level 15 (bank alts, fresh alts) are hidden by default. Turn it off with "Hide characters below level 15" in Friends & sharing. Your own characters always show, their alerts still come through, and they appear once they reach 15. When a friend is online on a hidden alt, their other character shows "online (on an alt)".
+- **Bounties column:** the Bounty board gold each person has collected (bounties paid to them, the ones you know of).
+
+### Syncing
+- **Catch-up covers a week:** when you log in, friends send what happened in the last week (was 24 hours), up to their latest 250 events each (was 100).
+- **Alts count:** when a friend logs in, they also hear what your other characters did while they were away (only what you share). Those characters show up in their Feed as your friends, and your alert list covers them too. Both of you need this version.
+- **A hitlist hello:** when you meet a friend, you send them your 40 most active hitlist entries, once a week at most. They are added quietly: no toast and no Feed line. Only enemies who killed or attacked the friend, you, or a friend you have in common come along.
+- **Profiles travel further:** you pass on up to 10 numbers (kills, deaths, notoriety) of friends who are offline, when they let friends pass on their events, so your Friends tab stays up to date. Only the numbers, and only once.
+- **No gaps while you are both online:** if a friend drops off and comes back, or goes quiet for an hour, you ask them for what you may have missed since their last event.
+
+### Alerts & options
+- **Four alert settings instead of nine:** Friends' fights (attacked, attacking someone, killed, a kill), Hitlist sightings, Friends' progress (epic loot, new epic gear, level-ups) and the Bounty board, each a toast, chat line or off, with or without sound. Attacking someone and plain level-ups stay quiet.
+- **Five sounds instead of nine:** Friend in trouble (attacked, killed), Friend's kill, Hitlist sightings, Friends' progress and the Bounty board. Urgent news never sounds like good news, and on "Default" attacked and killed still sound different from each other. The sounds are on the Alerts page now. Your old picks carry over where they can.
+- **Milestones always pop up** (level 60, a looted epic BoE, revenge, kill streaks of 5, 10, 15...): the switch is gone.
+- **New gear means epic gear:** blue items are no longer announced or sent, and the "New gear to show" choice is gone.
+- **One setting for instances:** one choice for dungeons, raids and battlegrounds together: show, wait until I'm out, or off. Your dungeon choice is kept ("chat line only" becomes "wait until I'm out").
+- **Alert list in Options:** Options -> Friends & sharing -> Alert list (or `/fnf alerts`) opens a small window with a tick box for each friend. The Friends tab no longer has an Alerts column, and clicking a friend who doesn't have the add-on yet no longer changes your list.
+- **Four option pages instead of six:** Test alerts is the first thing on the Alerts page. The instances setting is on the Alerts page under "When alerts wait", and tracking your own PvP is in Friends & sharing. The minimap button setting is under Appearance, and Advanced only has debugging. The "Hitlist shared" alert and the Status button are gone (`/fnf status` still works).
+- **Window sounds** (opening the window, turning a page) are always on, like the game's own windows; "Alert sounds" only switches the alerts' sounds.
+- **Simpler test:** `/fnf test` (also `/fnf sim`, and Test alerts in the options) shows one sample of each alert and a chat line. Nothing is recorded or sent. The old simulation is gone, and its saved data is removed.
+
 ## 0.9.3
 - **New: the Bounty board.** Put your own bounty on an enemy player, in gold, silver and copper,
   open for as many days as you pick (1-30): target them and click **Post bounty** on the new

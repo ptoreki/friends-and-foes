@@ -55,8 +55,10 @@ The packager reads these lines to know where to upload.
 1. Bump the version in **both** `FriendsAndFoes/FriendsAndFoes.toc` (`## Version:`) and
    `FriendsAndFoes/Core.lua` (`ns.VERSION`), plus `package.json`.
 2. Add a section at the top of `CHANGELOG.md`.
-3. Run `npm test`, then commit.
-4. Tag and push:
+3. Write 3-8 short patch notes for the new version in `WhatsNew.lua` / `Locale.lua`
+   (`L.NEW_<ver>_n`); a test fails without them.
+4. Run `npm test`, then commit.
+5. Tag and push:
    ```
    git tag v0.5.3
    git push && git push --tags

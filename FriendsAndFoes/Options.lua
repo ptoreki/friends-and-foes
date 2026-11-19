@@ -1,20 +1,17 @@
 local _, ns = ...
 local L = ns.L
 
--- Settings live in the game's own Options -> AddOns panel, not in the main window.
--- Every event gets its own Show (Toast / Chat / Off) and Sound (on/off) choice.
+-- Settings live in the game's own Settings panel: Options -> AddOns -> Friends & Foes. Four pages:
+--   Alerts (main)      Test alerts; four groups of alerts, each Toast / Chat / Off (with or
+--                      without sound) with its own sound; when alerts wait (instances, combat)
+--   Appearance         toasts, messages, the minimap button
+--   Friends & sharing  what you share, where your own PvP is tracked, your alert list, the hitlist
+--   Advanced           debug logging and the debug report
+-- The game's controls read and write the settings directly, so there's nothing to refresh.
 local Options = {}
 ns.Options = Options
 
-local panel, category, standalone
-local checks, cyclers = {}, {}
-local beta, capsText, modeText
-
-local EVENTS = {
-  { "attacked", L.OPT_ATTACKED }, { "engage", L.OPT_ENGAGE }, { "died", L.OPT_DIED }, { "kill", L.OPT_KILL },
-  { "sighting", L.OPT_SIGHTING }, { "level", L.OPT_LEVEL }, { "loot", L.OPT_LOOT },
-  { "gear", L.OPT_GEAR }, { "share", L.OPT_SHARE }, { "contract", L.OPT_CONTRACT },
-}
+local function S() return ns.S() end
 
 -- what you share with friends: { key in settings.share, label, tooltip }
 Options.SHARE = {
@@ -24,239 +21,23 @@ Options.SHARE = {
   { "relay", L.OPT_SHARE_RELAY, L.TIP_SHARE_RELAY },
 }
 
-local function S() return ns.S() end
-
-local function text(parent, font, x, y, s, width)
-  local fs = parent:CreateFontString(nil, "OVERLAY", font)
-  fs:SetPoint("TOPLEFT", x, y)
-  fs:SetJustifyH("LEFT")
-  if width then fs:SetWidth(width) end
-  fs:SetText(s)
-  return fs
-end
-
-local function check(parent, x, y, label, get, set)
-  local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-  cb:SetSize(22, 22)
-  cb:SetPoint("TOPLEFT", x, y)
-  if label then
-    local fs = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-    fs:SetText(label)
-  end
-  cb:SetScript("OnClick", function(self)
-    set(self:GetChecked() and true or false)
-    Options.Refresh()
-  end)
-  cb.get = get
-  checks[#checks + 1] = cb
-  return cb
-end
-
-local function toggle(tbl, key)
-  return function() return S()[tbl][key] end, function(v) S()[tbl][key] = v end
-end
-
--- a small button that cycles an event through toast -> chat -> off
-local SHOW_NEXT = { toast = "chat", chat = "off", off = "toast" }
-local SHOW_LABEL = {
-  toast = "|cffffd100" .. L.SHOW_TOAST .. "|r",
-  chat = "|cff33ff99" .. L.SHOW_CHAT .. "|r",
-  off = "|cff888888" .. L.SHOW_OFF .. "|r",
+-- the alerts, four groups with one setting each: { key, label, tooltip, alerts in it }. The
+-- setting is still kept per alert (settings.show / settings.sound), all of a group set together.
+Options.ALERT_GROUPS = {
+  { "fights", L.ALERT_FIGHTS, L.TIP_ALERT_FIGHTS, { "attacked", "engage", "died", "kill" } },
+  { "sighting", L.ALERT_SIGHTINGS, L.TIP_SIGHTING, { "sighting" } },
+  { "progress", L.ALERT_PROGRESS, L.TIP_ALERT_PROGRESS, { "loot", "gear", "level" } }, -- (loot leads: level-ups are quiet)
+  { "bounty", L.OPT_CONTRACT, L.TIP_CONTRACT, { "contract" } },
 }
-local function cycler(parent, x, y, kind)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(56, 20)
-  b:SetPoint("TOPLEFT", x, y)
-  b.refresh = function() b:SetText(SHOW_LABEL[S().show[kind]] or SHOW_LABEL.toast) end
-  b:SetScript("OnClick", function()
-    local show = S().show
-    show[kind] = SHOW_NEXT[show[kind]] or "toast"
-    b.refresh()
-  end)
-  cyclers[#cyclers + 1] = b
-  return b
-end
-
--- w is the minimum width: a button always grows to fit its label
-local function button(parent, w, label, onClick)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetText(label)
-  local fs = b.GetFontString and b:GetFontString()
-  local tw = fs and fs.GetStringWidth and fs:GetStringWidth()
-  if type(tw) == "number" then w = math.max(w, math.ceil(tw) + 24) end
-  b:SetSize(w, 22)
-  b:SetScript("OnClick", onClick)
-  return b
-end
-
--- how tall a wrapped text is (the game measures it); `guess` if it can't tell yet
-local function heightOf(fs, guess)
-  local h = fs.GetStringHeight and fs:GetStringHeight()
-  if type(h) ~= "number" or h < 10 then return guess end
-  return math.ceil(h)
-end
-
-local function build(p)
-  text(p, "GameFontNormalLarge", 16, -16, L.ADDON)
-
-  -- alerts: one row per event
-  local x = 16
-  text(p, "GameFontNormal", x, -50, L.ALERTS_HEADER)
-  text(p, "GameFontDisableSmall", x + 150, -70, L.COL_SHOW)
-  text(p, "GameFontDisableSmall", x + 214, -70, L.COL_SOUND)
-  local y = -86
-  for _, e in ipairs(EVENTS) do
-    text(p, "GameFontHighlightSmall", x, y - 4, e[2])
-    cycler(p, x + 150, y, e[1])
-    check(p, x + 214, y + 1, nil, toggle("sound", e[1]))
-    y = y - 24
-  end
-  -- the note wraps over several lines: the next row starts below its real height
-  local note = text(p, "GameFontDisableSmall", x, y - 4, L.MILESTONE_NOTE, 280)
-  y = y - 4 - heightOf(note, 64) - 10
-  check(p, x, y, L.OPT_NEARBY_ONLY, function() return S().nearbyOnly end, function(v) S().nearbyOnly = v end)
-  y = y - 22
-  check(p, x, y, L.OPT_ALL_SOUNDS, toggle("sound", "enabled"))
-  y = y - 22
-  check(p, x, y, L.OPT_UI_SOUNDS, function() return S().sound.ui ~= false end, function(v) S().sound.ui = v end)
-  y = y - 22
-  check(p, x, y, L.OPT_FLAVOR, function() return S().flavor end, function(v) S().flavor = v end)
-  y = y - 22
-  check(p, x, y, L.OPT_MILESTONES, function() return S().milestones ~= false end, function(v) S().milestones = v end)
-  local leftBottom = y - 22
-
-  -- right column
-  x = 340
-  y = -50
-  text(p, "GameFontNormal", x, y, L.SHARE_HEADER)
-  y = y - 20
-  for _, o in ipairs(Options.SHARE) do
-    local get, set = toggle("share", o[1])
-    check(p, x, y, o[2], get, function(v)
-      set(v)
-      ns.Profile.Changed()
-    end)
-    y = y - 21
-  end
-  y = y - 10
-  text(p, "GameFontNormal", x, y, L.DND_HEADER)
-  y = y - 20
-  check(p, x, y, L.OPT_DND_COMBAT, toggle("dnd", "combat"))
-  y = y - 21
-  check(p, x, y, L.OPT_DND_INSTANCE,
-    function() return S().where.party == "hold" end,
-    function(v) for k in pairs(S().where) do S().where[k] = v and "hold" or "show" end end)
-  y = y - 31
-  text(p, "GameFontNormal", x, y, L.MISC_HEADER)
-  y = y - 20
-  check(p, x, y, L.OPT_MARK, function() return S().mark end, function(v)
-    S().mark = v
-    if ns.Marks then ns.Marks.Refresh() end
-  end)
-  y = y - 21
-  check(p, x, y, L.OPT_MARK_TOOLTIP, function() return S().markTooltip ~= false end, function(v) S().markTooltip = v end)
-  y = y - 21
-  check(p, x, y, L.OPT_MINIMAP, function() return not S().minimap.hide end, function(v)
-    S().minimap.hide = not v
-    if ns.Minimap then ns.Minimap.Update() end
-  end)
-  y = y - 21
-  check(p, x, y, L.OPT_DEBUG, function() return S().debug end, function(v) ns.SetDebug(v) end)
-  y = y - 30
-  button(p, 120, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end):SetPoint("TOPLEFT", x, y)
-
-  -- toast style: click to switch, Preview to see it
-  y = y - 30
-  text(p, "GameFontHighlightSmall", x, y - 4, L.OPT_THEME)
-  local theme = CreateFrame("Button", nil, p, "UIPanelButtonTemplate")
-  theme:SetSize(100, 22)
-  theme:SetPoint("TOPLEFT", x + 74, y)
-  theme.refresh = function() theme:SetText(L.THEME_NAMES[ns.Toast.Theme()] or ns.Toast.Theme()) end
-  theme:SetScript("OnClick", function()
-    local list, cur = ns.Toast.THEMES, ns.Toast.Theme()
-    local nextTheme = list[1]
-    for i, name in ipairs(list) do
-      if name == cur then nextTheme = list[i % #list + 1] end
-    end
-    S().theme = nextTheme
-    theme.refresh()
-  end)
-  cyclers[#cyclers + 1] = theme
-  button(p, 80, L.BTN_PREVIEW, function() ns.Toast.Test() end):SetPoint("LEFT", theme, "RIGHT", 6, 0)
-  local rightBottom = y - 22
-
-  -- beta tools: only while debug logging is on; below whichever column ends lower
-  beta = CreateFrame("Frame", nil, p)
-  beta:SetPoint("TOPLEFT", 16, math.min(leftBottom, rightBottom) - 20)
-  beta:SetSize(600, 200)
-  text(beta, "GameFontNormal", 0, 0, L.BETA_HEADER)
-  local tools = ns.UI.Row(beta, "TOPLEFT", 0, -20)
-  tools:Add(button(beta, 110, L.BTN_TEST, function() ns.Toast.Test() end))
-  tools:Add(button(beta, 110, L.BTN_SIM, function() ns.Sim.RunAll(false) end), 8)
-  tools:Add(button(beta, 150, L.BTN_REPORT, function() ns.Report.Show() end), 8)
-  text(beta, "GameFontNormalSmall", 0, -52, L.CAPS_HEADER)
-  capsText = text(beta, "GameFontHighlightSmall", 0, -68, "", 200)
-  text(beta, "GameFontNormalSmall", 230, -52, L.MODE_HEADER)
-  modeText = text(beta, "GameFontHighlightSmall", 230, -68, "", 370)
-end
-
-local CAP_LABELS = {
-  { "bnet", L.CAP_BNET }, { "whisper", L.CAP_WHISPER },
-  { "enemyDetect", L.CAP_ENEMY_DETECT }, { "targeting", L.CAP_TARGETING }, { "unitNames", L.CAP_NAMES },
-  { "deathRecap", L.CAP_RECAP }, { "honor", L.CAP_HONOR },
-}
-local CAP_COLORS = { ok = "|cff33ff33", secret = "|cffff5555", missing = "|cffff5555", untested = "|cffaaaaaa" }
-
-local function modeNotes()
-  local c, notes = ns.caps, {}
-  local function bad(k) return c[k] == "secret" or c[k] == "missing" end
-  if bad("enemyDetect") or bad("targeting") then
-    notes[#notes + 1] = L.MODE_NO_DETECT
-  elseif bad("unitNames") then
-    notes[#notes + 1] = L.MODE_NO_NAMES
-  end
-  if bad("deathRecap") then notes[#notes + 1] = L.MODE_NO_RECAP end
-  if bad("honor") then notes[#notes + 1] = L.MODE_NO_HONOR end
-  if c.bnet ~= "ok" and c.whisper ~= "ok" then notes[#notes + 1] = L.MODE_SYNC_UNTESTED end
-  if #notes == 0 then notes[1] = L.MODE_FULL end
-  return table.concat(notes, "\n\n")
-end
-
-function Options.Refresh()
-  if not panel then return end
-  for _, cb in ipairs(checks) do cb:SetChecked(cb.get() and true or false) end
-  for _, b in ipairs(cyclers) do b.refresh() end
-  beta:SetShown(S().debug and true or false)
-  if S().debug then
-    local lines = {}
-    for _, c in ipairs(CAP_LABELS) do
-      local v = ns.caps[c[1]] or "untested"
-      lines[#lines + 1] = c[2] .. ": " .. (CAP_COLORS[v] or "") .. v .. "|r"
-    end
-    lines[#lines + 1] = L.ERRORS_LINE:format(ns.errors)
-    capsText:SetText(table.concat(lines, "\n"))
-    modeText:SetText(modeNotes())
-  end
-end
-
----------------------------------------------------------------------------
--- Native options (the game's own Settings panel): dropdowns with < > arrows, tooltips, search.
--- Four pages: Alerts (main), Appearance, Friends & sharing, Advanced.
--- The canvas panel above is only the fallback when this API isn't available.
----------------------------------------------------------------------------
-local native -- main native category, once built
-
-local EVENT_ROWS = {
-  { "attacked", L.OPT_ATTACKED, L.TIP_ATTACKED }, { "engage", L.OPT_ENGAGE, L.TIP_ENGAGE },
-  { "died", L.OPT_DIED, L.TIP_DIED },
-  { "kill", L.OPT_KILL, L.TIP_KILL }, { "sighting", L.OPT_SIGHTING, L.TIP_SIGHTING },
-  { "level", L.OPT_LEVEL, L.TIP_LEVEL }, { "loot", L.OPT_LOOT, L.TIP_LOOT },
-  { "gear", L.OPT_GEAR, L.TIP_GEAR }, { "share", L.OPT_SHARE, L.TIP_SHARE },
-  { "contract", L.OPT_CONTRACT, L.TIP_CONTRACT },
+-- alerts that never make a sound of their own: you attacking someone (it happens a lot), and a
+-- plain level-up (milestones like level 60 still chime)
+Options.QUIET = { engage = true, level = true }
+-- one sound for each kind of alert: { key in settings.soundPick, label }
+local SOUND_GROUPS = {
+  { "trouble", L.SOUND_TROUBLE, L.TIP_SOUND_TROUBLE }, { "victory", L.SOUND_VICTORY, L.TIP_SOUND_VICTORY }, { "sighting", L.SOUND_SIGHTING }, { "progress", L.SOUND_PROGRESS }, { "bounty", L.SOUND_BOUNTY },
 }
 
--- one dropdown per event = show + sound together
+-- one dropdown per alert = show + sound together
 local DISPLAY = {
   { "toast_sound", L.DISPLAY_TOAST_SOUND }, { "toast", L.DISPLAY_TOAST },
   { "chat_sound", L.DISPLAY_CHAT_SOUND }, { "chat", L.DISPLAY_CHAT }, { "off", L.DISPLAY_OFF },
@@ -275,10 +56,22 @@ function Options.SetDisplay(kind, value)
   end
   local show, withSound = value:match("^(%a+)(.*)$")
   s.show[kind] = show == "chat" and "chat" or "toast"
-  s.sound[kind] = withSound == "_sound"
+  s.sound[kind] = withSound == "_sound" and not Options.QUIET[kind]
 end
 
-local function nativeAvailable()
+-- a group: what its first alert shows; setting it sets every alert in it
+function Options.GroupValue(group)
+  local first = group[4][1]
+  return Options.DisplayValue(S().show[first], S().sound[first])
+end
+function Options.SetGroup(group, value)
+  for _, kind in ipairs(group[4]) do Options.SetDisplay(kind, value) end
+end
+
+---------------------------------------------------------------------------
+-- building blocks
+---------------------------------------------------------------------------
+local function available()
   return Settings and Settings.RegisterVerticalLayoutCategory and Settings.RegisterVerticalLayoutSubcategory
     and Settings.RegisterAddOnSetting and Settings.RegisterProxySetting and Settings.CreateCheckbox
     and Settings.CreateDropdown and Settings.CreateControlTextContainer and Settings.RegisterAddOnCategory
@@ -337,66 +130,55 @@ local function chatTabs()
   return out
 end
 
+---------------------------------------------------------------------------
+-- the pages
+---------------------------------------------------------------------------
+local native -- the main category, once built
+
 function Options.BuildNative()
   local D = ns.DEFAULTS
   local main, mainLayout = Settings.RegisterVerticalLayoutCategory(L.ADDON)
 
-  -- Alerts (main page)
+  -- Alerts (main page): try them first, then one row per group of alerts
+  button(mainLayout, L.OPT_SIM, L.BTN_TEST, function() ns.Toast.Test() end, L.TIP_SIM)
   header(mainLayout, L.ALERTS_HEADER, L.MILESTONE_NOTE)
-  for _, row in ipairs(EVENT_ROWS) do
-    local kind = row[1]
-    proxyDropdown(main, "display_" .. kind, "String", row[2],
-      Options.DisplayValue(D.show[kind], D.sound[kind]),
-      function() return Options.DisplayValue(S().show[kind], S().sound[kind]) end,
-      function(v) Options.SetDisplay(kind, v) end,
-      DISPLAY, row[3] .. "\n\n" .. L.MILESTONE_NOTE)
+  for _, group in ipairs(Options.ALERT_GROUPS) do
+    local first = group[4][1]
+    proxyDropdown(main, "display_" .. group[1], "String", group[2],
+      Options.DisplayValue(D.show[first], D.sound[first]),
+      function() return Options.GroupValue(group) end,
+      function(v) Options.SetGroup(group, v) end,
+      DISPLAY, group[3] .. "\n\n" .. L.MILESTONE_NOTE)
   end
-  checkbox(main, "milestones", S(), "milestones", L.OPT_MILESTONES, D.milestones, L.TIP_MILESTONES)
   proxyDropdown(main, "levelEvery", "Number", L.OPT_LEVEL_EVERY, D.levelEvery,
     function() return tonumber(S().levelEvery) or 1 end, function(v) S().levelEvery = v end,
     { { 1, L.LEVEL_EVERY_1 }, { 5, L.LEVEL_EVERY_5 }, { 10, L.LEVEL_EVERY_10 }, { 60, L.LEVEL_EVERY_MAX } }, L.TIP_LEVEL_EVERY)
-  proxyDropdown(main, "gearMin", "Number", L.OPT_GEAR_MIN, D.gearMin,
-    function() return tonumber(S().gearMin) or 3 end, function(v) S().gearMin = v end,
-    { { 3, L.GEAR_MIN_BLUE }, { 4, L.GEAR_MIN_EPIC } }, L.TIP_GEAR_MIN)
   checkbox(main, "nearbyOnly", S(), "nearbyOnly", L.OPT_NEARBY_ONLY, D.nearbyOnly, L.TIP_NEARBY_ONLY)
-  header(mainLayout, L.DND_HEADER)
+  -- sounds: on or off for all alerts, and one sound for each kind (picking one plays it)
+  header(mainLayout, L.SOUNDS_HEADER, L.TIP_SOUNDS_HEADER)
+  checkbox(main, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
+  local sounds = { { "default", L.SND_DEFAULT } }
+  for _, c in ipairs(ns.Toast.SOUND_CHOICES) do sounds[#sounds + 1] = { c[1], c[2] } end
+  for _, g in ipairs(SOUND_GROUPS) do
+    local key = g[1]
+    proxyDropdown(main, "soundPick_" .. key, "String", g[2], D.soundPick[key] or "default",
+      function() return S().soundPick[key] or "default" end,
+      function(v)
+        S().soundPick[key] = v
+        ns.Toast.PlayChoice(v, key) -- hear it straight away
+      end, sounds, g[3] or L.TIP_SOUND_PICK)
+  end
+  -- when alerts wait: in dungeons, raids and battlegrounds (one setting for all), and in combat
+  header(mainLayout, L.HOLD_HEADER)
+  local inst = Settings.RegisterAddOnSetting(main, "FNF_instances", "instances", S(), varType("String"), L.WHERE_INSTANCES, D.instances)
+  Settings.CreateDropdown(main, inst, choices({
+    { "show", L.WHERE_SHOW, L.TIP_WHERE_SHOW }, { "hold", L.WHERE_HOLD, L.TIP_WHERE_HOLD },
+    { "off", L.WHERE_OFF, L.TIP_WHERE_OFF },
+  }), L.TIP_WHERE_ALERTS)
   checkbox(main, "dndCombat", S().dnd, "combat", L.OPT_DND_COMBAT, D.dnd.combat, L.TIP_DND_COMBAT)
 
-  -- Where it works
-  local where, whereLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_WHERE)
-  header(whereLayout, L.WHERE_ALERTS_HEADER, L.TIP_WHERE_ALERTS)
-  local rules = {
-    { "show", L.WHERE_SHOW, L.TIP_WHERE_SHOW }, { "hold", L.WHERE_HOLD, L.TIP_WHERE_HOLD },
-    { "chat", L.WHERE_CHAT, L.TIP_WHERE_CHAT }, { "off", L.WHERE_OFF, L.TIP_WHERE_OFF },
-  }
-  for _, w in ipairs({ { "party", L.WHERE_PARTY }, { "raid", L.WHERE_RAID }, { "pvp", L.WHERE_PVP } }) do
-    local s = Settings.RegisterAddOnSetting(where, "FNF_where_" .. w[1], w[1], S().where, varType("String"), w[2], D.where[w[1]])
-    Settings.CreateDropdown(where, s, choices(rules), L.TIP_WHERE_ALERTS)
-  end
-  header(whereLayout, L.TRACK_HEADER, L.TIP_TRACK)
-  checkbox(where, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
-  checkbox(where, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
 
-  -- Sounds: which sound each event plays (picking one plays it)
-  local snd, sndLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_SOUNDS)
-  checkbox(snd, "sound", S().sound, "enabled", L.OPT_ALL_SOUNDS, D.sound.enabled, L.TIP_ALL_SOUNDS)
-  checkbox(snd, "sound_ui", S().sound, "ui", L.OPT_UI_SOUNDS, D.sound.ui, L.TIP_UI_SOUNDS)
-  header(sndLayout, L.SOUNDS_HEADER, L.TIP_SOUNDS_HEADER)
-  local CATEGORY = { attacked = "pvp", engage = "pvp", died = "pvp", kill = "pvp", sighting = "sighting",
-    level = "progress", loot = "progress", gear = "progress", share = "progress", contract = "bounty" }
-  for _, row in ipairs(EVENT_ROWS) do
-    local kind = row[1]
-    local list = { { "default", L.SND_DEFAULT } }
-    for _, c in ipairs(ns.Toast.SOUND_CHOICES) do list[#list + 1] = { c[1], c[2] } end
-    proxyDropdown(snd, "soundPick_" .. kind, "String", row[2], D.soundPick[kind] or "default",
-      function() return S().soundPick[kind] or "default" end,
-      function(v)
-        S().soundPick[kind] = v
-        ns.Toast.PlayChoice(v, CATEGORY[kind]) -- hear it straight away
-      end, list, L.TIP_SOUND_PICK)
-  end
-
-  -- Appearance
+  -- Appearance: toasts, messages, the minimap button
   local look, lookLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_APPEARANCE)
   header(lookLayout, L.TOASTS_HEADER)
   local themes = {}
@@ -416,7 +198,7 @@ function Options.BuildNative()
       function() return math.floor((tonumber(S().toastScale) or 1) * 100 + 0.5) end,
       function(v) S().toastScale = v / 100; ns.Toast.ApplyScale() end, 70, 150, 5, "%d%%", L.TIP_TOAST_SIZE)
     slider("toastDuration", L.OPT_TOAST_DURATION, D.toastDuration,
-      function() return tonumber(S().toastDuration) or 3 end,
+      function() return tonumber(S().toastDuration) or ns.DEFAULT_TOAST_DURATION end,
       function(v) S().toastDuration = v end, 2, 10, 1, "%d s", L.TIP_TOAST_DURATION)
     slider("toastMax", L.OPT_TOAST_MAX, D.toastMax,
       function() return tonumber(S().toastMax) or 2 end,
@@ -426,7 +208,6 @@ function Options.BuildNative()
     function() return S().toastGrow == "up" and "up" or "down" end,
     function(v) S().toastGrow = v; ns.Toast.ApplyScale() end,
     { { "down", L.GROW_DOWN }, { "up", L.GROW_UP } }, L.TIP_TOAST_GROW)
-  button(lookLayout, L.OPT_PREVIEW, L.BTN_PREVIEW, function() ns.Toast.Test() end, L.TIP_PREVIEW)
   button(lookLayout, L.OPT_POSITION, L.BTN_UNLOCK, function() ns.Toast.ToggleUnlock() end, L.TIP_POSITION)
   header(lookLayout, L.MESSAGES_HEADER)
   proxyDropdown(look, "style", "String", L.OPT_STYLE, "flavor",
@@ -436,65 +217,76 @@ function Options.BuildNative()
   proxyDropdown(look, "chatTab", "Number", L.OPT_CHAT_TAB, D.chatFrame,
     function() return tonumber(S().chatFrame) or 1 end, function(v) S().chatFrame = v end, chatTabs, L.TIP_CHAT_TAB)
   checkbox(look, "weekly", S(), "weekly", L.OPT_WEEKLY, D.weekly, L.TIP_WEEKLY)
+  header(lookLayout, L.MINIMAP_HEADER)
+  local mm = Settings.RegisterProxySetting(look, "FNF_minimap", varType("Boolean"), L.OPT_MINIMAP_SHOW, true,
+    function() return not S().minimap.hide end,
+    function(v)
+      S().minimap.hide = not v
+      if ns.Minimap then ns.Minimap.Update() end
+    end)
+  Settings.CreateCheckbox(look, mm, L.TIP_MINIMAP)
 
-  -- Friends & sharing
+  -- Friends & sharing: what you share, where your own PvP is tracked, alert list, hitlist
   local friends, friendsLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_FRIENDS)
   header(friendsLayout, L.SHARE_HEADER, L.TIP_SHARE_HEADER)
   for _, o in ipairs(Options.SHARE) do
     -- your profile goes out again right away, so friends see the change
     checkbox(friends, "share_" .. o[1], S().share, o[1], o[2], D.share[o[1]], o[3], function() ns.Profile.Changed() end)
   end
+  header(friendsLayout, L.TRACK_HEADER, L.TIP_TRACK)
+  checkbox(friends, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
+  checkbox(friends, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
+  checkbox(friends, "hideLowAlts", S(), "hideLowAlts", L.OPT_HIDE_LOW_ALTS, D.hideLowAlts, L.TIP_HIDE_LOW_ALTS, function()
+    if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
+  end)
   header(friendsLayout, L.PICK_HEADER)
-  button(friendsLayout, L.OPT_PICK, L.BTN_PICK, function()
-    if SettingsPanel and SettingsPanel.Hide then SettingsPanel:Hide() end
-    ns.UI.Show("friends")
-  end, L.TIP_PICK)
+  button(friendsLayout, L.OPT_PICK, L.BTN_PICK, function() ns.UI.ShowAlertList() end, L.TIP_PICK)
   header(friendsLayout, L.HITLIST_HEADER)
   checkbox(friends, "mark", S(), "mark", L.OPT_MARK, D.mark, L.TIP_MARK, function()
     if ns.Marks then ns.Marks.Refresh() end
   end)
   checkbox(friends, "markTooltip", S(), "markTooltip", L.OPT_MARK_TOOLTIP, D.markTooltip, L.TIP_MARK_TOOLTIP)
   -- forgetting deletes entries: if any would go now, ask first; "No" puts the setting back
-  local forget
-  forget = proxyDropdown(friends, "forgetAfter", "Number", L.OPT_FORGET, 0,
-    function() return tonumber(S().forgetAfter) or 0 end,
-    function(v)
-      local old = tonumber(S().forgetAfter) or 0
-      if v == old then return end
-      local n = ns.Data.CountForget(FriendsAndFoesDB, v)
-      if n == 0 then
-        S().forgetAfter = v
-        return
-      end
-      S().forgetAfter = old -- until confirmed
-      ns.UI.Confirm(L.CONFIRM_FORGET:format(n), function()
-        S().forgetAfter = v
-        ns.Data.ForgetOld(FriendsAndFoesDB)
-        if ns.UI then ns.UI.Refresh() end
-      end, function()
-        if forget and forget.SetValue then forget:SetValue(old) end
-      end)
-    end,
-    { { 0, L.FORGET_NEVER }, { 90, L.FORGET_3M }, { 180, L.FORGET_6M }, { 365, L.FORGET_1Y } }, L.TIP_FORGET)
-  button(friendsLayout, L.OPT_SHARE_NOW, L.BTN_SHARE, function() ns.UI.ShareHitlist() end, L.TIP_SHARE_NOW)
+  local FORGET_CHOICES = {
+    { 7, L.FORGET_1W }, { 14, L.FORGET_2W }, { 30, L.FORGET_1M }, { 90, L.FORGET_3M },
+    { 180, L.FORGET_6M }, { 365, L.FORGET_1Y }, { 0, L.FORGET_FOREVER },
+  }
+  local function forgetDropdown(key, name, default, tip)
+    local dd
+    dd = proxyDropdown(friends, key, "Number", name, default,
+      function()
+        local v = tonumber(S()[key])
+        if v == nil then v = default end
+        return v
+      end,
+      function(v)
+        local old = tonumber(S()[key])
+        if old == nil then old = default end
+        if v == old then return end
+        local n = ns.Data.CountForget(FriendsAndFoesDB, key, v)
+        if n == 0 then
+          S()[key] = v
+          return
+        end
+        S()[key] = old -- until confirmed
+        ns.UI.Confirm(L.CONFIRM_FORGET:format(n), function()
+          S()[key] = v
+          ns.Data.ForgetOld(FriendsAndFoesDB)
+          if ns.UI then ns.UI.Refresh() end
+        end, function()
+          if dd and dd.SetValue then dd:SetValue(old) end
+        end)
+      end, FORGET_CHOICES, tip)
+  end
+  forgetDropdown("forgetAttackers", L.OPT_FORGET_ATTACKERS, D.forgetAttackers, L.TIP_FORGET_ATTACKERS)
+  forgetDropdown("forgetKilledOnce", L.OPT_FORGET_KILLED_ONCE, D.forgetKilledOnce, L.TIP_FORGET_KILLED_ONCE)
+  forgetDropdown("forgetKilledMore", L.OPT_FORGET_KILLED_MORE, D.forgetKilledMore, L.TIP_FORGET_KILLED_MORE)
 
-  -- Advanced
+  -- Advanced: debugging only
   local adv, advLayout = Settings.RegisterVerticalLayoutSubcategory(main, L.PAGE_ADVANCED)
-  local mm = Settings.RegisterProxySetting(adv, "FNF_minimap", varType("Boolean"), L.OPT_MINIMAP_SHOW, false,
-    function() return not S().minimap.hide end,
-    function(v)
-      S().minimap.hide = not v
-      if ns.Minimap then ns.Minimap.Update() end
-    end)
-  Settings.CreateCheckbox(adv, mm, L.TIP_MINIMAP)
   local dbg = Settings.RegisterProxySetting(adv, "FNF_debug", varType("Boolean"), L.OPT_DEBUG, false,
     function() return S().debug and true or false end, function(v) ns.SetDebug(v) end)
   Settings.CreateCheckbox(adv, dbg, L.TIP_DEBUG)
-  header(advLayout, L.TOOLS_HEADER)
-  button(advLayout, L.OPT_STATUS, L.BTN_STATUS, function() ns.PrintStatus() end, L.TIP_STATUS)
-  button(advLayout, L.OPT_SIM, L.BTN_SIM, function() ns.Sim.RunAll(false) end, L.TIP_SIM)
-  button(advLayout, L.OPT_SIM_STOP, L.BTN_SIM_STOP, function() ns.Sim.Stop() end, L.TIP_SIM_STOP)
-  button(advLayout, L.OPT_SIM_CLEAR, L.BTN_SIM_CLEAR, function() ns.Sim.Clear() end, L.TIP_SIM_CLEAR)
   button(advLayout, L.OPT_REPORT, L.BTN_REPORT, function() ns.Report.Show() end, L.TIP_REPORT)
 
   Settings.RegisterAddOnCategory(main)
@@ -503,65 +295,19 @@ function Options.BuildNative()
 end
 
 local function create()
-  if nativeAvailable() then
-    local ok, err = pcall(Options.BuildNative)
-    if ok then return end
-    ns.Debug("ERR:options-native", err) -- fall back to the canvas panel
+  if not available() then
+    ns.Debug("OPTIONS", "the game's Settings panel isn't available")
+    return
   end
-  panel = CreateFrame("Frame")
-  panel.name = L.ADDON
-  panel:Hide()
-  build(panel)
-  panel:SetScript("OnShow", function() ns.Try("options", Options.Refresh) end)
-  if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
-    local ok, cat = pcall(Settings.RegisterCanvasLayoutCategory, panel, L.ADDON)
-    if ok and cat then
-      category = cat
-      pcall(Settings.RegisterAddOnCategory, cat)
-    end
-  elseif InterfaceOptions_AddCategory then
-    pcall(InterfaceOptions_AddCategory, panel)
-  end
+  local ok, err = pcall(Options.BuildNative)
+  if not ok then ns.Debug("ERR:options", err) end
 end
 
--- own window, if the game's options panel can't be opened
-local function openStandalone()
-  if not panel then
-    panel = CreateFrame("Frame")
-    panel:Hide()
-    build(panel)
-  end
-  if not standalone then
-    local ok, f = pcall(CreateFrame, "Frame", "FriendsAndFoesOptions", UIParent, "BasicFrameTemplateWithInset")
-    if not ok or not f then f = CreateFrame("Frame", "FriendsAndFoesOptions", UIParent) end
-    f:SetSize(660, 620)
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
-    tinsert(UISpecialFrames, "FriendsAndFoesOptions")
-    panel:SetParent(f)
-    panel:ClearAllPoints()
-    panel:SetPoint("TOPLEFT", 4, -24)
-    panel:SetPoint("BOTTOMRIGHT", -4, 4)
-    standalone = f
-  end
-  standalone:Show()
-  panel:Show()
-  Options.Refresh()
-end
-
-local function openCategory(cat)
-  if not (cat and Settings and Settings.OpenToCategory) then return false end
-  return pcall(Settings.OpenToCategory, cat.GetID and cat:GetID() or cat)
-end
-
+---------------------------------------------------------------------------
+-- opening
+---------------------------------------------------------------------------
 -- The game's settings window can't be opened by an addon during combat (protected UI),
 -- so Options simply isn't available in combat.
-
 local function inCombat()
   if not InCombatLockdown then return false end
   local ok, locked = pcall(InCombatLockdown)
@@ -569,29 +315,28 @@ local function inCombat()
 end
 
 function Options.Open()
+  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
   if inCombat() then
-    print("|cff33ff99" .. L.ADDON .. "|r " .. L.OPTIONS_IN_COMBAT)
+    print(prefix .. L.OPTIONS_IN_COMBAT)
     return
   end
-  if not (native or panel) then create() end
-  if openCategory(native) or openCategory(category) then return end
-  if panel and not category and InterfaceOptionsFrame_OpenToCategory then
-    if pcall(InterfaceOptionsFrame_OpenToCategory, panel) then
-      pcall(InterfaceOptionsFrame_OpenToCategory, panel) -- the old panel needs it twice
-      return
-    end
+  if not native then create() end
+  local cat = native
+  if cat and Settings and Settings.OpenToCategory
+    and pcall(Settings.OpenToCategory, cat.GetID and cat:GetID() or cat) then
+    return
   end
-  openStandalone()
+  print(prefix .. L.OPTIONS_WHERE) -- (no Settings panel to open: say where they are)
 end
 
 -- set up the options at login; after combat if you logged in or reloaded mid-fight
 local createAfterCombat = false
 ns.OnReady(function()
-  if native or panel then return end
+  if native then return end
   if inCombat() then createAfterCombat = true else create() end
 end)
 ns.On("PLAYER_REGEN_ENABLED", function()
-  if createAfterCombat and not (native or panel) then
+  if createAfterCombat and not native then
     createAfterCombat = false
     create()
   end

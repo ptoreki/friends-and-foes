@@ -1,12 +1,12 @@
 local _, ns = ...
 local L = ns.L
 
--- The group window: everything about the shared group picked on the Leaderboard, in one place,
+-- The group window: everything about the shared group picked on the Friends tab, in one place,
 -- docked to the right of the main window (drag it anywhere; it hides with the main window).
 --   the group's name, who leads it, its members (joined or invited), its totals, and the
 --   buttons that apply to you: Invite / Leave as a member, Join / Decline when invited,
 --   Remove beside each member when you lead.
--- Opened with the Group button on the Leaderboard; the Leaderboard itself just shows the board.
+-- Opened with the Group button on the Friends tab; the tab itself just shows the board.
 -- Every action goes through the same UI functions as before (UI.lua), so nothing changes in
 -- what they do: confirmations, messages, rules.
 local UI = ns.UI
@@ -40,6 +40,7 @@ local function build(main)
       tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 },
     })
   end
+  UI.SolidBackground(f)
   local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -4, -4)
 
@@ -88,7 +89,7 @@ local function build(main)
   return f
 end
 
--- fill it in for the group picked on the Leaderboard (closes if there's none any more)
+-- fill it in for the group picked on the Friends tab (closes if there's none any more)
 function UI.RefreshGroupWindow()
   if not win or not win:IsShown() then return end
   local g = UI.CurrentGroup()

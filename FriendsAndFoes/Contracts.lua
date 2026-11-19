@@ -12,7 +12,7 @@ local L = ns.L
 --    if the poster is offline; the poster's own client confirms it to everyone.
 --  * Contracts go to every friend with the add-on (not only your alert list), when posted or
 --    changed, and when a friend comes online.
---  * Enemy players only: never someone on your side. Never in the simulation.
+--  * Enemy players only: never someone on your side.
 -- Saved account-wide in FriendsAndFoesDB.contracts, keyed "poster/id".
 local Contracts = {}
 ns.Contracts = Contracts
@@ -174,6 +174,60 @@ function Contracts.On(name)
   return out
 end
 
+-- Everyone who got the kill (several players can complete a bounty together): up to KILLERS_MAX
+-- names, the ones who killed the target within SHARE_WINDOW seconds of the first kill. c.killer
+-- stays the "lead" (the best credit). Older contracts have only c.killer.
+local KILLERS_MAX = 5
+local SHARE_WINDOW = 60
+Contracts.KILLERS_MAX, Contracts.SHARE_WINDOW = KILLERS_MAX, SHARE_WINDOW
+
+local function killersOf(c)
+  if type(c.killers) == "table" and #c.killers > 0 then return c.killers end
+  return c.killer and { c.killer } or {}
+end
+Contracts.Killers = killersOf
+
+local function hasKiller(c, name)
+  for _, n in ipairs(killersOf(c)) do
+    if n == name then return true end
+  end
+  return false
+end
+
+-- true if the name was new (and there was room)
+local function addKiller(c, name)
+  if not name or hasKiller(c, name) then return false end
+  if type(c.killers) ~= "table" then c.killers = c.killer and { c.killer } or {} end
+  if #c.killers >= KILLERS_MAX then return false end
+  c.killers[#c.killers + 1] = name
+  return true
+end
+
+-- the killers the poster has to pay (the poster doesn't pay themselves)
+function Contracts.Payees(c)
+  local out = {}
+  for _, n in ipairs(killersOf(c)) do
+    if n ~= c.by then out[#out + 1] = n end
+  end
+  return out
+end
+
+-- what each killer gets, in copper: the gold shared equally
+function Contracts.ShareOf(c)
+  return math.floor(ns.Count(c.amount) / math.max(1, #killersOf(c)))
+end
+
+-- Bounty board gold this player collected: bounties marked paid with them among those who got
+-- the kill, their share each (the ones you know of: your friends' bounties and yours)
+function Contracts.EarnedBy(name)
+  if not name then return 0 end
+  local total = 0
+  for _, c in pairs(store()) do
+    if c.state == "paid" and name ~= c.by and hasKiller(c, name) then total = total + Contracts.ShareOf(c) end
+  end
+  return total
+end
+
 -- your open contracts
 function Contracts.MineOpen()
   local n = 0
@@ -186,10 +240,23 @@ end
 ---------------------------------------------------------------------------
 -- sending
 ---------------------------------------------------------------------------
-local function message(c)
+-- asPoster: passing on someone else's contract (their name goes in `poster`)
+local function message(c, asPoster)
   local _, class = UnitClass("player")
   local now = time()
+  -- the lead first (a message that's too long loses names from the end)
+  local names, seen = {}, {}
+  local function add(n)
+    n = n and (n:gsub("[,:;\t|]", ""))
+    if n and n ~= "" and not seen[n] and #names < KILLERS_MAX then
+      seen[n] = true
+      names[#names + 1] = n
+    end
+  end
+  add(c.killer)
+  for _, n in ipairs(killersOf(c)) do add(n) end
   return { kind = "BTY", id = ns.NewId(), class = class, level = UnitLevel("player"), f = {
+    poster = asPoster and c.by or "",
     cid = c.id,
     target = ns.EncodeUnit({ name = c.target, class = c.class, level = c.level, guild = c.guild }),
     amount = c.amount,
@@ -198,6 +265,9 @@ local function message(c)
     age = math.max(0, now - (c.t or now)),
     updage = math.max(0, now - (c.upd or now)),
     days = daysOf(c),
+    blow = c.blow or "",
+    last = c.last and tostring(math.floor(c.last)) or "",
+    killers = table.concat(names, ","),
   } }
 end
 
@@ -224,6 +294,36 @@ function Contracts.Greet(names)
       send(c, names)
     end
   end
+  for _, name in ipairs(names) do
+    ns.Comm.WhenSupported(name, "contractRelay", function() Contracts.SendRelayed(name) end)
+  end
+end
+
+-- Contracts of your other friends, passed on (0.9.4): so a friend hears of a bounty even when its
+-- poster is offline. Only ones you got from the poster yourself (never one that came to you
+-- passed on: one hop), open or done and not paid yet, at most RELAY_MAX per friend, the newest
+-- news first, in the background; never to the poster. Returns how many were sent.
+local RELAY_MAX = 10
+Contracts.RELAY_MAX = RELAY_MAX
+function Contracts.SendRelayed(name)
+  Contracts.Tidy()
+  local list = {}
+  for _, c in pairs(store()) do
+    if c.direct and c.by ~= ns.me and c.by ~= name and (c.state == "open" or c.state == "done") then
+      list[#list + 1] = c
+    end
+  end
+  table.sort(list, function(a, b)
+    if (a.upd or 0) ~= (b.upd or 0) then return (a.upd or 0) > (b.upd or 0) end
+    return a.by .. a.id < b.by .. b.id
+  end)
+  local n = 0
+  for _, c in ipairs(list) do
+    if n >= RELAY_MAX then break end
+    ns.Comm.SendTo(name, message(c, true), "bulk")
+    n = n + 1
+  end
+  return n
 end
 
 ---------------------------------------------------------------------------
@@ -287,6 +387,7 @@ function Contracts.Post(u, amount, days)
   local c = { id = ns.NewId(), by = ns.me, target = name, class = u.class, level = ns.Count(u.level) > 0 and ns.Count(u.level) or nil,
     guild = u.guild, amount = amount, days = days, state = "open", t = now, upd = now }
   list[key(c.by, c.id)] = c
+  ns.Debug("CONTRACT-POST", c.id, name, amount .. " copper", days .. " days")
   onHitlist(c)
   ns.Data.Feed("contract", L.CONTRACT_FEED_POSTED:format(ns.ClassColored(ns.me), Contracts.MoneyText(amount),
     ns.ClassColored(name, c.class)), ns.me, { name })
@@ -304,6 +405,7 @@ function Contracts.Cancel(k)
   local c = ownContract(k)
   if not c or c.state ~= "open" then return false end
   c.state, c.upd = "cancelled", time()
+  ns.Debug("CONTRACT-CANCEL", c.id, c.target)
   send(c)
   changed()
   return true
@@ -313,6 +415,7 @@ function Contracts.MarkPaid(k)
   local c = ownContract(k)
   if not c or c.state ~= "done" then return false end
   c.state, c.upd = "paid", time()
+  ns.Debug("CONTRACT-PAID", c.id, c.target, "payees " .. #Contracts.Payees(c))
   send(c)
   changed()
   return true
@@ -329,15 +432,58 @@ local function sameTarget(c, victim)
   return not c.target:find(" ", 1, true) and ns.FirstName(victim) == c.target
 end
 
-function Contracts.OnKill(killer, victim)
+-- Who closed it: the best credit (Events.BetterCredit: the killing blow, a pet's counting for its
+-- owner; else whoever attacked them last); with nothing known, the first to report the kill. A
+-- better credit reported a little after someone else's (same death, within BLOW_SWAP seconds)
+-- takes it over, as long as it isn't paid yet.
+-- That only picks the lead (c.killer): everyone who got the kill within SHARE_WINDOW of the first
+-- one is paid their share (c.killers).
+-- a kill of the same death (within SHARE_WINDOW of the first) while it's done and not paid yet; or
+-- one the poster closed themselves (paid with nobody owed: "auto-closed", derived from the killers
+-- rather than a flag, so it holds for received messages too); one they marked paid after
+-- someone was owed is frozen
+local function sharing(c, when)
+  if not c.doneAt or math.abs(when - c.doneAt) > SHARE_WINDOW then return false end
+  return c.state == "done" or (c.state == "paid" and #Contracts.Payees(c) == 0)
+end
+
+function Contracts.OnKill(killer, victim, credit)
   if not killer or not victim then return 0 end
+  if credit == true then credit = { blow = "1" } elseif type(credit) ~= "table" then credit = {} end
   local now, when, n = time(), ns.Now(), 0
   for _, c in pairs(store()) do
-    if (c.state == "open" or c.state == "expired") and sameTarget(c, victim)
+    if sameTarget(c, victim) and sharing(c, when) then
+      local was = c.state
+      local better = (credit.blow or credit.last)
+        and ns.Events.BetterCredit(credit, { blow = c.blow, last = c.last })
+      local joined = false
+      joined = addKiller(c, killer) -- (sharing(): done, or closed by the poster alone, nothing owed)
+      local swapped = false
+      if better and c.killer ~= killer and hasKiller(c, killer) then
+        c.killer, c.blow, c.last = killer, credit.blow, credit.last
+        swapped = true
+      end
+      ns.Debug("CONTRACT-KILL", c.id, victim, killer, joined and "joined" or "already in", swapped and "lead changed" or "")
+      if joined or swapped then
+        c.upd = now
+        c.state = #Contracts.Payees(c) > 0 and "done" or "paid"
+        n = n + 1
+        if joined then
+          if c.by ~= ns.me and killer == ns.me then
+            Contracts.ToastDone(c)
+          elseif c.by == ns.me and killer ~= ns.me then
+            if was == "paid" then Contracts.ToastDone(c) -- (it needs paying after all)
+            else say(L.CONTRACT_ALSO_KILLED:format(ns.ClassColored(killer))) end
+          end
+        end
+        send(c)
+      end
+    elseif (c.state == "open" or c.state == "expired") and sameTarget(c, victim)
       and when >= (c.t or 0) and when - (c.t or 0) <= daysOf(c) * DAY then
       n = n + 1
       c.target = victim
-      c.killer, c.doneAt, c.upd = killer, when, now
+      c.killer, c.killers, c.doneAt, c.upd, c.blow, c.last = killer, { killer }, when, now, credit.blow, credit.last
+      ns.Debug("CONTRACT-DONE", c.id, victim, "closed by " .. killer, "poster " .. tostring(c.by), "blow " .. tostring(credit.blow or "-"), "last " .. tostring(credit.last or "?"))
       -- the poster got them: nothing to pay
       c.state = killer == c.by and "paid" or "done"
       if killer ~= c.by then Contracts.ToastDone(c) end
@@ -358,17 +504,30 @@ end
 ---------------------------------------------------------------------------
 -- from: the friend who sent it (always the poster: a contract is keyed by its sender, so no one
 -- can change someone else's)
+-- poster (0.9.4): when it's set and isn't the sender, the sender passes on that friend's contract
+-- (one hop). It's kept under the poster's name, only if the poster is your friend (and not you),
+-- only as open or done (the poster alone says paid or cancelled), and is never passed on again.
 function Contracts.OnMessage(from, f)
   if not from or from == ns.me then return end
+  local function drop(why) ns.Debug("CONTRACT-DROP", tostring(from), tostring(f.cid), why) end
+  local by, relayed = from, false
+  local poster = ns.CleanName(f.poster)
+  if poster and poster ~= from then
+    if poster == ns.me then drop("relayed copy of your own bounty") return end
+    local rec = ns.Data.FindPlayer(poster)
+    if not (rec and rec.friend and not rec.self) then drop("relayed: the poster is not your friend") return end
+    if f.state ~= "open" and f.state ~= "done" then drop("relayed: only open or done are passed on") return end
+    by, relayed = poster, true
+  end
   local id = f.cid and f.cid:match("^%w+$")
-  if not id or #id > 16 then return end
+  if not id or #id > 16 then drop("bad id") return end
   local u = ns.DecodeUnit(f.target)
   local name = u and u.name
-  if not name or name == ns.me or ns.PvP.IsFriendly(name) then return end
+  if not name or name == ns.me or ns.PvP.IsFriendly(name) then drop("target missing, yourself, or on your side") return end
   local amount = ns.Count(tonumber(f.amount))
-  if amount < 1 or amount > AMOUNT_MAX then return end
+  if amount < 1 or amount > AMOUNT_MAX then drop("amount out of range") return end
   local state = RANK[f.state] and f.state or nil
-  if not state then return end
+  if not state then drop("unknown state") return end
   local now = time()
   local updAge = math.min(ns.Count(tonumber(f.updage)), 60 * DAY)
   local t = now - math.min(ns.Count(tonumber(f.age)), 60 * DAY)
@@ -377,15 +536,16 @@ function Contracts.OnMessage(from, f)
   local days = tonumber(f.days)
   if not (finite(days) and days >= DAYS_MIN and days <= DAYS_MAX) then days = nil end
 
-  local list, k = store(), key(from, id)
+  local list, k = store(), key(by, id)
   local c = list[k]
   local isNew = c == nil
   if isNew then
-    if state == "cancelled" or state == "expired" then return end
-    c = { id = id, by = from, target = name, t = t }
+    if state == "cancelled" or state == "expired" then drop("new, but already " .. state) return end
+    c = { id = id, by = by, target = name, t = t }
     list[k] = c
   end
   local before = c.state
+  if not relayed then c.direct = true end -- (from the poster themselves: may be passed on)
   -- the poster's word on the amount, days and details (when it's newer than what you have)
   local newer = not c.upd or upd >= c.upd - 5
   if newer then
@@ -399,25 +559,54 @@ function Contracts.OnMessage(from, f)
     -- open again after it ran out here: only if the poster's days say it's still open
     if not (state == "open" and now - (c.t or 0) > daysOf(c) * DAY) then c.state = state end
   end
-  -- who got the kill: the poster's word wins (two friends can get honor for the same death)
-  if killer and (c.state == "done" or c.state == "paid") and (state == "done" or state == "paid") then
-    c.killer = killer
+  -- who got the kill: a killing blow wins; otherwise the poster's word (two friends can get honor
+  -- for the same death)
+  local hadMe = hasKiller(c, ns.me)
+  local msg = { blow = (f.blow == "1" or f.blow == "pet") and f.blow or nil, last = tonumber(f.last) }
+  if msg.last then msg.last = math.max(0, math.min(120, math.floor(msg.last))) end
+  if killer and (c.state == "done" or c.state == "paid") and (state == "done" or state == "paid")
+    and not ns.Events.BetterCredit({ blow = c.blow, last = c.last }, msg) then
+    c.killer, c.blow, c.last = killer, msg.blow, msg.last
     c.doneAt = c.doneAt or upd
+  end
+  -- everyone who got the kill: the poster's list and yours together (the poster's names first),
+  -- never fewer; an older client sends only the one killer
+  if (c.state == "done" or c.state == "paid") and (state == "done" or state == "paid") then
+    local merged, seen = {}, {}
+    local function add(n)
+      if n and not seen[n] and #merged < KILLERS_MAX then
+        seen[n] = true
+        merged[#merged + 1] = n
+      end
+    end
+    local listed = {}
+    for n in tostring(f.killers or ""):gmatch("[^,]+") do listed[#listed + 1] = ns.CleanName(n) end
+    if #listed == 0 then listed[1] = killer end
+    for _, n in ipairs(listed) do add(n) end
+    add(c.killer)
+    for _, n in ipairs(killersOf(c)) do add(n) end
+    if #merged > 0 then
+      c.killers = merged
+      c.doneAt = c.doneAt or upd
+    end
   end
   c.upd = math.max(c.upd or 0, upd)
 
-  local money, target, poster = Contracts.MoneyText(c.amount), ns.ClassColored(name, c.class), ns.ClassColored(from)
+  local money, target, poster = Contracts.MoneyText(c.amount), ns.ClassColored(name, c.class), ns.ClassColored(by)
   -- toasts only for news (a friend who comes online sends all their bounties again)
   local fresh = updAge <= FRESH
   if isNew and c.state == "open" then
     onHitlist(c)
     if fresh then Contracts.ToastPosted(c) end
-    ns.Data.Feed("contract", L.CONTRACT_FEED_POSTED:format(poster, money, target), from, { name })
-  elseif fresh and before ~= "done" and before ~= "paid" and c.state == "done" and c.killer and c.killer ~= c.by then
+    ns.Data.Feed("contract", L.CONTRACT_FEED_POSTED:format(poster, money, target), by, { name })
+  elseif fresh and before ~= "done" and before ~= "paid" and c.state == "done" and #Contracts.Payees(c) > 0 then
     Contracts.ToastDone(c) -- (a kill you hadn't heard of: the poster confirms it)
-  elseif before ~= c.state and c.state == "paid" and c.killer == ns.me then
-    say(L.CONTRACT_PAID_YOU:format(poster, money, target))
+  elseif fresh and c.state == "done" and not hadMe and hasKiller(c, ns.me) then
+    Contracts.ToastDone(c) -- (the poster counts you in on a kill)
+  elseif before ~= c.state and c.state == "paid" and hasKiller(c, ns.me) then
+    say(L.CONTRACT_PAID_YOU:format(poster, Contracts.MoneyText(Contracts.ShareOf(c)), target))
   end
+  ns.Debug("CONTRACT-RECV", from, c.id, c.target, tostring(before or "new") .. " -> " .. c.state, relayed and ("relayed for " .. by) or "direct", "killers " .. #killersOf(c))
   Contracts.Tidy()
   changed()
 end
@@ -446,16 +635,39 @@ function Contracts.ToastPosted(c)
 end
 
 -- your bounty: pay them; theirs and you got it: they pay you; anyone else's: who got it
+local function joinNames(list)
+  local out = {}
+  for i, n in ipairs(list) do out[i] = ns.ClassColored(n) end
+  if #out < 2 then return out[1] or "?" end
+  local last = table.remove(out)
+  return L.CONTRACT_NAMES_AND:format(table.concat(out, ", "), last)
+end
+Contracts.JoinNames = joinNames
+
 function Contracts.ToastDone(c)
-  local target, money = ns.ClassColored(c.target, c.class), Contracts.MoneyText(c.amount)
-  local killer, poster = ns.ClassColored(c.killer or "?"), ns.ClassColored(c.by)
+  local target = ns.ClassColored(c.target, c.class)
+  local money, poster = Contracts.MoneyText(Contracts.ShareOf(c)), ns.ClassColored(c.by)
   local title, text
   if c.by == ns.me then
-    title, text = L.CONTRACT_YOURS_DONE_TITLE:format(target, killer), L.CONTRACT_YOURS_DONE_TEXT:format(money)
-  elseif c.killer == ns.me then
-    title, text = L.CONTRACT_YOU_DID_TITLE:format(poster, target), L.CONTRACT_YOU_DID_TEXT:format(money)
+    local payees = Contracts.Payees(c)
+    if #payees > 1 then
+      title, text = L.CONTRACT_YOURS_DONE_TITLE:format(target, joinNames(payees)), L.CONTRACT_YOURS_DONE_MANY_TEXT:format(money)
+    else
+      title, text = L.CONTRACT_YOURS_DONE_TITLE:format(target, joinNames(payees)), L.CONTRACT_YOURS_DONE_TEXT:format(money)
+    end
+  elseif hasKiller(c, ns.me) then
+    local others = {}
+    for _, n in ipairs(killersOf(c)) do
+      if n ~= ns.me then others[#others + 1] = n end
+    end
+    if #others > 0 then
+      title = L.CONTRACT_YOU_DID_MANY_TITLE:format(joinNames(others), poster, target)
+      text = L.CONTRACT_YOU_DID_MANY_TEXT:format(money)
+    else
+      title, text = L.CONTRACT_YOU_DID_TITLE:format(poster, target), L.CONTRACT_YOU_DID_TEXT:format(money)
+    end
   else
-    title, text = L.CONTRACT_DONE_TITLE:format(killer, poster, target), money
+    title, text = L.CONTRACT_DONE_TITLE:format(joinNames(killersOf(c)), poster, target), money
   end
   ns.Toast.Push({ kind = "contract", category = "bounty", icon = ICON_DONE, header = L.HEADER_CONTRACT_DONE,
     title = title, text = text, chat = title .. ns.Flavor.SEP .. text, player = c.target })

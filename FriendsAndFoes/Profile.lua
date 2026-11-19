@@ -2,9 +2,9 @@ local _, ns = ...
 local L = ns.L
 local issecret = ns.issecret
 
--- Profiles and the PvP leaderboard.
+-- Profiles and the Friends tab ranking.
 -- Every client is the authority on its own player: it sends its own all-time kills/deaths,
--- most wanted enemy, zone and status (PRO message). Friends keep the latest one.
+-- zone and status (PRO message). Friends keep the latest one.
 local Profile = {}
 ns.Profile = Profile
 
@@ -83,14 +83,9 @@ function Profile.Shown(text)
   return nil, verdict
 end
 
-function Profile.Wanted() return mine().wanted end
+
 
 -- name = nil clears it
-function Profile.SetWanted(name)
-  mine().wanted = ns.CleanName(name)
-  Profile.Changed()
-  return mine().wanted
-end
 
 local function myRecord()
   local players = ns.Data.RealRealm().players
@@ -133,11 +128,14 @@ function Profile.Fields()
   return {
     k = sharePvp and ns.Count(me and me.k) or "",
     d = sharePvp and ns.Count(me and me.d) or "",
-    wanted = mine().wanted or "",
+    wanted = "", -- (most wanted, until 0.9.3: the field stays, empty, so the ones after it line up)
     zone = cut(zone, ZONE_MAX),
     status = shareWhere and Profile.MyStatus() or "",
     t = sharePvp and Profile.MyStatsTime() or "",
-    bt = sharePvp and (ns.Bounty.Mine()) or "", -- bounties collected (0.9; older clients ignore it)
+    bt = sharePvp and (ns.Bounty.Mine()) or "", -- notoriety now (0.9; older clients ignore it)
+    btw = sharePvp and ns.Bounty.Week() or "", -- notoriety claimed this week, and which week
+    bwk = sharePvp and ns.Bounty.WeekId() or "",
+    rl = ns.Comm.RelayAllowed() and "1" or "", -- (0.9.4) friends may pass these numbers on
   }
 end
 
@@ -152,7 +150,7 @@ end
 local lastSig
 local function signature(msg)
   local f = msg.f
-  return table.concat({ tostring(f.k), tostring(f.d), f.wanted, f.zone, f.status, tostring(msg.level), tostring(f.bt) }, "\t")
+  return table.concat({ tostring(f.k), tostring(f.d), f.wanted, f.zone, f.status, tostring(msg.level), tostring(f.bt), tostring(f.btw), tostring(f.bwk) }, "\t")
 end
 
 -- force: send even if nothing changed since the last time
@@ -181,7 +179,51 @@ end
 
 function Profile.Greet(names)
   local msg = message()
-  for _, name in ipairs(names) do ns.Comm.SendTo(name, msg) end
+  for _, name in ipairs(names) do
+    ns.Comm.SendTo(name, msg)
+    -- and the numbers of friends who are offline now (one hop, only for add-ons that take them)
+    ns.Comm.WhenSupported(name, "profileRelay", function() Profile.SendRelayed(name) end)
+  end
+end
+
+-- Friends' numbers passed on (PRL): only friends who are offline now (the online ones tell you
+-- themselves), whose last profile you got from them directly and who allow passing it on, with
+-- numbers newer than PRL_AGE_MAX days. Never one that came to you passed on (one hop), never the
+-- friend you're sending to. At most PRL_MAX, the freshest first, in the background.
+local PRL_MAX = 10
+local PRL_AGE_MAX = 30 * 86400
+Profile.PRL_MAX = PRL_MAX
+
+function Profile.RelayList(toName)
+  local out, now = {}, time()
+  for _, p in pairs(ns.Data.RealRealm().players) do
+    if p.relayOk and p.sk and p.sd and p.statAt and p.friend and not p.self and p.name ~= ns.me and p.name ~= toName
+      and not ns.Comm.everyone[p.name] and now - p.statAt <= PRL_AGE_MAX and not ns.Data.FriendIsGone(p)
+      and not ns.Comm.OtherFaction(p.faction) then
+      out[#out + 1] = p
+    end
+  end
+  table.sort(out, function(a, b)
+    if a.statAt ~= b.statAt then return a.statAt > b.statAt end
+    return a.name < b.name
+  end)
+  while #out > PRL_MAX do table.remove(out) end
+  return out
+end
+
+function Profile.SendRelayed(name)
+  if not ns.me then return 0 end
+  local _, class = UnitClass("player")
+  local n = 0
+  for _, p in ipairs(Profile.RelayList(name)) do
+    ns.Comm.SendTo(name, { kind = "PRL", id = ns.NewId(), class = class, level = UnitLevel("player"), f = {
+      origin = p.name, k = p.sk, d = p.sd, t = p.statAt,
+      bt = p.sbt or "", btw = p.sbtw or "", bwk = p.sbwk or "",
+    } }, "bulk")
+    n = n + 1
+  end
+  if n > 0 then ns.Debug("PRL-SEND", name, n) end
+  return n
 end
 
 ns.On("ZONE_CHANGED_NEW_AREA", function() Profile.Changed() end)
@@ -200,7 +242,6 @@ function Profile.Apply(p, f)
   else
     p.sk, p.sd = nil, nil -- they stopped sharing PvP
   end
-  p.wanted = ns.CleanName(f.wanted)
   -- where they are: an empty zone means they turned "Where I am" off - then nothing is kept
   local zone = Profile.CleanText(f.zone, ZONE_MAX)
   if zone then
@@ -216,6 +257,31 @@ function Profile.Apply(p, f)
   -- their bounties collected; nil = an older version (or they don't share PvP)
   local bt = tonumber(f.bt)
   p.sbt = bt and ns.Count(bt) or nil
+  local btw, bwk = tonumber(f.btw), tonumber(f.bwk)
+  p.sbtw, p.sbwk = btw and bwk and ns.Count(btw) or nil, btw and bwk and ns.Count(bwk) or nil
+  -- may friends pass these numbers on? (0.9.4; only if they said when the numbers were true)
+  p.relayOk = (f.rl == "1" and p.sk ~= nil and tonumber(f.t) ~= nil) or nil
+end
+
+-- A friend's numbers, passed on to you by another friend (PRL). Only for a friend of yours who is
+-- offline, only numbers newer than yours, only the stats (a zone or status would be stale), and
+-- never passed on again.
+function Profile.OnRelayed(relayer, f)
+  local origin = ns.CleanName(f.origin)
+  if not origin or origin == ns.me or origin == relayer or ns.Comm.everyone[origin] then ns.Debug("PRL-DROP", relayer, tostring(origin), "yourself, the sender, or a friend who is online") return end
+  local p = ns.Data.FindPlayer(origin)
+  if not (p and p.friend and not p.self) then ns.Debug("PRL-DROP", relayer, origin, "not your friend") return end
+  if ns.Comm.GroupActive() and not ns.Comm.Allowed(ns.Comm.TagFor(origin)) then ns.Debug("PRL-DROP", relayer, origin, "not allowed in your group") return end
+  local k, d, t = tonumber(f.k), tonumber(f.d), Profile.ClampTime(f.t)
+  if not (k and d and t) then ns.Debug("PRL-DROP", relayer, origin, "missing numbers") return end
+  if p.statAt and t <= p.statAt then ns.Debug("PRL-DROP", relayer, origin, "not newer than what you have") return end
+  p.sk, p.sd, p.statAt = ns.Count(k), ns.Count(d), t
+  local bt = tonumber(f.bt)
+  p.sbt = bt and ns.Count(bt) or nil
+  local btw, bwk = tonumber(f.btw), tonumber(f.bwk)
+  p.sbtw, p.sbwk = btw and bwk and ns.Count(btw) or nil, btw and bwk and ns.Count(bwk) or nil
+  p.relayOk = nil -- (it came through someone else: not passed on again)
+  ns.Debug("PRL-GOT", relayer, origin)
 end
 
 -- what a friend is doing now, if they're online: "Hillsbrad Foothills · in a fight"
@@ -244,7 +310,7 @@ function Profile.NowText(p)
 end
 
 ---------------------------------------------------------------------------
--- leaderboard
+-- Friends tab ranking
 ---------------------------------------------------------------------------
 function Profile.KD(k, d)
   if d <= 0 then return k end
@@ -255,10 +321,7 @@ end
 local function onBoard(p, view)
   if not p.friend or p.self or p.name == ns.me then return false end
   if p.faction and ns.myFaction and p.faction ~= ns.myFaction then return false end
-  if not view.sim then
-    if not ns.Comm.everyone[p.name] and ns.Data.FriendIsGone(p) then return false end
-    if ns.Comm.GroupActive() and not ns.Comm.IsPicked(ns.Comm.TagFor(p.name)) then return false end
-  end
+  if not ns.Comm.everyone[p.name] and ns.Data.FriendIsGone(p) then return false end
   return true
 end
 
@@ -318,7 +381,7 @@ function Profile.Board(groupId)
   local g = groupId and ns.Groups.Get(groupId)
   if g then return groupBoard(g) end
   local realm = ns.Data.ViewRealm()
-  local view = { sim = ns.viewSim }
+  local view = {}
   local rows = {}
   local function add(p, isMe)
     local reported = isMe or p.sk ~= nil
@@ -343,6 +406,41 @@ function Profile.Board(groupId)
   return rows
 end
 
+-- Friends tab: leave out friends' characters below MIN_LEVEL (bank alts, fresh alts). You are
+-- always shown, and so is anyone whose level isn't known. A friend online on a hidden alt gets
+-- their account's best shown character marked (onAlt) so the tab can say so. Ranks are redone.
+Profile.MIN_LEVEL = 15
+function Profile.HideLowAlts(rows)
+  local S = ns.S and ns.S()
+  if not (S and S.hideLowAlts) then return rows end
+  local function low(r)
+    local lv = tonumber(r.level)
+    return not r.me and lv ~= nil and lv > 0 and lv < Profile.MIN_LEVEL
+  end
+  local shown, hidden = {}, {}
+  for _, r in ipairs(rows) do
+    if low(r) then hidden[#hidden + 1] = r else shown[#shown + 1] = r end
+  end
+  if #hidden == 0 then return rows end
+  for _, h in ipairs(hidden) do
+    local tag = ns.Comm.everyone[h.name] and ns.Comm.TagFor(h.name)
+    if tag then
+      local best
+      for _, r in ipairs(shown) do
+        if not r.me and not ns.Comm.everyone[r.name] and ns.Comm.TagFor(r.name) == tag then
+          if not best or (tonumber(r.level) or 0) > (tonumber(best.level) or 0)
+            or ((tonumber(r.level) or 0) == (tonumber(best.level) or 0) and (r.lastSeen or 0) > (best.lastSeen or 0)) then
+            best = r
+          end
+        end
+      end
+      if best then best.onAlt = true end
+    end
+  end
+  rank(shown)
+  return shown
+end
+
 ---------------------------------------------------------------------------
 -- profile page data
 ---------------------------------------------------------------------------
@@ -356,16 +454,6 @@ function Profile.Nemesis(name)
   return best, most
 end
 
--- friends (and you) who have this enemy as their most wanted
-function Profile.WantedBy(enemy)
-  local out = {}
-  if mine().wanted == enemy then out[#out + 1] = ns.me end
-  for _, p in pairs(ns.Data.ViewRealm().players) do
-    if p.friend and not p.self and p.name ~= ns.me and p.wanted == enemy then out[#out + 1] = p.name end
-  end
-  table.sort(out)
-  return out
-end
 
 -- newest first: Feed lines about this friend (who) or this enemy (foes)
 function Profile.Recent(name, asEnemy, max)

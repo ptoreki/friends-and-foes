@@ -15,13 +15,24 @@ local profile -- the page's frame
 ---------------------------------------------------------------------------
 -- profile page
 ---------------------------------------------------------------------------
-local PROFILE_LINES, RECENT_LINES = 10, 10
--- your own profile: your character above recent PvP, which then has room for fewer lines
-local MODEL_TOP, MODEL_H, RECENT_LINES_ME = -40, 190, 5
+local PROFILE_LINES = 10
+local RECENT_GATHER = 30 -- recent PvP entries gathered per profile (paged)
+local RECENT_POOL = 12 -- most entries shown on one page (font strings built)
+local RECENT_GAP = 4 -- between entries
+local RECENT_LINE_H = 13 -- one wrapped line of an entry (small font), for the fallback estimate
+local RECENT_MAX_LINES = 3 -- an entry wraps to at most this many lines
+local RECENT_CHAR_W = 6 -- average glyph width, for the fallback estimate
+-- your own / a friend's profile: two columns. Left: name, stats, recent PvP under them. Right: your
+-- character, the full height of the page above the controls row.
+local MODEL_X = 340 -- the right column (the page is 700 - 20 - 18 = 662 wide)
+local PAGE_H = 380 -- the page: 470 - 62 - 28
+local CONTROLS_H = 30 -- the controls row (24) + a gap: the model and recent PvP stay above it
+local LEFT_W = 320 -- the left column's width
+local LINE_H = 19 -- one stat / recent line
 -- an enemy's profile: their Wanted poster in the left column, their facts and recent PvP beside it
 local POSTER_W = 290
 local POSTER_RIGHT = 300 -- where the column beside the poster starts
-local RECENT_LINES_POSTER = 7
+local POSTER_H = 360 -- (the slot under the Back button is 384 tall: 12 spare above and below)
 local PORTRAIT_W, PORTRAIT_H = 170, 124
 local FACE, SYMBOL = 112, 92 -- the painted face fills the portrait; a symbol sits smaller in it
 local SEPIA = { 0.50, 0.38, 0.24, 1 } -- the portrait's print
@@ -38,6 +49,12 @@ local function className(class)
 end
 
 local function nameOr(name) return name and ns.ClassColored(name) or DASH end
+
+-- "Level 35 Orc Mage"; an unknown level (lvl() gives "?") is left out: just "Orc Mage"
+local function levelClass(level, what)
+  if level == "?" then return what end
+  return L.PROF_LEVEL_CLASS:format(level, what)
+end
 
 
 -- What the Profile tab shows for a name: { kind, title, sub, lines = { {label, value} },
@@ -60,32 +77,35 @@ function UI.ProfileView(name)
     local seenRec = (rec and rec.race) and rec or h
     view.race, view.raceName, view.sex = seenRec and seenRec.race, seenRec and seenRec.raceName, seenRec and seenRec.sex
     view.faction = (rec and rec.faction) or (ns.myFaction == "Horde" and "Alliance" or ns.myFaction == "Alliance" and "Horde" or nil)
-    view.sub = L.PROF_LEVEL_CLASS:format(lvl(e), className(e.class)) .. (e.guild and ("  <" .. e.guild .. ">") or "")
+    view.sub = levelClass(lvl(e), className(e.class)) .. (e.guild and ("  <" .. e.guild .. ">") or "")
     line(L.PROF_KILLS_ON_US, C(rec and rec.k))
     line(L.PROF_DIED_TO_US, C(rec and rec.d))
     line(L.PROF_ATTACKS, math.max(C(rec and rec.atk), C(h and h.attacks)))
-    local victims = h and victimsText(h) or ""
-    line(L.PROF_KILLED, victims ~= "" and victims or DASH)
-    line(L.PROF_REVENGE, C(h and h.revenge))
-    line(L.PROF_HITLIST, h and L.PROF_ON_HITLIST or L.PROF_NOT_ON_HITLIST)
-    if h and h.sharedBy then line(L.PROF_SHARED_BY, ns.ClassColored(h.sharedBy)) end
-    local by = {}
-    for _, n in ipairs(ns.Profile.WantedBy(e.name)) do by[#by + 1] = ns.ClassColored(n) end
-    line(L.PROF_WANTED_BY, #by > 0 and ns.JoinNames(by) or DASH)
+    -- (who they killed: the Victims button; their hitlist row says it too)
+    if h and h.sharedBy then
+      local shared = {}
+      for who in tostring(h.sharedBy):gmatch("[^,]+") do
+        who = who:match("^%s*(.-)%s*$")
+        if who ~= "" then shared[#shared + 1] = UI.LinkName(who, ns.ClassColored(who), e.name) end
+      end
+      line(L.PROF_SHARED_BY, #shared > 0 and table.concat(shared, ", ") or ns.ClassColored(h.sharedBy))
+    end
     -- the bounty board: open contracts on them (only when there are any)
     local posted = {}
     for _, ct in ipairs(ns.Contracts.On(e.name)) do
-      posted[#posted + 1] = L.CONTRACT_BY:format(ns.Contracts.MoneyText(ct.amount), ct.by == ns.me and L.PROF_ME or ns.ClassColored(ct.by))
+      posted[#posted + 1] = L.CONTRACT_BY:format(ns.Contracts.MoneyText(ct.amount), ct.by == ns.me and L.PROF_ME or UI.LinkName(ct.by, ns.ClassColored(ct.by), e.name))
     end
     if #posted > 0 then line(L.PROF_CONTRACTS, table.concat(posted, ", ")) end
+    local rank = ns.Bounty.Rank(e.name)
+    view.rank = rank and (rank .. (ns.Bounty.OnRampage(e.name) and ("  -  " .. L.RAMPAGE_TAG) or "")) or nil
+    if view.rank then line(L.PROF_STANDING, view.rank) end
     line(L.PROF_LAST_SEEN, lastText(e))
-    view.note = h and h.note
     view.onHitlist = h ~= nil
-    view.recent = ns.Profile.Recent(e.name, true, RECENT_LINES)
+    view.recent = ns.Profile.Recent(e.name, true, RECENT_GATHER)
     -- the poster: their name in plain ink, "Level 42 Orc Hunter", guild, and the bounty
     view.name, view.guild = e.name, e.guild
     local what = view.raceName and (view.raceName .. " " .. className(e.class)) or className(e.class)
-    view.posterSub = L.PROF_LEVEL_CLASS:format(lvl(e), what)
+    view.posterSub = levelClass(lvl(e), what)
     view.bounty = ns.Bounty.Open(e.name) -- (Bounty.lua: what collecting on them would pay now)
     return view
   end
@@ -95,7 +115,7 @@ function UI.ProfileView(name)
   local _, myClass = UnitClass("player")
   local p = rec or { name = name, class = isMe and myClass or nil, level = isMe and UnitLevel("player") or nil, k = 0, d = 0 }
   view.title = classIcon(p.class) .. ns.ClassColored(p.name, p.class) .. (isMe and ("  |cff888888" .. L.YOU .. "|r") or "")
-  view.sub = (isMe and L.PROF_ME or L.PROF_FRIEND) .."  \194\183  " .. L.PROF_LEVEL_CLASS:format(lvl(p), className(p.class))
+  view.sub = (isMe and L.PROF_ME or L.PROF_FRIEND) .."  \194\183  " .. levelClass(lvl(p), className(p.class))
 
   local board, row = ns.Profile.Board(), nil
   for _, r in ipairs(board) do if r.name == p.name then row = r end end
@@ -105,17 +125,25 @@ function UI.ProfileView(name)
   line(L.PROF_KILLS, num(k))
   line(L.PROF_DEATHS, num(d))
   line(L.PROF_KD, kdText(k, d, ns.Profile.KD(k, d)))
-  line(L.PROF_RANK, row and L.PROF_RANK_OF:format(row.rank, #board) or DASH)
+  -- the rank is the Friends tab's: same filtered list (low alts left out), so same position and total
+  local shownBoard, shownRow = ns.Profile.HideLowAlts(board), nil
+  for _, r in ipairs(shownBoard) do if r.name == p.name then shownRow = r end end
+  line(L.PROF_RANK, shownRow and L.PROF_RANK_OF:format(shownRow.rank, #shownBoard) or DASH)
   -- bounties collected: yours with how many; a friend's as they report it (0.9 and later)
+  -- (notoriety now, with the title it earns; yours with everything you ever claimed in grey)
   if isMe then
     local total, n = ns.Bounty.Mine()
-    line(L.PROF_BOUNTIES, ns.Art.Points(total) .. (n > 0 and ("  |cff888888" .. L.PROF_BOUNTIES_N:format(n) .. "|r") or ""))
+    local all = ns.Bounty.AllTime()
+    line(L.PROF_BOUNTIES, ns.Art.Points(total) .. "  \194\183  " .. ns.Bounty.Title(total)
+      .. (all > 0 and ("  |cff888888" .. L.PROF_BOUNTIES_ALL:format(ns.Art.Points(all)) .. "|r") or ""))
+    line(L.PROF_BOUNTIES_WEEK, ns.Art.Points(ns.Bounty.Week()))
   else
-    line(L.PROF_BOUNTIES, p.sbt and ns.Art.Points(p.sbt) or DASH)
+    line(L.PROF_BOUNTIES, p.sbt and (ns.Art.Points(p.sbt) .. "  \194\183  " .. ns.Bounty.Title(p.sbt)) or DASH)
+    local wk = ns.Bounty.FriendWeek(p)
+    line(L.PROF_BOUNTIES_WEEK, wk and ns.Art.Points(wk) or DASH)
   end
   local nem, times = ns.Profile.Nemesis(p.name)
-  line(L.PROF_NEMESIS, nem and (isMe and L.PROF_NEMESIS_ME or L.PROF_NEMESIS_TEXT):format(ns.ClassColored(nem.name, nem.class), times) or DASH)
-  line(L.PROF_WANTED, nameOr(isMe and ns.Profile.Wanted() or p.wanted))
+  line(L.PROF_NEMESIS, nem and (isMe and L.PROF_NEMESIS_ME or L.PROF_NEMESIS_TEXT):format(UI.LinkName(nem.name, ns.ClassColored(nem.name, nem.class), p.name), times) or DASH)
   if isMe then
     local zone = GetRealZoneText and GetRealZoneText()
     if ns.issecret(zone) then zone = nil end
@@ -144,8 +172,47 @@ function UI.ProfileView(name)
   end
   view.estimated = estimated
   view.isMe = isMe
-  view.recent = ns.Profile.Recent(p.name, false, RECENT_LINES)
+  view.recent = ns.Profile.Recent(p.name, false, RECENT_GATHER)
   return view
+end
+
+local recentFor, recentPage -- whose recent PvP is paged, and which page
+
+-- one Recent PvP entry: the time stays at the start
+local function recentText(e)
+  return "|cff888888" .. ns.Ago(e.t) .. "|r  " .. UI.Linkify(e.text, e, UI.ProfileName())
+end
+
+-- how tall an entry is when wrapped to `width`: measured on the hidden measuring string, or
+-- (no GetStringHeight) estimated from the text length
+local function entryHeight(text, width)
+  local m = profile.recentMeasure
+  m:SetWidth(width)
+  m:SetText(text)
+  local h = tonumber(m:GetStringHeight())
+  if h and h > 0 then return h end
+  local plain = ns.Plain(text)
+  local lines = math.ceil(#plain / math.max(1, math.floor(width / RECENT_CHAR_W)))
+  return math.min(RECENT_MAX_LINES, math.max(1, lines)) * RECENT_LINE_H
+end
+
+-- split the entries into pages: walk them, adding heights; a new page starts when the next entry
+-- wouldn't fit in `avail` (or the page already holds the whole pool). { {first, last}, ... }
+local function paginate(entries, width, avail)
+  local pages, cur, used = {}, nil, 0
+  for i, e in ipairs(entries) do
+    local h = math.min(entryHeight(recentText(e), width), math.max(avail, RECENT_LINE_H))
+    local need = used + (cur and RECENT_GAP or 0) + h
+    if not cur or need > avail or (cur.last - cur.first + 1) >= RECENT_POOL then
+      cur = { first = i, last = i }
+      pages[#pages + 1] = cur
+      used = h
+    else
+      cur.last = i
+      used = need
+    end
+  end
+  return pages
 end
 
 function UI.RenderProfile()
@@ -203,6 +270,8 @@ function UI.RenderProfile()
     end
     ns.Art.StopCount(profile.bounty)
     profile.bounty:SetText(ns.Art.Points(v.bounty or 0))
+    profile.rankLine:SetText(v.rank or "")
+    profile.CenterPoster()
   end
 
   profile.title:SetText(v and v.title or "")
@@ -230,85 +299,103 @@ function UI.RenderProfile()
       model:Hide()
     end
   end
-  -- recent PvP: right-hand column; below your character on yours, below the facts beside a poster
-  local recentX = poster and POSTER_RIGHT or 340
-  local recentTop = (withModel and (MODEL_TOP - MODEL_H - 8)) or (poster and -(PROFILE_LINES * 19 + 12)) or PROFILE_TOP
-  local recentLines = (withModel and RECENT_LINES_ME) or (poster and RECENT_LINES_POSTER) or RECENT_LINES
+  -- recent PvP: beside the poster, under the facts (right column); otherwise in the left column
+  -- straight under the stats (and under the "estimated" footnote when there is one)
+  local recentX, recentTop, recentW
+  if poster then
+    profile.footnote:ClearAllPoints()
+    profile.footnote:SetPoint("TOPLEFT", 0, PROFILE_TOP - PROFILE_LINES * 19 - 6) -- (as built)
+    recentX, recentTop, recentW = POSTER_RIGHT, -(PROFILE_LINES * 19 + 12), 360
+  elseif not withModel then
+    -- a friend (no model): recent PvP takes the right column, from the top (level with the header)
+    local statsEnd = PROFILE_TOP - (v and #v.lines or PROFILE_LINES) * LINE_H
+    profile.footnote:ClearAllPoints()
+    profile.footnote:SetPoint("TOPLEFT", 0, statsEnd - 6)
+    recentX, recentTop, recentW = MODEL_X, 0, 322
+  else
+    local used = v and #v.lines or PROFILE_LINES
+    local statsEnd = PROFILE_TOP - used * LINE_H
+    profile.footnote:ClearAllPoints()
+    profile.footnote:SetPoint("TOPLEFT", 0, statsEnd - 6)
+    recentX, recentW = 0, LEFT_W
+    recentTop = statsEnd - 8 - ((v and v.estimated) and 26 or 0) -- (the footnote: up to 2 small lines)
+  end
   profile.recentHeader:ClearAllPoints()
   profile.recentHeader:SetPoint("TOPLEFT", recentX, recentTop)
-  for i = 1, RECENT_LINES do
-    profile.recent[i]:ClearAllPoints()
-    profile.recent[i]:SetPoint("TOPLEFT", recentX, recentTop - i * 19)
-    profile.recent[i]:SetWidth(poster and 360 or 320)
-  end
-
   profile.recentHeader:SetText(v and L.PROF_RECENT or "")
+
+  -- the entries: wrapped in full, filled page by page into the room between the heading and the
+  -- controls row (its top is -(PAGE_H - CONTROLS_H); the entries start 22 under the heading)
+  if recentFor ~= profileName then recentFor, recentPage = profileName, 1 end
   local recent = v and v.recent or {}
-  for i = 1, RECENT_LINES do
-    local e = i <= recentLines and recent[i]
-    profile.recent[i]:SetText(e and ("|cff888888" .. ns.Ago(e.t) .. "|r  " .. e.text) or "")
+  local entryTop = recentTop - 22
+  local avail = PAGE_H - CONTROLS_H + entryTop
+  local pages = {}
+  if #recent > 0 then pages = paginate(recent, recentW, avail) end
+  recentPage = math.max(1, math.min(recentPage, math.max(1, #pages)))
+  local pg = pages[recentPage]
+  local prev
+  for i = 1, RECENT_POOL do
+    local fs = profile.recent[i]
+    local e = pg and recent[pg.first + i - 1]
+    fs:ClearAllPoints()
+    fs:SetWidth(recentW)
+    if e and pg.first + i - 1 <= pg.last then
+      if prev then fs:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -RECENT_GAP)
+      else fs:SetPoint("TOPLEFT", recentX, entryTop) end
+      fs:SetText(recentText(e))
+      fs:Show()
+      prev = fs
+    elseif i == 1 and v and #recent == 0 then
+      fs:SetPoint("TOPLEFT", recentX, entryTop)
+      fs:SetText("|cff888888" .. L.PROF_RECENT_NONE .. "|r")
+      fs:Show()
+    else
+      fs:SetText("")
+      fs:Hide()
+    end
   end
-  if v and #recent == 0 then profile.recent[1]:SetText("|cff888888" .. L.PROF_RECENT_NONE .. "|r") end
+  -- page arrows and "1/3", right end of the heading's row (level with the heading, so clear of
+  -- the controls row in all three layouts); hidden with a single page
+  local pager = profile.recentPager
+  local multi = #pages > 1
+  pager.page, pager.pages = recentPage, #pages
+  pager.prev:ClearAllPoints()
+  pager.prev:SetPoint("TOPLEFT", recentX + recentW - 46, recentTop + 2)
+  pager.next:ClearAllPoints()
+  pager.next:SetPoint("LEFT", pager.prev, "RIGHT", 2, 0)
+  pager.label:SetText(multi and L.PROF_PAGE:format(recentPage, #pages) or "")
+  pager.label:SetShown(multi)
+  pager.prev:SetShown(multi)
+  pager.next:SetShown(multi)
+  pager.prev:SetEnabled(recentPage > 1)
+  pager.next:SetEnabled(recentPage < #pages)
   profile.footnote:SetText(v and v.estimated and ("|cff888888" .. L.PROF_ESTIMATED .. "|r") or "")
 
-  -- controls: you = clear most wanted; friend = pick; enemy = note (on your hitlist) + most wanted
+  -- controls: Victims; a friend: pick for alerts; an enemy: post a bounty
   local c = profile.controls
   c:SetShown(v ~= nil)
   if not v then return end
-  local editable = v.kind == "enemy" and v.onHitlist
-  c.editLabel:SetShown(editable)
-  c.edit:SetShown(editable)
-  c.save:SetShown(editable)
-  c.row:Layout()
-  if editable and not c.edit:HasFocus() then c.edit:SetText(v.note or "") end
-  -- Kill list (n): who they killed, how many in all
+  -- Victims (n): who they killed, how many in all
   UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Total(ns.Kills.List(profileName))))
   c.kills:Show()
-  c.post:SetShown(v.kind == "enemy" and not ns.viewSim)
+  c.post:SetShown(v.kind == "enemy")
+  -- a friend: add to or take off your alert list
   local action = c.action
-  action:Show()
-  action:Enable()
-  if v.isMe then
-    -- only there when you have a most wanted to clear (you set one on an enemy's profile)
-    UI.SetButtonText(action, L.BTN_WANTED_CLEAR)
-    action:SetShown(ns.Profile.Wanted() ~= nil)
-  elseif v.kind == "enemy" then
-    local isWanted = ns.Profile.Wanted() == profileName
-    UI.SetButtonText(action, isWanted and L.BTN_WANTED_CLEAR or L.BTN_WANTED_SET)
-  else
+  local isFriend = v.kind == "friend"
+  action:SetShown(isFriend)
+  if isFriend then
     local tag = ns.Comm.TagFor(profileName)
     UI.SetButtonText(action, ns.Comm.IsPicked(tag) and L.BTN_PICK_OFF or L.BTN_PICK_ON)
-    action:SetEnabled(tag ~= nil and not ns.viewSim and profileName ~= ns.me)
+    action:SetEnabled(tag ~= nil)
   end
-  c.row:Layout() -- (the action button may have come or gone)
+  c.row:Layout() -- (the buttons that apply, side by side)
 end
 
+-- the profile's action button: a friend on or off your alert list
 function UI.ProfileAction()
   local profileName = UI.ProfileName()
-  local kind = ns.Profile.KindOf(profileName)
-  if not kind then return end
-  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
-  if kind == "me" or (kind == "enemy" and ns.Profile.Wanted() == profileName) then
-    ns.Profile.SetWanted(nil)
-    print(prefix .. L.WANTED_CLEARED)
-  elseif kind == "enemy" then
-    print(prefix .. L.WANTED_SET:format(ns.Profile.SetWanted(profileName)))
-  else
-    UI.TogglePick(profileName)
-    return
-  end
-  UI.Refresh()
-end
-
--- Save on the profile page: the note on an enemy on your hitlist (it never leaves your computer)
-function UI.ProfileSave(text)
-  local profileName = UI.ProfileName()
-  local kind = ns.Profile.KindOf(profileName)
-  if kind == "enemy" then
-    local h = R().hitlist[ns.Data.Resolve(R().hitlist, profileName)]
-    if h then h.note = (text and text ~= "") and text or nil end
-  end
-  UI.Refresh()
+  if ns.Profile.KindOf(profileName) == "friend" then UI.TogglePick(profileName) end
 end
 
 -- leaving the Profile page: the numbers count up again next time
@@ -326,18 +413,29 @@ function UI.BuildProfile(win)
     fs:SetWordWrap(wrap and true or false)
     return fs
   end
-  -- an enemy's Wanted poster: the left column of their profile page, above the note box. Light
+  -- an enemy's Wanted poster: the left column of their profile page. Light
   -- worn paper, all centred: WANTED / a framed portrait / DEAD OR ALIVE / their name / level,
   -- race, class, guild / their bounty. Their faction: a small crest in the corner (it's always
   -- the other one).
   local INK, SOFT, RED = ns.Art.INK, ns.Art.INK_SOFT, ns.Art.INK_RED
+  -- the space for it: from just under the Back button (win TOPLEFT 16,-30, 22 tall -> bottom at
+  -- -52; +6 gap = -58 = profile top (-62) + 4) down to the page's bottom edge (the controls row's
+  -- bottom; its buttons are on the right, so this column may use the full height); the poster
+  -- sits centred in it. Slot = 470 - 58 - 28 = 384 tall; POSTER_H 360 leaves 12 above and below.
+  local slot = CreateFrame("Frame", nil, profile)
+  slot:SetPoint("TOPLEFT", -8, 4)
+  slot:SetPoint("BOTTOMLEFT", -8, 0)
+  slot:SetWidth(POSTER_W)
   local pw = CreateFrame("Frame", nil, profile)
-  pw:SetPoint("TOPLEFT", -8, 8)
-  pw:SetPoint("BOTTOMLEFT", -8, 32)
-  pw:SetWidth(POSTER_W)
+  pw:SetPoint("LEFT", slot, "LEFT", 0, 0) -- (vertical centre of the slot)
+  pw:SetSize(POSTER_W, POSTER_H)
   ns.Art.Parchment(pw)
-  -- top to bottom, each a set gap below the one before (UI.Column), centred on the poster
+  -- top to bottom, each a set gap below the one before (UI.Column), centred on the poster; a
+  -- spacer on top is sized when it's rendered so the whole block sits in the middle
   local col = UI.Column(pw, "TOP", 0, 0)
+  local pad = CreateFrame("Frame", nil, pw)
+  pad:SetSize(1, 1)
+  col:Add(pad, 0)
   local function inked(font, size, color, gap)
     local fs = pw:CreateFontString(nil, "OVERLAY", font)
     if size then ns.Art.UseTitleFont(fs, size) end
@@ -400,9 +498,10 @@ function UI.BuildProfile(win)
   profile.posterName = inked("GameFontNormalLarge", 22, INK, 7)
   profile.posterSub = inked("GameFontHighlight", nil, SOFT, 6)
   profile.posterGuild = inked("GameFontHighlight", nil, SOFT, 3)
-  profile.bountyLabel = inked("GameFontNormalSmall", 13, SOFT, 12)
+  profile.bountyLabel = inked("GameFontNormal", 15, INK, 10)
   profile.bountyLabel:SetText(L.PROF_BOUNTY)
-  profile.bounty = inked("GameFontNormalLarge", 26, RED, 3)
+  profile.bounty = inked("GameFontNormalLarge", 26, RED, 2)
+  profile.rankLine = inked("GameFontNormalLarge", 18, { 0.36, 0.03, 0.02 }, 0) -- their rank (and "on a rampage")
   -- hover the bounty: how it's worked out
   local bountyTip = CreateFrame("Frame", nil, pw)
   bountyTip:SetPoint("TOPLEFT", profile.bountyLabel, "TOPLEFT")
@@ -411,7 +510,7 @@ function UI.BuildProfile(win)
   bountyTip:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine(L.PROF_BOUNTY, 1, 0.82, 0)
-    GameTooltip:AddLine(L.TIP_BOUNTY:format(ns.Bounty.MURDER, ns.Bounty.ATTACK, ns.Bounty.WANTED), 1, 1, 1, true)
+    GameTooltip:AddLine(L.TIP_BOUNTY:format(ns.Bounty.MURDER, ns.Bounty.ATTACK), 1, 1, 1, true)
     GameTooltip:Show()
   end)
   bountyTip:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -422,6 +521,29 @@ function UI.BuildProfile(win)
   profile.factionIcon:SetAlpha(0.75)
 
   function profile.ShowPoster(on) pw:SetShown(on) end
+  -- Centre the stacked lines vertically on the parchment: equal empty paper above WANTED and
+  -- below the last line. Optional lines (guild, rank) are hidden when empty, so they take no room.
+  -- Heights come from the text itself (estimates when the client can't say).
+  local ESTIMATE = { wanted = 34, deadOrAlive = 15, posterName = 22, posterSub = 13, posterGuild = 13,
+    bountyLabel = 15, bounty = 26, rankLine = 18 }
+  local STACK = { { "wanted", 10 }, { "portrait", 12 }, { "deadOrAlive", 16 }, { "posterName", 7 },
+    { "posterSub", 6 }, { "posterGuild", 3 }, { "bountyLabel", 10 }, { "bounty", 2 }, { "rankLine", 0 } }
+  function profile.CenterPoster()
+    profile.posterGuild:SetShown((profile.posterGuild:GetText() or "") ~= "")
+    profile.rankLine:SetShown((profile.rankLine:GetText() or "") ~= "")
+    col:Layout()
+    local total, first = 0, nil
+    for _, item in ipairs(STACK) do
+      local r = profile[item[1]]
+      if not r.IsShown or r:IsShown() then
+        local h = (item[1] == "portrait") and PORTRAIT_H or (r.GetStringHeight and r:GetStringHeight()) or 0
+        if not h or h <= 0 then h = ESTIMATE[item[1]] or 0 end
+        if first then total = total + item[2] else first = item[2] end
+        total = total + h
+      end
+    end
+    pad:SetHeight(math.max(1, math.floor((POSTER_H - total) / 2 - (first or 0))))
+  end
   profile.poster = pw
   pw:Hide()
 
@@ -457,38 +579,61 @@ function UI.BuildProfile(win)
   end
   profile.recentHeader = text("GameFontNormalSmall")
   ns.Art.UseTitleFont(profile.recentHeader, 15)
-  profile.recentHeader:SetPoint("TOPLEFT", 340, PROFILE_TOP)
+  profile.recentHeader:SetPoint("TOPLEFT", 0, PROFILE_TOP)
   profile.recent = {}
-  for i = 1, RECENT_LINES do
-    local fs = text("GameFontHighlightSmall")
+  -- entries wrap in full (up to RECENT_MAX_LINES lines), stacked under each other (placed in RenderProfile)
+  local function wrapped(fs)
+    fs:SetWordWrap(true)
+    fs:SetJustifyH("LEFT")
+    if fs.SetMaxLines then fs:SetMaxLines(RECENT_MAX_LINES) end
+    return fs
+  end
+  for i = 1, RECENT_POOL do
+    local fs = wrapped(text("GameFontHighlightSmall"))
     fs:SetPoint("TOPLEFT", 340, PROFILE_TOP - i * 19)
     fs:SetWidth(320)
-    fs:SetWordWrap(false)
     profile.recent[i] = fs
-    -- a line cut short ("...") shows in full on hover
-    local hover = CreateFrame("Frame", nil, profile)
-    hover:SetAllPoints(fs)
-    hover:EnableMouse(true)
-    hover:SetScript("OnEnter", function(self)
-      local full = fs:GetText()
-      if not full or full == "" or not (fs.IsTruncated and fs:IsTruncated()) then return end
-      GameTooltip:SetOwner(self, "ANCHOR_TOP")
-      GameTooltip:AddLine(full, 1, 1, 1, true)
-      GameTooltip:Show()
-    end)
-    hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
   end
+  UI.EnableNameLinks(profile) -- (names in Recent PvP are links to their profile)
+  profile.recentMeasure = wrapped(text("GameFontHighlightSmall")) -- (never shown: measures entries)
+  profile.recentMeasure:Hide()
+  -- page arrows (the spellbook's) and "1/3" at the right end of the heading
+  local pager = {}
+  pager.label = text("GameFontDisableSmall")
+  pager.label:SetJustifyH("RIGHT")
+  local function arrow(dir)
+    local b = CreateFrame("Button", nil, profile)
+    b:SetSize(20, 20)
+    local n = dir < 0 and "Prev" or "Next"
+    b:SetNormalTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. n .. "Page-Up")
+    b:SetPushedTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. n .. "Page-Down")
+    b:SetDisabledTexture("Interface\\Buttons\\UI-SpellbookIcon-" .. n .. "Page-Disabled")
+    b:SetScript("OnClick", function()
+      recentPage = math.max(1, (recentPage or 1) + dir)
+      UI.RenderProfile()
+    end)
+    return b
+  end
+  pager.prev, pager.next = arrow(-1), arrow(1)
+  pager.label:SetPoint("RIGHT", pager.prev, "LEFT", -2, 0)
+  pager.label:SetWidth(40)
+  profile.recentPager = pager
   -- your own profile: your character, top of the right column (recent PvP moves below it).
   -- Drag to turn it. Without model frames in this client, the page is the same as a friend's.
   local okModel, model = pcall(CreateFrame, "PlayerModel", nil, profile)
   if okModel and model then
-    model:SetPoint("TOPLEFT", 340, MODEL_TOP)
-    model:SetSize(320, MODEL_H)
+    -- the right column, top to just above the controls row
+    model:SetPoint("TOPLEFT", MODEL_X, 0)
+    model:SetPoint("BOTTOMRIGHT", 0, CONTROLS_H)
     model:Hide()
-    -- head-and-shoulders framing (0 = whole body, 1 = face only); set again once the model
-    -- has loaded, since the client resets the camera when a unit's model finishes loading
+    -- whole body, head to feet: zoom 0 = whole body, camera pulled in close so the character fills
+    -- its frame (0.9; ~0.8 is the closest that still fits the head for tall races - tune in game),
+    -- no offset. Set again once the model has loaded and on every show, since the client resets
+    -- the camera when a unit's model finishes loading
     local function frame(self)
-      pcall(self.SetPortraitZoom, self, 0.45)
+      pcall(self.SetPortraitZoom, self, 0)
+      pcall(self.SetCamDistanceScale, self, 0.9)
+      pcall(self.SetPosition, self, 0, 0, 0)
     end
     local function dress(self)
       pcall(self.SetUnit, self, "player")
@@ -532,29 +677,12 @@ function UI.BuildProfile(win)
   c:SetPoint("BOTTOMLEFT", 0, 0)
   c:SetPoint("BOTTOMRIGHT", 0, 0)
   c:SetHeight(24)
-  -- right to left: [action][Kill list], then the note box and Save (enemies on your hitlist)
+  -- right to left: [action (a friend: alert list)][Victims][Post bounty (an enemy)]
   c.row = UI.Row(c, "BOTTOMRIGHT", 0, 0)
-  c.action = c.row:Add(button(c, 130, L.BTN_WANTED_SET, function() UI.ProfileAction() end))
+  c.action = c.row:Add(button(c, 130, L.BTN_PICK_ON, function() UI.ProfileAction() end))
   c.kills = c.row:Add(button(c, 90, L.BTN_KILL_LIST, function() UI.ShowKills(UI.ProfileName()) end), 8)
   -- an enemy: put a bounty on them (the Bounty board)
   c.post = c.row:Add(button(c, 100, L.BTN_POST_BOUNTY, function() UI.PostBounty(UI.ProfileName()) end), 8)
-  c.editLabel = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.editLabel:SetPoint("BOTTOMLEFT", 0, 4)
-  c.editLabel:SetText(L.NOTE)
-  c.edit = CreateFrame("EditBox", nil, c, "InputBoxTemplate")
-  c.edit:SetHeight(20)
-  c.edit:SetPoint("LEFT", c.editLabel, "RIGHT", 10, 0)
-  c.edit:SetAutoFocus(false)
-  c.edit:SetMaxLetters(200)
-  local function saveEdit()
-    c.edit:ClearFocus()
-    ns.Art.Sound("save")
-    UI.ProfileSave(c.edit:GetText())
-  end
-  c.save = c.row:Add(button(c, 60, L.SAVE, saveEdit), 16)
-  c.edit:SetPoint("RIGHT", c.save, "LEFT", -10, 0)
-  c.edit:SetScript("OnEnterPressed", saveEdit)
-  c.edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   profile.controls = c
   return profile
 end

@@ -237,12 +237,11 @@ local SOUNDS = {
   open = "IG_CHARACTER_INFO_OPEN",
   close = "IG_CHARACTER_INFO_CLOSE",
   page = "IG_ABILITY_PAGE_TURN", -- tab switch
-  save = "IG_QUEST_LIST_SELECT", -- a note written
 }
 
+-- window sounds are always on, like the game's own windows (the game's sound settings still
+-- apply); only alert sounds have an on/off switch (Options -> Sounds)
 function Art.Sound(what)
-  local s = ns.S and ns.S().sound
-  if not s or s.enabled == false or s.ui == false then return end
   local id = SOUNDKIT and SOUNDKIT[SOUNDS[what] or ""]
   if id and PlaySound then pcall(PlaySound, id) end
 end

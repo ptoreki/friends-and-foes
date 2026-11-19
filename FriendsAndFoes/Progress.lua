@@ -154,7 +154,7 @@ ns.On("PLAYER_EQUIPMENT_CHANGED", function(slot)
   if known[key] then return end
   known[key] = true
   ns.GetItemInfoAsync(link, function(quality)
-    if not quality or quality < QUALITY_RARE then return end
+    if not quality or quality < QUALITY_EPIC then return end -- (new gear: epic and better)
     local t = recentLootShared[id]
     if t and GetTime() - t < 300 then return end -- already announced as loot
     queueGear(link, quality)

@@ -3,7 +3,10 @@ FRAMES = {}
 local now = 1000
 function GetTime() return now end
 function ADVANCE(s) now = now + s end
-time = function(t) return os.time(t) end
+-- frozen wall clock: tests capture t0 = time() and later post contracts at "now"; a real second
+-- ticking over between the two made c.t > t0 and kills at t0 predate the bounty (flaky)
+local frozen = os.time()
+time = function(t) if t then return os.time(t) end return frozen end
 date = os.date
 
 local function newObj()

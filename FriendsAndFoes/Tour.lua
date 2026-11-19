@@ -35,6 +35,7 @@ local function build(parent)
       tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 },
     })
   end
+  ns.UI.SolidBackground(f)
   f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   ns.Art.UseTitleFont(f.title, 22)
   f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")

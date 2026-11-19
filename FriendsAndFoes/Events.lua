@@ -6,7 +6,7 @@ local L = ns.L
 local Events = {}
 ns.Events = Events
 
-local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", ENG = "pvp", DIE = "pvp", KILL = "pvp", SIGHT = "pvp" }
+local SHARE = { LVL = "level", LOOT = "loot", GEAR = "gear", ATK = "pvp", ENG = "pvp", DIE = "pvp", KILL = "pvp", AST = "pvp", SIGHT = "pvp" }
 Events.SHARE = SHARE
 
 local ICON = {
@@ -21,11 +21,9 @@ local ICON = {
 }
 ns.ICON = ICON
 
--- sim = true marks the event as simulated: it goes to the scratch store on every client.
 -- Kill streak (kills in a row without dying in world PvP) is counted by the player's own client,
 -- which sees all of their kills and deaths, and sent along with KILL / DIE.
-local function trackStreak(kind, fields, sim)
-  if sim then return end -- simulated events never touch the real streak
+local function trackStreak(kind, fields)
   local c = FriendsAndFoesCharDB
   if kind == "KILL" then
     c.streak = (c.streak or 0) + 1
@@ -36,12 +34,12 @@ local function trackStreak(kind, fields, sim)
   end
 end
 
-function Events.Emit(kind, fields, sim)
-  trackStreak(kind, fields, sim)
+function Events.Emit(kind, fields)
+  trackStreak(kind, fields)
   -- may friends pass this on to their other friends? (Options: "Friends may pass on my events")
   fields.rl = ns.Comm.RelayAllowed() and "1" or ""
   local _, class = UnitClass("player")
-  local msg = { kind = kind, id = ns.NewId(sim), class = class, level = UnitLevel("player"), f = fields }
+  local msg = { kind = kind, id = ns.NewId(), class = class, level = UnitLevel("player"), f = fields }
   local wire = ns.Comm.Fit(msg)
   if not wire then return end
   local decoded = ns.Comm.Decode(wire)
@@ -50,7 +48,7 @@ function Events.Emit(kind, fields, sim)
   Events.Apply(decoded, true)
   if SHARE[kind] and ns.S().share[SHARE[kind]] then
     ns.Comm.Broadcast(msg)
-    if not sim then ns.Comm.Remember(kind, msg.id, fields) end -- for friends who are offline now
+    ns.Comm.Remember(kind, msg.id, fields) -- for friends who are offline now
   end
 end
 
@@ -64,7 +62,7 @@ local function feed(p, kind, text, foes)
   -- their latest event, and when it happened (an older one caught up later doesn't replace it)
   local t = ns.Now()
   if p and (not p.lastTextAt or t >= p.lastTextAt) then p.lastText, p.lastTextAt = text, t end
-  ns.Data.Feed(kind, text, p and p.name, foes)
+  return ns.Data.Feed(kind, text, p and p.name, foes)
 end
 
 -- names of decoded units, for feed()
@@ -121,6 +119,25 @@ local function enemyTouch(u, zone)
   ns.PvP.NoteRace(e)
   return e
 end
+
+-- who an enemy has attacked or killed (a set of names with the time, the last HITWHO_MAX kept)
+local HITWHO_MAX = 10
+local function noteWho(h, name)
+  if not (h and name) then return end
+  h.hitWho = type(h.hitWho) == "table" and h.hitWho or {}
+  h.hitWho[name] = ns.Now()
+  local n = 0
+  for _ in pairs(h.hitWho) do n = n + 1 end
+  while n > HITWHO_MAX do
+    local oldest, ot
+    for k, t in pairs(h.hitWho) do
+      if not ot or (tonumber(t) or 0) < ot then oldest, ot = k, tonumber(t) or 0 end
+    end
+    h.hitWho[oldest] = nil
+    n = n - 1
+  end
+end
+Events.NoteWho = noteWho
 
 -- A kill puts someone on the hitlist, and so does attacking one of you first (an ATK: they
 -- started it). Attacks counted on their enemy record (e.atk) are carried over when they're added.
@@ -204,7 +221,7 @@ end
 local H = {}
 
 -- events whose zone is where the sender was (their own fights and sightings)
-local PLACE_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, SIGHT = true }
+local PLACE_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, AST = true, SIGHT = true }
 
 -- Text from friends' messages is shown in chat and the window: only plain text, a class token,
 -- or a real item link gets through (a modified client can't slip in textures or other links)
@@ -212,7 +229,18 @@ local TEXT_FIELDS = { zone = true, guild = true, vguild = true }
 local CLASS_FIELDS = { class = true, vclass = true }
 -- numbers that get shown: whole and never negative
 local NUMBER_FIELDS = { level = true, vlevel = true, streak = true, ended = true, count = true, epics = true,
-  k = true, d = true, bt = true, added = true }
+  k = true, d = true, bt = true, btw = true, bwk = true, added = true, last = true }
+
+-- Who gets the credit for a kill: a credit is { blow = "1"|"pet"|nil, last = seconds|nil }.
+-- A killing blow beats none (the first of two stays); with no blow the more recent attacker (the
+-- smaller `last`) wins, a known `last` beating an unknown one; nothing known: the first stays.
+-- Returns true when `a` outranks `b`.
+function Events.BetterCredit(a, b)
+  a, b = a or {}, b or {}
+  if a.blow or b.blow then return a.blow ~= nil and b.blow == nil end
+  if a.last and b.last then return a.last < b.last end
+  return a.last ~= nil and b.last == nil
+end
 
 function Events.Clean(msg)
   if msg.level then msg.level = ns.Count(msg.level) end
@@ -227,14 +255,12 @@ function Events.Clean(msg)
   end
 end
 
-local simTold = {} -- friends whose test alerts you were told about (once per session)
-
 function Events.Apply(msg, isSelf)
   local h = H[msg.kind]
   if not h then return end
+  -- (ids starting with "S": a friend on 0.9.3 or older testing with /fnf sim - never real data)
+  if msg.id:sub(1, 1) == "S" then return end
   if not isSelf then Events.Clean(msg) end
-  local sim = msg.id:sub(1, 1) == "S"
-  ns.simulating = sim
   local ok, err = pcall(function()
     local p = ns.Data.Player(msg.from)
     p.friend = true
@@ -251,24 +277,16 @@ function Events.Apply(msg, isSelf)
     if not isSelf and PLACE_KINDS[msg.kind] then ns.Profile.SeenAt(p, msg.f.zone, ns.Now()) end
     h(msg, isSelf, p, msg.f)
   end)
-  ns.simulating, ns.past, ns.eventTime = false, nil, nil
+  ns.past, ns.eventTime = nil, nil
   if ok and msg.ago then Events.CaughtUp(msg.from) end
   if not ok then error(err, 0) end
 
-  if not isSelf and not sim and ns.VersionNewer(msg.version, ns.VERSION) then
+  if not isSelf and ns.VersionNewer(msg.version, ns.VERSION) then
     Events.NewerVersion(msg.from, msg.version)
-  elseif not isSelf and not sim and msg.version and ns.VersionNewer(ns.VERSION, msg.version) then
+  elseif not isSelf and msg.version and ns.VersionNewer(ns.VERSION, msg.version) then
     Events.OlderVersion(msg.from, msg.version)
   end
-  -- your own simulation switches the window to it; a friend's test alerts don't take your window
-  -- over (one chat line says they're there)
-  if sim and (isSelf or msg.localSim) then
-    ns.viewSim = true
-  elseif sim and not simTold[msg.from] then
-    simTold[msg.from] = true
-    ns.Toast.Chat(L.SIM_FROM_FRIEND:format(ns.ClassColored(msg.from)))
-  end
-  if not sim and ns.Marks then ns.Marks.Refresh() end -- a new hitlist entry may be on screen
+  if ns.Marks then ns.Marks.Refresh() end -- a new hitlist entry may be on screen
   if ns.UI and ns.UI.OnDataChanged then ns.UI.OnDataChanged() end
 end
 
@@ -313,18 +331,17 @@ H.GEAR = function(_, isSelf, p, f)
   local line = L.FEED_GEAR:format(who(p), text) -- the Feed keeps the whole batch
   feed(p, "gear", line)
   if isSelf then return end
-  -- "Epic only": the toast counts just the epics of the batch (senders before 0.6.2 don't say)
+  -- epic gear only: the toast counts just the epics of a batch (friends on 0.9.3 or older also
+  -- send blue gear; senders before 0.6.2 don't say how many were epic)
   local epics = tonumber(f.epics)
-  if epics and (tonumber(ns.S().gearMin) or 3) >= 4 and epics >= 1 and epics ~= count then
+  if epics and epics >= 1 and epics ~= count then
     count = epics
     text = (count > 1) and L.TOAST_GEAR_MORE:format(f.link, count - 1) or f.link
     line = L.FEED_GEAR:format(who(p), text)
   end
-  -- Options: blue or better, or epic only (still in the Feed)
   local q = ns.ItemQuality(f.link)
-  local min = tonumber(ns.S().gearMin) or 3
-  if q and q < min then
-    ns.Debug("TOAST", "gear", ns.Plain(line), "skipped: below the gear quality you chose")
+  if q and q < 4 then
+    ns.Debug("TOAST", "gear", ns.Plain(line), "skipped: not epic")
     return
   end
   ns.Toast.Push({
@@ -359,6 +376,8 @@ H.ATK = function(msg, isSelf, p, f)
         local isNew = ns.Data.FindHit(u.name) == nil
         local h = hitTouch(u, f.zone) -- (a new entry starts with their attacks so far, this one included)
         if not isNew then h.attacks = (h.attacks or 0) + 1 end
+        h.lastOffence = math.max(tonumber(h.lastOffence) or 0, ns.Now())
+        noteWho(h, isSelf and ns.me or p.name)
       end
     end
   end
@@ -406,7 +425,7 @@ H.DIE = function(msg, isSelf, p, f)
   local function onYourSide(name) return name == msg.from or ns.PvP.IsFriendly(name) end
   local killer = ns.DecodeUnit(f.killer)
   if killer and killer.name and onYourSide(killer.name) then killer = nil end
-  if isSelf and not msg.id:find("^S") then
+  if isSelf then
     Events.WeeklyAdd("d", killer and killer.name)
     ns.Profile.Changed() -- friends' leaderboards
   end
@@ -417,6 +436,12 @@ H.DIE = function(msg, isSelf, p, f)
     e.k = e.k + 1
     h = hitTouch(killer, f.zone, msg.from)
     h.kills = h.kills + 1
+    noteWho(h, msg.from)
+    -- when they killed (for a rampage: the last 10) and their last offence (for cooling)
+    h.killTimes = h.killTimes or {}
+    h.killTimes[#h.killTimes + 1] = ns.Now()
+    while #h.killTimes > 10 do table.remove(h.killTimes, 1) end
+    h.lastOffence = math.max(tonumber(h.lastOffence) or 0, ns.Now())
     if suspect then h.suspect = h.suspect + 1 end
     by = ns.ClassColored(killer.name, killer.class) .. (suspect and L.SUSPECT_TAG or "")
   end
@@ -441,12 +466,26 @@ H.DIE = function(msg, isSelf, p, f)
   })
 end
 
+-- enemy name -> GetTime() you reported their death yourself, or sent an AST for it: not again
+-- within ASSIST_ONCE seconds (you'd already be one of the killers)
+local assisted, ASSIST_ONCE = {}, 60
+
+-- One death, one toast and one Feed line, however many friends report the kill: a second killer's
+-- report of the same victim within SAME_DEATH seconds, with the victim not seen alive in between,
+-- folds into the first (a new death - Reincarnation, a soulstone, a resurrection - is its own).
+local SAME_DEATH = 60
+local deaths = {} -- victim -> { t = first report (GetTime), killers = set, names = {...}, entry = Feed entry, zone }
+local function mergeDeath(old, new)
+  old.title, old.text, old.chat = new.title, new.text, new.chat
+end
+
 H.KILL = function(msg, isSelf, p, f)
-  if isSelf and not msg.id:find("^S") then
+  if isSelf then
     Events.WeeklyAdd("k")
     ns.Profile.Changed()
   end
   local name = ns.CleanName(f.victim)
+  ns.Debug("KILL", isSelf and "you" or p.name, "victim " .. tostring(name or "(unnamed)"), "blow " .. tostring(f.blow ~= "" and f.blow or "-"), "last " .. tostring(f.last ~= "" and f.last or "?"), ns.past and "caught up" or "live")
   -- someone on your side is never a victim (it can only be a misread): a kill without a name
   if name and ns.PvP.IsFriendly(name) then name = nil end
   p.k = p.k + 1
@@ -456,6 +495,8 @@ H.KILL = function(msg, isSelf, p, f)
     -- on its own so the kill list can show them as one "name not readable" line
     p.kx = ns.Count(p.kx) + 1
     local title, text, line = ns.Flavor.Kill(p, who(p), nil, nil, nil, false, f.zone, streak)
+    if f.blow == "1" then title, line = title .. L.KILLING_BLOW_TAG, line .. L.KILLING_BLOW_TAG end
+    if f.blow == "pet" then title, line = title .. L.PET_BLOW_TAG, line .. L.PET_BLOW_TAG end
     feed(p, "kill", line)
     if isSelf then return end
     ns.Toast.Push({
@@ -468,10 +509,29 @@ H.KILL = function(msg, isSelf, p, f)
   local e = enemyTouch(victim, f.zone)
   local counted = ns.Data.EnemyDied(name)
   ns.Kills.Add(p, e.name, f.zone) -- the killer's kill list
-  -- their bounty: collected by everyone who got the kill (never in the simulation)
-  if not msg.id:find("^S") and e.enemy then
-    ns.Bounty.OnKill(isSelf and ns.me or p.name, e.name)
-    ns.Contracts.OnKill(isSelf and ns.me or p.name, e.name) -- the bounty board: contracts on them are done
+  -- their bounty: collected by everyone who got the kill
+  if e.enemy then
+    -- who gets the credit: the killing blow, when the game says whose it was; else everyone who got
+    -- the kill (notoriety) / the first to report it (a bounty)
+    local credit = { blow = (f.blow == "1" or f.blow == "pet") and f.blow or nil, last = tonumber(f.last) }
+    ns.Bounty.OnKill(isSelf and ns.me or p.name, e.name, credit)
+    ns.Contracts.OnKill(isSelf and ns.me or p.name, e.name, credit) -- the bounty board: contracts on them are done
+    -- you healed or buffed this friend a moment ago, outside their party (so no honor, no KILL of
+    -- your own): you were in on it, and your friends are told (once per victim)
+    local at = GetTime()
+    if isSelf then
+      assisted[e.name] = at
+    elseif ns.past then
+      ns.Debug("AST-SKIP", e.name, "a caught-up kill")
+    elseif not ns.PvP.SupportedRecently(p.name, ns.PvP.SUPPORT_WINDOW) then
+      ns.Debug("AST-SKIP", e.name, "you did not support " .. p.name .. " in the last " .. ns.PvP.SUPPORT_WINDOW .. " s")
+    elseif assisted[e.name] and at - assisted[e.name] <= ASSIST_ONCE then
+      ns.Debug("AST-SKIP", e.name, "already reported or assisted in the last " .. ASSIST_ONCE .. " s")
+    else
+      assisted[e.name] = at
+      ns.Debug("AST-SEND", e.name, "helped " .. p.name)
+      Events.Emit("AST", { victim = e.name, vclass = f.vclass or "", vlevel = f.vlevel or "", zone = f.zone or "", helped = p.name })
+    end
   end
 
   local hit = ns.Data.FindHit(name)
@@ -484,14 +544,89 @@ H.KILL = function(msg, isSelf, p, f)
 
   local v = ns.ClassColored(name, victim.class)
   local title, text, line = ns.Flavor.Kill(p, who(p), v, e, hit, revenge, f.zone, streak)
-  feed(p, "kill", line, { name })
+  -- their own killing blow (0.9.4, when the game says so): marked, and counted on their record
+  if f.blow == "1" then
+    title, line = title .. L.KILLING_BLOW_TAG, line .. L.KILLING_BLOW_TAG
+    p.blows = ns.Count(p.blows) + 1
+  elseif f.blow == "pet" then
+    title, line = title .. L.PET_BLOW_TAG, line .. L.PET_BLOW_TAG
+  end
+  local milestone = revenge or ns.Flavor.StreakMilestone(streak)
+  local key = isSelf and ns.me or p.name
+  local now = GetTime()
+  local d = (not ns.past) and deaths[name] or nil
+  if d then
+    local why
+    if d.killers[key] then why = "the same killer again"
+    elseif now - d.t > SAME_DEATH then why = "more than " .. SAME_DEATH .. " s after the first report"
+    elseif ns.PvP.SeenAliveSince(name, d.t) then why = "seen alive since the first report" end
+    if why then
+      ns.Debug("KILL-NEWDEATH", name, why)
+      d = nil
+    end
+  end
+  if d then
+    -- the same death, reported by another killer: one Feed line and one toast naming everyone
+    d.killers[key] = true
+    if isSelf then table.insert(d.names, 1, L.KILL_YOU_NAME) else d.names[#d.names + 1] = who(p) end
+    local together = L.KILL_TOGETHER:format(ns.JoinNames(d.names), v)
+    local place = ns.Flavor.Place(d.zone)
+    local both = together .. ns.Flavor.SEP .. place
+    ns.Debug("KILL-MERGE", name, ns.Plain(ns.JoinNames(d.names)))
+    if d.entry then d.entry.text = both end
+    if not p.lastTextAt or ns.Now() >= p.lastTextAt then p.lastText, p.lastTextAt = both, ns.Now() end
+    if isSelf then return end
+    if milestone then
+      -- a streak or revenge is about this killer: it still gets its own toast (and no plain one)
+      ns.Toast.Push({
+        header = (revenge and L.HEADER_REVENGE) or L.HEADER_STREAK,
+        chat = line, milestone = true, kind = "kill", category = "pvp", icon = ICON.kill,
+        title = title, text = text, player = name,
+      })
+    else
+      ns.Toast.Push({
+        chat = both, kind = "kill", category = "pvp", icon = ICON.kill, mergeOnly = true, keepKey = true,
+        title = together, text = ns.S().flavor ~= false and place or nil, player = name,
+        collapseKey = "death:" .. name .. ":" .. d.t, merge = mergeDeath,
+      })
+    end
+    return
+  end
+  local entry = feed(p, "kill", line, { name })
+  if not ns.past then
+    for k, o in pairs(deaths) do if now - o.t > SAME_DEATH * 2 then deaths[k] = nil end end
+    deaths[name] = { t = now, killers = { [key] = true }, names = { isSelf and L.KILL_YOU_NAME or who(p) },
+      entry = entry, zone = f.zone }
+  end
   if isSelf then return end
   ns.Toast.Push({
     header = (revenge and L.HEADER_REVENGE) or (ns.Flavor.StreakMilestone(streak) and L.HEADER_STREAK) or nil,
-    chat = line, milestone = revenge or ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
+    chat = line, milestone = milestone, kind = "kill", category = "pvp", icon = ICON.kill,
     title = title, text = text,
     player = name,
+    collapseKey = "death:" .. name .. ":" .. now, merge = mergeDeath, keepKey = true,
   })
+end
+
+-- someone supported (healed, buffed) a friend's kill without honor of their own: they share the
+-- notoriety and any bounty, but it's no kill for them (no count, kill list or hitlist change, no toast)
+H.AST = function(msg, isSelf, p, f)
+  local name = ns.CleanName(f.victim)
+  if ns.past then ns.Debug("AST-SKIP", p.name, "a caught-up message") return end
+  if not name or ns.PvP.IsFriendly(name) then ns.Debug("AST-SKIP", p.name, "no usable enemy name: " .. tostring(name)) return end
+  ns.Debug("AST-GOT", isSelf and "you" or p.name, "helped " .. tostring(f.helped), "victim " .. name)
+  ns.Bounty.OnKill(p.name, name, nil)
+  ns.Contracts.OnKill(p.name, name, nil)
+  if isSelf then return end
+  local helped = ns.CleanName(f.helped)
+  local victim = ns.ClassColored(name, f.vclass ~= "" and f.vclass or nil)
+  local line
+  if helped == ns.me then
+    line = L.FEED_ASSIST_YOU:format(who(p), victim)
+  else
+    line = L.FEED_ASSIST:format(who(p), helped and ns.ClassColored(helped) or "?", victim)
+  end
+  feed(p, "kill", line, { name })
 end
 
 -- after a catch-up: one quiet chat line saying what came in, no toasts
@@ -534,16 +669,22 @@ H.SIGHT = function(msg, isSelf, p, f)
   feed(p, "sighting", line, { name })
 end
 
--- a friend's profile: their own all-time K/D, most wanted, zone and status
+-- a friend's profile: their own all-time K/D, zone and status
 H.PRO = function(_, isSelf, p, f)
   if isSelf then return end
   ns.Profile.Apply(p, f)
 end
 
+-- a friend's numbers passed on by another friend (only for friends who are offline)
+H.PRL = function(msg, isSelf, _, f)
+  if isSelf then return end
+  ns.Profile.OnRelayed(msg.from, f)
+end
+
 -- shared groups: membership, and stats passed along by members
 -- a friend's contract on the bounty board (Contracts.lua)
 H.BTY = function(msg, isSelf, _, f)
-  if isSelf or msg.id:find("^S") then return end
+  if isSelf then return end
   ns.Contracts.OnMessage(msg.from, f)
 end
 
@@ -568,10 +709,40 @@ H.KLA = function(msg, isSelf, _, f)
   ns.Kills.OnAnswer(msg.from, f)
 end
 
+-- A week is over (at login, or when you claim notoriety after it): start the next one and say how
+-- the last one went in one chat line.
+function Events.WeeklyRoll()
+  local db = FriendsAndFoesDB
+  local now = time()
+  local w = db.weekly
+  if not w then
+    db.weekly = { start = now, k = 0, d = 0, killers = {}, bt = 0 }
+    return
+  end
+  if now - (w.start or now) < 7 * 86400 then return end
+  db.weekly = { start = now, k = 0, d = 0, killers = {}, bt = 0 }
+  if ns.S().weekly == false or ((w.k or 0) + (w.d or 0) + ns.Count(w.bt)) == 0 then return end
+  local line = L.WEEKLY:format(ns.Count(w.k), ns.Count(w.d))
+  if ns.Count(w.bt) > 0 then line = line:gsub("%.$", "") .. L.WEEKLY_NOTORIETY:format(ns.Art.Points(ns.Count(w.bt))) end
+  local nemesis, most = nil, 0
+  for name, n in pairs(w.killers or {}) do
+    if n > most then nemesis, most = name, n end
+  end
+  if nemesis and most >= 2 then line = line .. " " .. L.WEEKLY_NEMESIS:format(nemesis, most) end
+  C_Timer.After(8, function() ns.Toast.Chat(line) end)
+end
+
 -- weekly summary: your own takedowns and deaths, and who killed you most
+-- (kind "bt": points of notoriety you claimed; killer is then the number)
 function Events.WeeklyAdd(kind, killer)
   local w = FriendsAndFoesDB.weekly
   if not w then return end
+  if kind == "bt" then
+    -- a week over while you were playing: start the next one (with its summary) first
+    if time() - (w.start or time()) >= 7 * 86400 then Events.WeeklyRoll(); w = FriendsAndFoesDB.weekly end
+    w.bt = ns.Count(w.bt) + ns.Count(killer)
+    return
+  end
   if kind == "k" then w.k = (w.k or 0) + 1 end
   if kind == "d" then
     w.d = (w.d or 0) + 1
@@ -584,19 +755,34 @@ end
 
 H.HIT = function(msg, isSelf, p, f)
   if isSelf then return end
-  local added = 0
+  local added, total, dropped = 0, 0, {}
+  local auto = f.auto == "1"
   for _, raw in ipairs(ns.Split(f.entries or "", ";")) do
     local e = ns.Split(raw, ":")
     local name = ns.CleanName(e[1])
+    -- an automatic digest only brings enemies who hurt the sender, you, or a friend you share: the
+    -- 9th field names up to 3 of their victims; none of them on your side = not for you
+    local who9 = {}
+    if auto then
+      for _, n in ipairs(ns.Split(e[9] or "", ",")) do
+        n = ns.CleanName(n)
+        if n and (n == msg.from or ns.Data.OnOurSideName(n)) then who9[#who9 + 1] = n end
+      end
+    end
     local isNew = name and ns.Data.FindHit(name) == nil
-    -- don't add someone your "Forget hitlist players" setting would remove at the next login
+    -- don't add someone your "Forget ... after" settings would remove at the next login
     local hours = tonumber(e[8])
-    local forget = tonumber(ns.S().forgetAfter) or 0
-    local tooOld = isNew and forget > 0 and hours and hours / 24 > forget
+    local forget = ns.Data.ForgetDays({ kills = e[6], attacks = e[5] })
+    local tooOld = isNew and forget and hours and hours / 24 > forget
+    total = total + 1
+    local why = (not name and "no name") or (tooOld and "older than your Forget setting") or ((auto and #who9 == 0) and "no victim on your side")
+      or (ns.PvP.IsFriendly(name) and "on your side") or ((isNew and (tonumber(e[6]) or 0) <= 0 and (tonumber(e[5]) or 0) <= 0) and "no kill or attack") or nil
+    if why then dropped[why] = (dropped[why] or 0) + 1 end
     -- a new entry needs a kill or an attack on one of you (an empty one is never added)
     -- (never someone on your side, even if they are on the sharer's list)
-    if name and not tooOld and not ns.PvP.IsFriendly(name) and (not isNew or (tonumber(e[6]) or 0) > 0 or (tonumber(e[5]) or 0) > 0) then
+    if name and not tooOld and (not auto or #who9 > 0) and not ns.PvP.IsFriendly(name) and (not isNew or (tonumber(e[6]) or 0) > 0 or (tonumber(e[5]) or 0) > 0) then
       local h = ns.Data.Hit(name)
+      for _, n in ipairs(who9) do noteWho(h, n) end
       local cls = e[2] and e[2]:match("^%u+$")
       if cls then h.class = h.class or cls end
       local lvl = tonumber(e[3])
@@ -618,6 +804,15 @@ H.HIT = function(msg, isSelf, p, f)
     end
   end
 
+  -- the automatic digest a friend sends when you meet: merged quietly (no toast, no Feed line)
+  if auto then
+    local parts = {}
+    for why, n in pairs(dropped) do parts[#parts + 1] = n .. " " .. why end
+    table.sort(parts)
+    ns.Debug("DIGEST-GOT", msg.from, "entries " .. total, "new " .. added, "dropped: " .. (#parts > 0 and table.concat(parts, "; ") or "none"))
+    return
+  end
+
   local key = msg.from .. ":" .. f.share
   local s = shareSeen[key]
   if not s then
@@ -628,10 +823,7 @@ H.HIT = function(msg, isSelf, p, f)
   local text = L.FEED_SHARE:format(who(p), s.added)
   s.first = s.entry == nil
   if s.entry then s.entry.text = text else s.entry = ns.Data.Feed("share", text) end
-  ns.Toast.Push({
-    kind = "share", category = "progress", icon = ICON.share, chat = L.CHAT_SHARE:format(who(p)), quiet = not s.first,
-    title = L.TOAST_SHARE:format(who(p)), text = L.TOAST_SHARE_TEXT:format(s.added),
-    collapseKey = "share:" .. key,
-    merge = function(old) old.text = L.TOAST_SHARE_TEXT:format(s.added) end,
-  })
+  -- an old version's manual share: one chat line, never a toast or a sound (the chunks of one
+  -- share fold into that one line)
+  if s.first then ns.Toast.Chat(L.CHAT_SHARE:format(who(p))) end
 end

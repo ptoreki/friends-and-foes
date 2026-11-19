@@ -2,18 +2,18 @@ local _, ns = ...
 local L = ns.L
 
 -- The main window: a plain, native-looking reference you open now and then.
--- Tabs: Hitlist, Leaderboard, Enemies, Friends, Feed, Profile; settings live in the game's Options panel.
+-- Tabs: Hitlist, Bounty board, Friends (with the ranking), Feed, Profile; settings live in the game's Options panel.
 local UI = ns.UI -- (made in UIWidgets.lua, with the shared building blocks)
 ns.UI = UI
 local button, createWindow, createTab = UI.Button, UI.CreateWindow, UI.CreateTab
 
 local WIDTH, HEIGHT = 700, 470
 local ROWS, ROW_H = 15, 20
-local MAX_COLS = 7
+local MAX_COLS = 9
 
-local win, rowsFrame, header, rows, detail, pageText, emptyText, simBanner, friendsHint, prevPage, nextPage
+local win, rowsFrame, header, rows, detail, pageText, emptyText, friendsHint, prevPage, nextPage
 local contractBar -- the Bounty board's bottom row
-local groupBar -- Leaderboard: board picker + group buttons
+local groupBar -- Friends tab: board picker + group buttons
 local pageRow -- bottom right: [<] 1-15 of 40 [>] (arrows only when there's more than a page)
 -- Back (Profile page and Kill list): the places you came through, newest last
 -- ({ tab, offset, boardView, profileName, killsOf })
@@ -34,7 +34,6 @@ local data = {}
 local selected
 
 local function R() return ns.Data.ViewRealm() end
-local onlineNow = {} -- friend record name -> true while they are in the roster (not saved)
 
 ---------------------------------------------------------------------------
 -- cell helpers
@@ -72,7 +71,7 @@ end
 local function lvl(e)
   local n = ns.Count(e.level)
   if n <= 0 then return "?" end
-  if not e.pending and not e.friend and ns.Data.LevelIsOld(e) then return "|cff888888" .. n .. "|r" end
+  if not e.friend and ns.Data.LevelIsOld(e) then return "|cff888888" .. n .. "|r" end
   return tostring(n)
 end
 local C = ns.Count
@@ -97,10 +96,98 @@ local function classIcon(class)
 end
 local function nameCol(e) return classIcon(e.class) .. ns.ClassColored(e.name, e.class) end
 
+-- Clickable names in the Feed tab and the profile's Recent PvP: each player name becomes a custom
+-- hyperlink "|Hfnfplayer:<name>|h...|h" (only in these UI lines, never in toasts or chat).
+local LINK_KIND = "fnfplayer:"
+local function wrapName(colour, name)
+  return (colour or "") .. "|H" .. LINK_KIND .. name .. "|h" .. name .. "|h" .. (colour and "|r" or "")
+end
+-- link `name` wherever it stands alone in `seg` (a stretch of text with no links in it)
+local function linkPlain(seg, name)
+  local out, pos = {}, 1
+  while true do
+    local a, b = seg:find(name, pos, true)
+    if not a then break end
+    local before, after = seg:sub(a - 1, a - 1), seg:sub(b + 1, b + 1)
+    if (a > 1 and before:match("%a")) or after:match("%a") then
+      out[#out + 1] = seg:sub(pos, b)
+    else
+      out[#out + 1] = seg:sub(pos, a - 1) .. wrapName(nil, name)
+    end
+    pos = b + 1
+  end
+  out[#out + 1] = seg:sub(pos)
+  return table.concat(out)
+end
+-- entry: the feed entry (its who / foes name the players in the text)
+-- skip: a name to leave unlinked (the profile that's open: no link to the page you're on)
+function UI.Linkify(text, entry, skip)
+  if type(text) ~= "string" or text == "" or text:find("|H" .. LINK_KIND, 1, true) then return text end
+  -- class-coloured names we know a profile for
+  text = text:gsub("(|c%x%x%x%x%x%x%x%x)([^|]+)|r", function(colour, name)
+    if name ~= skip and ns.Profile.KindOf(name) then return colour .. "|H" .. LINK_KIND .. name .. "|h" .. name .. "|h|r" end
+  end)
+  -- names without a colour (class not known): the entry's own players
+  local names = {}
+  if entry then
+    if type(entry.who) == "string" and entry.who ~= "" and entry.who ~= skip then names[#names + 1] = entry.who end
+    for _, f in ipairs(entry.foes or {}) do
+      if type(f) == "string" and f ~= "" and f ~= skip then names[#names + 1] = f end
+    end
+  end
+  table.sort(names, function(a, b) return #a > #b end) -- (longest first: "Rogz Fang" before "Rogz")
+  for _, name in ipairs(names) do
+    local out, pos = {}, 1
+    while true do
+      local a, b = text:find("|H.-|h.-|h", pos)
+      out[#out + 1] = linkPlain(text:sub(pos, (a or #text + 1) - 1), name)
+      if not a then break end
+      out[#out + 1] = text:sub(a, b)
+      pos = b + 1
+    end
+    text = table.concat(out)
+  end
+  return text
+end
+
+-- one player's name (already class-coloured or plain) as a link to their profile; left as it is
+-- for `skip` (the open profile) and for names we know nothing about
+function UI.LinkName(name, shown, skip)
+  shown = shown or name
+  if type(name) ~= "string" or name == "" or name == skip or not ns.Profile.KindOf(name) then return shown end
+  return "|H" .. LINK_KIND .. name .. "|h" .. shown .. "|h"
+end
+
+-- a click on a name link: that player's profile (everything after the first ":" is the name)
+function UI.OnPlayerLink(link)
+  local name = type(link) == "string" and link:match("^" .. LINK_KIND .. "(.+)$")
+  if name and name ~= "" then UI.ShowProfile(name) end
+end
+
+-- make `frame` (the one holding the text) answer clicks on the name links
+function UI.EnableNameLinks(frame)
+  if not frame.SetHyperlinksEnabled then return end
+  frame:SetHyperlinksEnabled(true)
+  frame:SetScript("OnHyperlinkClick", function(self, link)
+    self.linkAt = GetTime and GetTime() or nil -- (a row's own OnClick can tell a link was just clicked)
+    UI.OnPlayerLink(link)
+  end)
+  frame:SetScript("OnHyperlinkEnter", function(self, link)
+    if type(link) ~= "string" or link:sub(1, #LINK_KIND) ~= LINK_KIND then return end
+    GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+    GameTooltip:AddLine(L.LINK_TIP, 1, 1, 1)
+    GameTooltip:Show()
+    if SetCursor then SetCursor("Interface\\CURSOR\\Point") end
+  end)
+  frame:SetScript("OnHyperlinkLeave", function()
+    GameTooltip:Hide()
+    if ResetCursor then ResetCursor() end
+  end)
+end
+
 -- just the number (how many of them were best guesses is in the row tooltip)
 local function hitKills(e)
   local s = tostring(C(e.kills))
-  if C(e.revenge) > 0 then s = s .. "  |cff33ff33" .. L.REVENGE_SHORT:format(C(e.revenge)) .. "|r" end
   return s
 end
 
@@ -123,82 +210,7 @@ local HITLIST_COLS = {
   { L.COL_LAST, 145, lastText, byLast },
 }
 
--- a friend's kills and deaths: the same numbers as on the Leaderboard and their profile (their
--- own report, or counted from their alerts while they don't report yet)
-local function friendKD(e)
-  if e.sk then return e.sk, e.sd or 0 end
-  return C(e.k), C(e.d)
-end
-local function kdCell(i)
-  return function(e)
-    if e.pending then return "" end
-    return num((select(i, friendKD(e))))
-  end, function(e)
-    if e.pending then return -1 end
-    return (select(i, friendKD(e)))
-  end
-end
-local killsCell, killsSort = kdCell(1)
-local deathsCell, deathsSort = kdCell(2)
-
-local FRIEND_COLS = {
-  { L.COL_NAME, 165, nameCol, byName },
-  { L.COL_LEVEL, 30, lvl, byLevel },
-  { L.COL_VERSION, 50, function(e)
-    if not e.version then return "" end
-    -- newer than yours: time to update; older: tell them to (same colours as on their profile)
-    if ns.VersionNewer(e.version, ns.VERSION) then return "|cffffd100" .. e.version .. "|r" end
-    if ns.VersionNewer(ns.VERSION, e.version) then return "|cffff7f3f" .. e.version .. "|r" end
-    return e.version
-  end, function(e) return e.version or "" end },
-  { L.COL_KILLS, 70, killsCell, killsSort },
-  { L.COL_DEATHS, 55, deathsCell, deathsSort },
-  { L.COL_ALERTS, 50, function(e)
-    local tag = ns.Comm.TagFor(e.name)
-    if ns.Comm.IsPicked(tag) then return "|cff33ff33" .. L.ALERTS_ON .. "|r" end
-    if ns.Comm.GroupActive() then return "|cff888888" .. L.ALERTS_OFF .. "|r" end
-    return "|cff888888" .. L.ALERTS_ALL .. "|r"
-  end, function(e) return ns.Comm.IsPicked(ns.Comm.TagFor(e.name)) and 1 or 0 end },
-  { L.COL_LAST_EVENT, 240, function(e)
-    -- "online · Ashenvale": the zone comes from Battle.net
-    local function onlineText(zone)
-      return "|cff33ff33" .. L.FRIEND_ONLINE .. (zone and (" \194\183 " .. zone) or "") .. "|r  "
-    end
-    if e.pending then return onlineText(e.zone) .. "|cff888888" .. L.FRIEND_NOT_HEARD .. "|r" end
-    local online = onlineNow[e.name] and onlineText(type(onlineNow[e.name]) == "string" and onlineNow[e.name] or nil) or ""
-    -- the time of that event itself (older saves don't have it: then when we last heard of them)
-    return online .. (e.lastText or "") .. "  |cff888888" .. ns.Ago(e.lastTextAt or e.lastSeen) .. "|r"
-  end, function(e) return e.pending and math.huge or (e.lastTextAt or e.lastSeen or 0) end },
-}
-
--- friends we've heard from, plus online Battle.net friends in Forever the addon can see
--- but hasn't received anything from yet (so you can tell "not detected" from "silent")
-local function fetchFriends()
-  -- you are not your own friend; friends on the other faction aren't shown
-  -- friends you haven't heard from in 6 months leave the list (unless they're online now)
-  -- one pass over who's online: known friends get "online", the rest a placeholder row
-  wipe(onlineNow)
-  local onlineRows = {}
-  if not ns.viewSim then
-    for _, name in ipairs(ns.Comm.EveryoneNames()) do
-      local rec = R().players[ns.Data.Resolve(R().players, name)]
-      if rec and rec.friend then
-        onlineNow[rec.name] = ns.Comm.ZoneOf(name) or true
-      else
-        onlineRows[#onlineRows + 1] = { name = name, pending = true, zone = ns.Comm.ZoneOf(name) }
-      end
-    end
-  end
-  local list = sortedValues(R().players, function(p)
-    return p.friend and not p.self and p.name ~= ns.me
-      and not (p.faction and ns.myFaction and p.faction ~= ns.myFaction)
-      and (onlineNow[p.name] or ns.viewSim or not ns.Data.FriendIsGone(p))
-  end)
-  for _, row in ipairs(onlineRows) do table.insert(list, 1, row) end
-  return list
-end
-
--- Leaderboard cells: just the number. Group boards: empty for an invite, or a member whose
+-- Friends tab cells: just the number. Group boards: empty for an invite, or a member whose
 -- numbers haven't reached you yet.
 local function est(r, v)
   if r.invited or r.unknown then return "" end
@@ -220,6 +232,7 @@ UI.Util = { R = R, victimsText = victimsText, lastText = lastText, lvl = lvl, nu
 local function boardNow(r)
   if r.me then return GREEN .. L.FRIEND_ONLINE .. "|r" end
   if r.invited then return GREY .. L.GROUP_ROW_INVITED .. "|r" end
+  if r.onAlt then return GREEN .. L.FRIEND_ONLINE_ALT .. "|r" end
   local now = r.rec and r.rec.friend and ns.Profile.NowText(r.rec)
   if now then return GREEN .. now .. "|r" end
   -- a member you're not friends with: how old their numbers are, and who passed them on
@@ -228,12 +241,15 @@ local function boardNow(r)
   return GREY .. ns.Ago(r.lastSeen) .. "|r"
 end
 
-local boardView = "friends" -- Leaderboard: "friends" or a shared group's id
+local boardView = "friends" -- Friends tab: "friends" or a shared group's id
 local killsOf -- Kill list view: whose kills it shows
 
 -- Kill list: who someone killed (an enemy: which of your friends), most first
 local KILL_COLS = {
-  { L.COL_NAME, 220, nameCol, byName },
+  -- the victim's name links to their profile (not the name of whose list this is)
+  { L.COL_NAME, 220, function(e)
+    return classIcon(e.class) .. UI.LinkName(e.name, ns.ClassColored(e.name, e.class), killsOf)
+  end, byName },
   { L.COL_LEVEL, 30, lvl, byLevel },
   { L.COL_GUILD, 130, guild, byGuild },
   { L.COL_KILLS, 70, function(r) return tostring(C(r.n)) end, function(r) return C(r.n) end },
@@ -243,21 +259,41 @@ local KILL_COLS = {
   end, function(r) return r.t or 0 end },
 }
 
-local BOARD_COLS = {
+-- the Friends tab: you and your friends ranked by kills (what was the Leaderboard), their
+-- notoriety and Bounty board gold, and where they are. A shared group picked above the list shows
+-- that group's board instead. Only friends who have sent you something from the add-on are listed.
+-- (Your alert list is in Options: Friends & sharing -> Alert list.)
+local function bountiesCell(r)
+  if r.invited then return "" end
+  local gold = ns.Contracts.EarnedBy(r.name)
+  return gold > 0 and ns.Contracts.MoneyText(gold) or ""
+end
+local FRIEND_COLS = {
   { L.COL_RANK, 34, function(r) return ns.Art.RankText(r.rank) end, function(r) return -(r.rank or 999) end },
-  { L.COL_NAME, 200, function(r)
+  { L.COL_NAME, 170, function(r)
     return nameCol(r) .. (r.me and ("  |cff888888" .. L.YOU .. "|r") or "") .. (r.leader and ("  |cffffd100" .. L.GROUP_LEADER_TAG .. "|r") or "")
   end, byName },
-  { L.COL_KILLS, 70, function(r) return est(r, r.k) end, function(r) return r.k end },
-  { L.COL_DEATHS, 70, function(r) return est(r, r.d) end, function(r) return r.d end },
-  { L.COL_KD, 60, function(r) return est(r, kdText(r.k, r.d, r.kd)) end, function(r) return r.kd end },
-  -- bounties collected, in gold (empty: invited, or a friend on a version before 0.9)
-  { L.COL_BOUNTY, 90, function(r)
+  { L.COL_LEVEL, 30, function(r) return lvl(r.rec or r) end, function(r) return tonumber((r.rec or r).level) or 0 end },
+  { L.COL_KILLS, 55, function(r) return est(r, r.k) end, function(r) return r.k end },
+  { L.COL_DEATHS, 55, function(r) return est(r, r.d) end, function(r) return r.d end },
+  { L.COL_KD, 50, function(r) return est(r, kdText(r.k, r.d, r.kd)) end, function(r) return r.kd end },
+  -- notoriety claimed (empty: invited, or a friend on a version before 0.9)
+  { L.COL_BOUNTY, 75, function(r)
     if r.invited or r.bounty == nil then return "" end
     return ns.Art.Points(r.bounty)
   end, function(r) return r.bounty or -1 end },
-  { L.COL_NOW, 146, boardNow, function(r) return r.me and math.huge or (r.lastSeen or 0) end },
+  -- Bounty board gold they collected (paid bounties you know of)
+  { L.COL_BOUNTIES, 90, bountiesCell, function(r) return ns.Contracts.EarnedBy(r.name) end },
+  { L.COL_NOW, 113, boardNow, function(r) return r.me and math.huge or (r.lastSeen or 0) end },
 }
+
+local function fetchFriends()
+  local g = boardView ~= "friends" and ns.Groups.Get(boardView)
+  if g and ns.Groups.MyState(g) ~= "out" then return ns.Profile.Board(g.id) end
+  boardView = "friends"
+  local rows = ns.Profile.HideLowAlts(ns.Profile.Board())
+  return rows
+end
 
 -- Bounty board: contracts you and your friends put on enemy players (Contracts.lua)
 local STATE_ORDER = { open = 4, done = 3, paid = 2, expired = 1 }
@@ -271,7 +307,15 @@ end
 -- who got the kill (finished bounties stay on the board with it)
 local function closedBy(r)
   if not r.killer or (r.state ~= "done" and r.state ~= "paid") then return "" end
-  return r.killer == ns.me and L.PROF_ME or (classIcon((ns.Data.FindPlayer(r.killer) or {}).class) .. ns.ClassColored(r.killer))
+  local names = ns.Contracts.Killers(r)
+  local shown = {}
+  for i = 1, math.min(#names, 2) do
+    local n = names[i]
+    shown[i] = n == ns.me and L.PROF_ME or (classIcon((ns.Data.FindPlayer(n) or {}).class) .. ns.ClassColored(n))
+  end
+  local text = table.concat(shown, ", ")
+  if #names > #shown then text = text .. " " .. L.CONTRACT_MORE:format(#names - #shown) end
+  return text
 end
 local CONTRACT_COLS = {
   { L.COL_TARGET, 150, nameCol, byName },
@@ -286,21 +330,12 @@ local TABS = {
   { key = "hitlist", label = L.TAB_HITLIST, columns = HITLIST_COLS,
     fetch = function() return sortedValues(R().hitlist, function(h) return not isFriendRecord(h.name) end) end },
   { key = "contracts", label = L.TAB_CONTRACTS, columns = CONTRACT_COLS, defaultSort = { col = 5, desc = true },
-    fetch = function() return ns.viewSim and {} or ns.Contracts.List() end },
-  { key = "board", label = L.TAB_BOARD, columns = BOARD_COLS, defaultSort = { col = 3, desc = true },
-    fetch = function()
-      local g = boardView ~= "friends" and ns.Groups.Get(boardView)
-      if not g or ns.Groups.MyState(g) == "out" or ns.viewSim then
-        boardView = "friends"
-        return ns.Profile.Board()
-      end
-      return ns.Profile.Board(g.id)
-    end },
-  { key = "friends", label = L.TAB_FRIENDS, columns = FRIEND_COLS, fetch = fetchFriends },
+    fetch = function() return ns.Contracts.List() end },
+  { key = "friends", label = L.TAB_FRIENDS, columns = FRIEND_COLS, defaultSort = { col = 4, desc = true }, fetch = fetchFriends },
   { key = "feed", label = L.TAB_FEED,
     columns = {
       { L.COL_TIME, 80, function(e) return ns.Ago(e.t) end },
-      { L.COL_EVENT, 580, function(e) return e.text end },
+      { L.COL_EVENT, 580, function(e) return UI.Linkify(e.text, e) end },
     },
     fetch = function()
       local feed, out = R().feed, {}
@@ -314,6 +349,7 @@ local TABS = {
 }
 
 local function tabDef(key)
+  if key == "board" or key == "leaderboard" then key = "friends" end -- (the Leaderboard is part of Friends)
   for _, t in ipairs(TABS) do if t.key == key then return t end end
   return TABS[1]
 end
@@ -343,7 +379,7 @@ local function applySort(list, cols)
   local st = sortOf(cols)
   local key = cols[st.col] and cols[st.col][4]
   if not key then return end
-  -- always last, whatever the column: faded hitlist entries (not seen for 90 days), and on a
+  -- always last, whatever the column: faded hitlist entries (not seen for 30 days), and on a
   -- group board members who are only invited or whose numbers haven't reached you yet.
   -- Decided once, before sorting.
   local last = {}
@@ -377,7 +413,7 @@ function UI.SetSearch(text)
   UI.Refresh()
 end
 
--- tooltip for a hitlist row: record, who they killed (with counts), last seen, note
+-- tooltip for a hitlist row: record, who they killed (with counts), last seen
 function UI.HitTooltip(owner, h)
   GameTooltip:SetOwner(owner, "ANCHOR_CURSOR")
   GameTooltip:AddLine(ns.ClassColored(h.name, h.class) .. (h.guild and ("  |cff888888<" .. h.guild .. ">|r") or ""))
@@ -397,7 +433,6 @@ function UI.HitTooltip(owner, h)
   end
   GameTooltip:AddLine(" ")
   GameTooltip:AddLine(L.HIT_TIP_LAST:format(lastText(h)), 0.7, 0.7, 0.7)
-  if h.note then GameTooltip:AddLine(h.note, 1, 1, 1, true) end
   GameTooltip:Show()
 end
 
@@ -409,6 +444,7 @@ function UI.TabColumns(key) return colsOf(tabDef(key)) end
 
 -- what a column's numbers mean, for its header's tooltip (nil: nothing to explain)
 function UI.ColumnTip(tab, label)
+  if tab == "board" or tab == "leaderboard" then tab = "friends" end
   local tips = L.COLUMN_TIPS[tab]
   return tips and label and tips[label]
 end
@@ -469,17 +505,10 @@ local function layoutColumns(cols)
   end
 end
 
-local function refreshShareStatus()
-  if detail.clear then detail.clear:SetEnabled(next(R().hitlist) ~= nil) end
-  local queued = ns.Comm.QueuedCount("bulk")
-  detail.shareStatus:SetText(queued > 0 and L.SHARE_QUEUED:format(queued) or "")
-  if ns.viewSim then detail.share:Disable() else detail.share:Enable() end
-end
 
 local function refreshDetail()
   contractBar:SetShown(currentTab == "contracts")
   if currentTab == "contracts" then
-    contractBar.post:SetEnabled(not ns.viewSim)
     contractBar.label:SetText(L.CONTRACT_HINT)
   end
   if currentTab ~= "hitlist" then
@@ -487,13 +516,13 @@ local function refreshDetail()
     return
   end
   detail:Show()
-  refreshShareStatus()
+  detail.clear:SetEnabled(next(R().hitlist) ~= nil)
   detail.label:SetText(L.HITLIST_HINT)
 end
 
 
 ---------------------------------------------------------------------------
--- shared groups on the Leaderboard
+-- shared groups on the Friends tab
 ---------------------------------------------------------------------------
 local function currentGroup()
   local g = boardView ~= "friends" and ns.Groups.Get(boardView)
@@ -502,7 +531,7 @@ end
 UI.CurrentGroup = currentGroup -- (the group window, UIGroup.lua)
 
 local function refreshGroupBar()
-  local show = currentTab == "board" and not ns.viewSim
+  local show = currentTab == "friends"
   groupBar:SetShown(show)
   if not show then return end
   if not currentGroup() then boardView = "friends" end
@@ -653,14 +682,13 @@ function UI.Refresh()
   currentTab = def.key
   if currentTab ~= "profile" and currentTab ~= "kills" then homeTab = currentTab end
   for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == homeTab) end
-  simBanner:SetShown(ns.viewSim and true or false)
   refreshGroupBar()
 
   local isProfile = currentTab == "profile"
   if not isProfile then UI.ResetProfileCount() end -- (back to a profile later: count up again)
   rowsFrame:SetShown(not isProfile)
   profile:SetShown(isProfile)
-  if currentTab == "board" then UI.RefreshGroupWindow() else UI.HideGroupWindow() end
+  if currentTab == "friends" then UI.RefreshGroupWindow() else UI.HideGroupWindow() end
   searchBox:SetShown(not isProfile)
   -- Back: on the Profile page and the Kill list, if there's somewhere to go back to
   local backTo = (isProfile or currentTab == "kills") and history[#history]
@@ -672,6 +700,7 @@ function UI.Refresh()
     prevPage:Hide()
     nextPage:Hide()
     detail:Hide()
+    contractBar:Hide() -- (the Bounty board's row belongs to that tab alone)
     friendsHint:Hide()
     UI.RenderProfile()
     return
@@ -698,7 +727,7 @@ function UI.Refresh()
     local e = data[offset + i]
     row.entry = e
     if e then
-      local faded = currentTab == "hitlist" and ns.Data.IsStale(e) -- not seen for 90 days: grey
+      local faded = currentTab == "hitlist" and ns.Data.IsStale(e) -- not seen for 30 days: grey
       for c, col in ipairs(cols) do
         local ok, val = pcall(col[3], e)
         local text = ok and tostring(val) or "?"
@@ -725,16 +754,16 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(friendsView() or currentTab == "board" or currentTab == "kills")
+  friendsHint:SetShown(friendsView() or currentTab == "kills")
   if currentTab == "kills" then
     friendsHint:SetText(killsHint())
-  elseif currentTab == "board" then
+  elseif friendsView() then
     local g = currentGroup()
-    friendsHint:SetText(g and groupHint(g) or L.BOARD_HINT)
-  elseif friendsView() and not ns.viewSim then
-    friendsHint:SetText((ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL) .. "  " .. L.REMOVE_HINT)
-  else
-    friendsHint:SetText(L.REMOVE_HINT)
+    if g then
+      friendsHint:SetText(groupHint(g))
+    else
+      friendsHint:SetText(L.BOARD_HINT .. " " .. L.REMOVE_HINT)
+    end
   end
 end
 
@@ -875,7 +904,7 @@ local function build()
   box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   searchBox = box
 
-  -- Leaderboard: which board (your friends or a shared group) and what you can do with it
+  -- Friends tab: which board (your friends or a shared group) and what you can do with it
   groupBar = CreateFrame("Frame", nil, win)
   groupBar:SetSize(420, 24)
   groupBar:SetPoint("TOPLEFT", 16, -30)
@@ -904,16 +933,6 @@ local function build()
   backButton:SetPoint("TOPLEFT", 16, -30)
   backButton:Hide()
 
-  -- simulation banner
-  simBanner = CreateFrame("Frame", nil, win)
-  simBanner:SetSize(260, 22)
-  simBanner:SetPoint("BOTTOMLEFT", 16, 2)
-  local simText = simBanner:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  simText:SetText("|cffff9933" .. L.SIM_BANNER .. "|r")
-  local simRow = UI.Row(simBanner, "LEFT", 0, 0)
-  simRow:Add(simText)
-  simRow:Add(button(simBanner, 110, L.SIM_EXIT, function() ns.Sim.Stop() end), 6)
-  simBanner:Hide()
 
   local prev
   for i, t in ipairs(TABS) do
@@ -987,6 +1006,7 @@ local function build()
       row.stripe:SetAllPoints()
       row.stripe:SetColorTexture(1, 1, 1, 0.03)
     end
+    UI.EnableNameLinks(row) -- (the Feed's player names are links to their profile)
     row.cells = {}
     for c = 1, MAX_COLS do
       local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1023,21 +1043,20 @@ local function build()
     row:SetScript("OnClick", function(self, mouse)
       local e = self.entry
       if mouse == "RightButton" then
-        if e and not e.pending and currentTab == "hitlist" then
+        if e and currentTab == "hitlist" then
           UI.RemoveFromHitlist(e.name)
-        elseif e and not e.pending and friendsView() then
-          UI.RemovePlayer(e.name)
-        elseif e and currentTab == "board" and currentGroup() then
+        elseif e and friendsView() and currentGroup() then
           UI.RemoveFromGroup(e.key, e.name)
+        elseif e and not e.me and friendsView() then
+          UI.RemovePlayer(e.name)
         elseif e and currentTab == "contracts" and e.mine then
           UI.ContractAction(e)
         end
         return
       end
-      -- a click on a name opens their profile, on every tab
-      if friendsView() and e and e.pending and not ns.viewSim then
-        UI.TogglePick(e.name) -- online but never heard from: no profile yet, but you can add them
-      elseif currentTab ~= "feed" and e and e.name and ns.Profile.KindOf(e.name) then
+      -- a click on a name opens their profile, on every tab (not twice when it was the name link)
+      if self.linkAt and GetTime and GetTime() - self.linkAt < 0.2 then self.linkAt = nil; return end
+      if currentTab ~= "feed" and e and e.name and ns.Profile.KindOf(e.name) then
         UI.ShowProfile(e.name) -- (a group member you've never heard from directly has no profile)
       end
     end)
@@ -1076,7 +1095,7 @@ local function build()
   -- two lines at most, so it never reaches the list above it
   if friendsHint.SetMaxLines then friendsHint:SetMaxLines(2) end
 
-  -- hitlist bottom row: a hint on the left, [Clear hitlist][Share hitlist] on the right.
+  -- hitlist bottom row: a hint on the left, [Clear hitlist] on the right.
   -- (A player's note, kill list and the rest are on their profile: click them.)
   detail = CreateFrame("Frame", nil, win)
   -- above the page arrows (bottom right), so the two rows never touch
@@ -1084,10 +1103,7 @@ local function build()
   detail:SetPoint("BOTTOMRIGHT", -16, 30)
   detail:SetHeight(46)
   local detailRow = UI.Row(detail, "BOTTOMRIGHT", 0, 0)
-  detail.share = detailRow:Add(button(detail, 110, L.BTN_SHARE, function() UI.ShareHitlist() end))
-  detail.clear = detailRow:Add(button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end), 6)
-  detail.shareStatus = detail:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-  detail.shareStatus:SetPoint("BOTTOMRIGHT", detail.share, "TOPRIGHT", 0, 4)
+  detail.clear = detailRow:Add(button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end))
   -- the hint stops before the buttons; two lines at most
   detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   detail.label:SetPoint("BOTTOMLEFT", 0, 4)
@@ -1111,11 +1127,6 @@ local function build()
 
   profile = UI.BuildProfile(win)
 
-
-  -- keep the share queue counter live while the window is open
-  C_Timer.NewTicker(1, function()
-    if win:IsShown() and currentTab == "hitlist" then ns.Try("share-status", refreshShareStatus) end
-  end)
 end
 
 ---------------------------------------------------------------------------
@@ -1133,7 +1144,6 @@ end
 
 -- amountText: the amount already typed (/fnf bounty 10g); otherwise you're asked for it
 function UI.PostBounty(name, amountText)
-  if ns.viewSim then return false end
   local u = bountyTarget(name)
   if not u then
     why("CONTRACT_NEED_TARGET")
@@ -1170,24 +1180,18 @@ function UI.ContractAction(r)
       UI.Refresh()
     end)
   elseif r.state == "done" then
-    UI.Confirm(L.CONTRACT_CONFIRM_PAID:format(ns.ClassColored(r.killer or "?"), money, target), function()
+    local payees = ns.Contracts.Payees(r)
+    local text
+    if #payees > 1 then
+      text = L.CONTRACT_CONFIRM_PAID_MANY:format(ns.Contracts.JoinNames(payees), ns.Contracts.MoneyText(ns.Contracts.ShareOf(r)), target)
+    else
+      text = L.CONTRACT_CONFIRM_PAID:format(ns.ClassColored(payees[1] or r.killer or "?"), ns.Contracts.MoneyText(ns.Contracts.ShareOf(r)), target)
+    end
+    UI.Confirm(text, function()
       ns.Contracts.MarkPaid(r.key)
       UI.Refresh()
     end)
   end
-end
-
-function UI.ShareHitlist()
-  local n = 0
-  for _ in pairs(ns.Comm.roster) do n = n + 1 end
-  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
-  if n == 0 then
-    print(prefix .. L.SHARE_NO_FRIENDS)
-    return
-  end
-  local count = ns.Comm.ShareHitlist()
-  print(prefix .. L.SHARE_STARTED:format(count, n))
-  UI.Refresh()
 end
 
 -- pick/unpick a friend (by character name; the pick is stored by BattleTag)
@@ -1205,8 +1209,8 @@ function UI.TogglePick(name)
 end
 
 
--- tab: "hitlist" | "board" | "friends" | "feed" | "profile" ("players" / "enemies" from older
--- versions open the Hitlist)
+-- tab: "hitlist" | "contracts" | "friends" | "feed" | "profile" ("players" / "enemies" from older
+-- versions open the Hitlist; "board", the old Leaderboard, opens Friends)
 function UI.Show(tab)
   if not win then build() end
   if tab == "players" or tab == "enemies" then
@@ -1225,6 +1229,8 @@ function UI.Show(tab)
     offset = 0
   end
   win:Show()
+  -- (patch notes first: on a brand-new account they stay silent and the tour takes over)
+  if ns.WhatsNew then ns.Try("whatsnew", ns.WhatsNew.MaybeShow) end
   if ns.Tour then ns.Tour.MaybeShow(win) end -- (first time on this account)
   UI.Refresh()
 end
@@ -1264,7 +1270,7 @@ end
 function UI.ProfileName() return profileName end
 function UI.SetProfileName(name) profileName = name end
 function UI.ProfileModel() return profile and profile.model end -- (for tests)
-function UI.Frames() return { profile = profile, rows = rowsFrame } end -- (for tests)
+function UI.Frames() return { profile = profile, rows = rowsFrame, contractBar = contractBar } end -- (for tests)
 
 -- clicking a toast: that player's profile
 function UI.ShowPlayer(name)
@@ -1302,23 +1308,5 @@ ns.OnReady(function()
 end)
 
 -- once a week at login: your PvP week in one line
-ns.OnReady(function()
-  local db = FriendsAndFoesDB
-  local now = time()
-  local w = db.weekly
-  if not w then
-    db.weekly = { start = now, k = 0, d = 0, killers = {} }
-    return
-  end
-  if now - (w.start or now) < 7 * 86400 then return end
-  db.weekly = { start = now, k = 0, d = 0, killers = {} }
-  if ns.S().weekly == false or ((w.k or 0) + (w.d or 0)) == 0 then return end
-  local line = L.WEEKLY:format(ns.Count(w.k), ns.Count(w.d))
-  local nemesis, most = nil, 0
-  for name, n in pairs(w.killers or {}) do
-    if n > most then nemesis, most = name, n end
-  end
-  if nemesis and most >= 2 then line = line .. " " .. L.WEEKLY_NEMESIS:format(nemesis, most) end
-  C_Timer.After(8, function() ns.Toast.Chat(line) end)
-end)
+ns.OnReady(function() ns.Events.WeeklyRoll() end) -- (Events.lua)
 

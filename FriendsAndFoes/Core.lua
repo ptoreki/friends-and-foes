@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "0.9.3"
+ns.VERSION = "1.0.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -11,34 +11,42 @@ ns.issecret = issecret
 ---------------------------------------------------------------------------
 -- defaults
 ---------------------------------------------------------------------------
+-- how long (days, 0 = forever) hitlist players stay unseen, by what they did to you
+ns.DEFAULT_FORGET_ATTACKERS = 14 -- attacked one of you, never killed anyone
+ns.DEFAULT_FORGET_KILLED_ONCE = 0
+ns.DEFAULT_FORGET_KILLED_MORE = 0
+
+ns.DEFAULT_TOAST_DURATION = 5 -- seconds a toast stays (PvP toasts 2 longer)
+
 local DEFAULTS = {
   -- where: zone, AFK, in a fight; relay: friends may pass your events on to your other friends
   share = { level = true, loot = true, gear = true, pvp = true, where = true, relay = true },
   -- how each kind shows: "toast" | "chat" | "off"
-  show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", share = "chat", contract = "toast" },
-  milestones = true, -- level 60, looted epic BoE, revenge and kill streaks always pop up as a toast
+  show = { level = "toast", loot = "toast", gear = "toast", attacked = "toast", engage = "toast", died = "toast", kill = "toast", sighting = "toast", contract = "toast" },
   levelEvery = 1,    -- show friends' level-ups: every level (1), every 5, every 10, or only 60
-  gearMin = 3,       -- "new gear" alerts from this quality up: 3 = blue, 4 = epic
   toastGrow = "down", -- toasts stack "down" or "up" from their position
   toastMax = 2,      -- toasts on screen at once (1-4)
   chatFrame = 1,
   nearbyOnly = false, -- true: fights outside your zone become chat lines
-  flavor = true, -- varied wording: repeat killers, sprees, streaks, revenge for a friend
-  theme = "minimal", -- toast look: "minimal" | "achievement"
+  flavor = true, -- varied wording: repeat killers, streaks, revenge for a friend
+  theme = "minimal", -- toast look: "minimal" (Modern) | "achievement" (Classic) | "alliance" | "horde"
   toastScale = 1,    -- toast size (0.7 - 1.5)
-  toastDuration = 5, -- seconds a toast stays (PvP toasts 2 longer)
+  toastDuration = ns.DEFAULT_TOAST_DURATION, -- seconds a toast stays (PvP toasts 2 longer)
   weekly = true,     -- weekly PvP summary in chat
-  -- which sound each event plays ("default" = the built-in choice for that kind of event)
-  soundPick = { attacked = "alarm", engage = "default", died = "raidwarning", kill = "levelup", sighting = "mapping",
-    level = "default", loot = "default", gear = "default", share = "default", contract = "default" },
+  -- which sound each kind of alert plays ("default" = the built-in one): a friend in trouble
+  -- (attacked, killed), a friend's kill, hitlist sightings, friends' progress, the Bounty board
+  soundPick = { trouble = "default", victory = "default", sighting = "mapping", progress = "default", bounty = "default" },
   mark = true,        -- skull next to hitlist players' nameplates
   markTooltip = true, -- hitlist record in hitlist players' tooltips
-  forgetAfter = 0, -- days unseen before a hitlist entry (without a note) is removed; 0 = never
+  hideLowAlts = true, -- Friends tab: leave out friends' characters below level 15
+  forgetAttackers = ns.DEFAULT_FORGET_ATTACKERS,    -- days unseen before an attacker leaves the hitlist (0 = never)
+  forgetKilledOnce = ns.DEFAULT_FORGET_KILLED_ONCE, -- the same for someone who killed one of you once
+  forgetKilledMore = ns.DEFAULT_FORGET_KILLED_MORE, -- ... and for someone who killed 2 or more times
   -- sound per kind (played whenever that kind is shown, toast or chat). Milestones chime anyway.
-  sound = { enabled = true, ui = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, share = false, contract = true },
+  sound = { enabled = true, level = false, loot = true, gear = true, attacked = true, engage = false, died = true, kill = true, sighting = true, contract = true },
   dnd = { combat = false },
-  -- alerts while you're in an instance: "show" | "hold" (until you're out) | "chat" | "off"
-  where = { party = "hold", raid = "hold", pvp = "hold" },
+  -- (see instances below)
+  instances = "hold", -- alerts in dungeons, raids and battlegrounds: "show" | "hold" (until you're out) | "off"
   -- where your own PvP (attacks, deaths, kills, sightings) is tracked
   track = { world = true, pvp = false },
   minimap = { hide = false, angle = 210 }, -- shown; drag round the rim, Shift-drag anywhere
@@ -103,6 +111,10 @@ function ns.InstanceType()
   if kind == "arena" then return "pvp" end
   return kind
 end
+
+-- in a dungeon, raid or battleground (where the "Where it works" setting applies)
+local INSTANCE_KINDS = { party = true, raid = true, pvp = true }
+function ns.InInstance() return INSTANCE_KINDS[ns.InstanceType()] == true end
 
 ---------------------------------------------------------------------------
 -- debug log + error containment
@@ -341,7 +353,7 @@ end
 function ns.ClassColored(name, class)
   if not name then return "?" end
   if (not class or class == "") and ns.Data and FriendsAndFoesDB and FriendsAndFoesDB.realms then
-    local ok, view = pcall(ns.Data.ViewRealm) -- the data on screen (real or simulation)
+    local ok, view = pcall(ns.Data.RealRealm)
     local rec = ok and view and view.players[name]
     if rec and rec.class then class = rec.class end
   end
@@ -376,9 +388,9 @@ function ns.Ago(t)
 end
 
 local idCounter = 0
-function ns.NewId(sim)
+function ns.NewId()
   idCounter = idCounter + 1
-  return (sim and "S" or "") .. string.format("%x%x", time() % 0x1000000, idCounter)
+  return string.format("%x%x", time() % 0x1000000, idCounter)
 end
 
 -- "1.2.10" > "1.2.9"

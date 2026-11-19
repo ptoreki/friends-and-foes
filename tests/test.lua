@@ -22,14 +22,14 @@ ns.SetDebug(true) -- testers run with debug on
 do
   local s = ns.S()
   local okShow = s.show.level == "toast" and s.show.loot == "toast" and s.show.gear == "toast" and s.show.attacked == "toast"
-    and s.show.engage == "toast" and s.show.died == "toast" and s.show.kill == "toast" and s.show.sighting == "toast" and s.show.share == "chat"
+    and s.show.engage == "toast" and s.show.died == "toast" and s.show.kill == "toast" and s.show.sighting == "toast" and s.show.share == nil
   local okSound = s.sound.enabled and not s.sound.level and s.sound.loot and s.sound.gear and s.sound.attacked and not s.sound.engage
-    and s.sound.died and s.sound.kill and s.sound.sighting and not s.sound.share
-  local okPick = s.soundPick.attacked == "alarm" and s.soundPick.died == "raidwarning" and s.soundPick.kill == "levelup"
-    and s.soundPick.sighting == "mapping" and s.soundPick.engage == "default"
+    and s.sound.died and s.sound.kill and s.sound.sighting and s.sound.share == nil
+  local okPick = s.soundPick.trouble == "default" and s.soundPick.victory == "default" and s.soundPick.sighting == "mapping"
+    and s.soundPick.progress == "default" and s.soundPick.bounty == "default" and s.soundPick.kill == nil
   check(okShow and okSound and okPick, "default alerts and sounds")
   check(s.nearbyOnly == false and s.dnd.combat == false and s.toastDuration == 5 and s.theme == "minimal" and s.toastScale == 1
-    and s.flavor and s.weekly and s.mark and s.markTooltip and s.milestones and s.levelEvery == 1 and s.gearMin == 3
+    and s.flavor and s.weekly and s.mark and s.markTooltip and s.milestones == nil and s.levelEvery == 1 and s.gearMin == nil
     and s.toastGrow == "down" and s.toastMax == 2 and s.share.pvp and s.share.where and s.chatFrame == 1, "default appearance, sharing and behaviour")
   -- the rest of these tests were written against the earlier, quieter defaults
   s.show.level, s.show.loot, s.show.gear, s.show.sighting = "chat", "chat", "chat", "chat"
@@ -48,35 +48,16 @@ check(ns.CleanName("Bob Smith-Nightslayer") == "Bob Smith" and ns.CleanName("Bob
 local u = ns.DecodeUnit(ns.EncodeUnit({ name = "Gank", class = "ROGUE", level = 60, guild = "Bad Guys" }))
 check(u.name == "Gank" and u.class == "ROGUE" and u.level == 60 and u.guild == "Bad Guys", "unit roundtrip w/ guild")
 
--- simulated friend events: all kinds, isolated from real data
-for _, kind in ipairs(ns.Sim.KINDS) do ns.Sim.Run(kind, false) end
-local sim = FriendsAndFoesDB.sim
-check(sim ~= nil, "sim store created")
-local sf = sim.players["Simfriend Tester"]
-check(sf and sf.k == 1 and sf.d == 1 and sf.level == 43,
-  "Simfriend K/D/level in sim store: " .. tostring(sf and sf.k) .. "/" .. tostring(sf and sf.d) .. "/" .. tostring(sf and sf.level))
-local sg = sim.hitlist["Simganker Shade"]
-check(sg and sg.attacks == 1 and sg.kills == 1 and sg.revenge == 1 and sg.guild == "Sim Gankers", "Simganker hitlist: attacks/kills/revenge/guild")
-check(sim.hitlist["Simhelper Shade"] and sim.hitlist["Simhelper Shade"].kills == 0, "an enemy who attacked first is on the hitlist, with no kills")
-check(sim.players["Simhelper Shade"] and sim.players["Simhelper Shade"].a == 1, "assist counted")
-check(sim.players["Simganker Shade"].d == 1 and sim.players["Simganker Shade"].k == 1, "enemy K and D")
-check(#sim.feed >= 6, "sim feed entries: " .. #sim.feed)
+-- test alerts (/fnf test, /fnf sim): sample toasts and a chat line - nothing recorded or sent
 local real = ns.Data.RealRealm()
-check(real.players["Simfriend Tester"] == nil and real.hitlist["Simganker Shade"] == nil and #real.feed == 0, "real data untouched by sim")
-check(ns.viewSim == true, "window switches to sim view")
-check(ns.errors == 0, "no errors after sim (" .. tostring(ns.lastError) .. ")")
-
--- self sim broadcasts with S-id
 RUN_TICKERS(8) -- drain the profile greeting sent at login
-SENT = {}
-ns.Sim.Run("kill", true)
-RUN_TICKERS(2)
-check(#SENT == 1 and SENT[1].route == "bn", "self sim sent once, over Battle.net only: " .. #SENT)
-check(SENT[1] and SENT[1].payload:find("^3\tKILL\tS") ~= nil, "payload protocol 3 + sim id")
-
--- clear sim
-ns.Sim.Clear()
-check(FriendsAndFoesDB.sim == nil and not ns.viewSim, "sim cleared")
+SENT, CHAT = {}, {}
+ns.Toast.Test()
+RUN_TICKERS(4)
+check(#real.feed == 0 and next(real.hitlist) == nil and #SENT == 0 and FriendsAndFoesDB.sim == nil and ns.Sim == nil,
+  "test alerts: nothing recorded, nothing sent, no simulation store")
+check(#CHAT == 1, "test alerts: a sample chat line")
+check(ns.errors == 0, "no errors in test alerts (" .. tostring(ns.lastError) .. ")")
 
 -- receive real event over BN, then duplicate over whisper
 local function payload(kind, fields, id, version)
@@ -276,18 +257,8 @@ for i = 1, 45 do
   local h = ns.Data.Hit("Enemy" .. i .. " Foe")
   h.class, h.level, h.guild, h.attacks, h.kills, h.lastSeen = "MAGE", 60, "Some Long Guild Name", i, 1, time() - i * 60
 end
-SENT = {}
-local shared = ns.Comm.ShareHitlist()
-check(shared == 40, "share capped at 40: " .. shared)
-RUN_TICKERS(400)
-local maxLen, hitMsgs = 0, 0
-for _, s in ipairs(SENT) do
-  if s.payload:find("^3\tHIT\t") then
-    hitMsgs = hitMsgs + 1
-    if #s.payload > maxLen then maxLen = #s.payload end
-  end
-end
-check(maxLen <= 255 and hitMsgs > 0, "share payloads <=255 (max " .. maxLen .. ", msgs " .. hitMsgs .. ")")
+-- sharing your hitlist is gone (0.9.4); a share from a friend on an older version still merges in
+check(ns.Comm.ShareHitlist == nil and ns.UI.ShareHitlist == nil, "no Share hitlist")
 -- receive a share chunk from Buddy
 local before = count(real.hitlist)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s1", entries = "Newguy Hunt:HUNTER:59:Their Guild:3:2:0:5;Enemy1 Foe:MAGE:60::99:7:1:1;Peaceful Pete:MAGE:20::4:0:0:2;Empty Ed:MAGE:20::0:0:0:2" }, "h1"), "WHISPER", 77)
@@ -399,16 +370,14 @@ for _, tab in ipairs({ "hitlist", "players", "feed" }) do ns.UI.SelectTab(tab) e
 ns.UI.SetPlayerFilter("friends")
 ns.UI.SetPlayerFilter("enemies")
 SlashCmdList.FRIENDSANDFOES("options")
-ns.SetDebug(false); ns.Options.Refresh(); ns.SetDebug(true); ns.Options.Refresh()
+ns.SetDebug(false); ns.SetDebug(true)
 FriendsAndFoes_OnAddonCompartmentClick(nil, "LeftButton")
 FriendsAndFoes_OnAddonCompartmentClick(nil, "RightButton")
 check(ns.errors == 0, "window tabs, options panel, addon menu: no errors (" .. tostring(ns.lastError) .. ")")
 ns.UI.ShowPlayer("Rogz Fang")
-SlashCmdList.FRIENDSANDFOES("sim all")
+SlashCmdList.FRIENDSANDFOES("sim") -- (the same quick test as /fnf test)
 RUN_TIMERS()
-SlashCmdList.FRIENDSANDFOES("sim clear")
 SlashCmdList.FRIENDSANDFOES("status")
-SlashCmdList.FRIENDSANDFOES("share")
 SlashCmdList.FRIENDSANDFOES("test")
 SlashCmdList.FRIENDSANDFOES("bogus")
 check(ns.errors == 0, "no errors after UI/slash exercise (" .. tostring(ns.lastError) .. ")")
@@ -552,6 +521,87 @@ do
   FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
   check(lastFeed():find("Old Corpse", 1, true) == nil and lastFeed():find("got a kill", 1, true) ~= nil, "an old corpse isn't credited: " .. lastFeed())
   enemyUnits.target = nil
+  -- 5) a long fight: targeted 90 s before the kill, never hit you - their health changing during
+  -- the fight keeps them "seen alive", so the kill is theirs
+  enemyUnits.target = { "Long", "Fight", false }
+  ns.PvP.ReadEnemy("target")
+  for _ = 1, 9 do
+    ADVANCE(10)
+    FIRE("UNIT_HEALTH", "target")
+  end
+  enemyUnits.target[3] = true
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Long Fight", 1, true) ~= nil, "a fight over a minute long: the kill still names the target: " .. lastFeed())
+  enemyUnits.target = nil
+  -- 6) not targeted, killed by a damage-over-time spell: their nameplate (seen alive while the
+  -- dot ticks) shows them dead when the honor comes
+  enemyUnits.nameplate5 = { "Dot", "Victim", false }
+  FIRE("NAME_PLATE_UNIT_ADDED", "nameplate5")
+  for _ = 1, 8 do
+    ADVANCE(10)
+    FIRE("UNIT_HEALTH", "nameplate5")
+  end
+  enemyUnits.nameplate5[3] = true
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Dot Victim", 1, true) ~= nil, "killed by a dot, never targeted: named from their nameplate: " .. lastFeed())
+  -- 7) ...but with no nameplate, target or mouseover there's nobody to name: a kill without a name
+  enemyUnits.nameplate5 = nil
+  FIRE("NAME_PLATE_UNIT_REMOVED", "nameplate5")
+  ADVANCE(30)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("got a kill", 1, true) ~= nil, "nothing on screen: a kill without a name: " .. lastFeed())
+  -- 8) killing blows (PARTY_KILL): your blow names the victim exactly, even with nothing on screen
+  local oGuid = UnitGUID
+  UnitGUID = function(u)
+    if u == "player" then return "Player-1-00000001" end
+    if enemyUnits[u] then return "Player-1-" .. enemyUnits[u][1] end
+  end
+  enemyUnits.target = { "Blow", "Taker", false }
+  ns.PvP.ReadEnemy("target") -- (seen once: their GUID is known)
+  enemyUnits.target = nil -- (then out of sight: a DoT finishes them)
+  ADVANCE(40)
+  FIRE("PARTY_KILL", "Player-1-00000001", "Player-1-Blow")
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(lastFeed():find("Blow Taker", 1, true) and lastFeed():find(ns.L.KILLING_BLOW_TAG, 1, true) and ns.caps.partyKill == "ok",
+    "your killing blow: the victim named exactly, marked as a killing blow: " .. lastFeed())
+  -- a party member's blow, or one coming after the honor, doesn't name your kill
+  ADVANCE(30)
+  FIRE("PARTY_KILL", "Player-1-00000099", "Player-1-Blow")
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(not lastFeed():find(ns.L.KILLING_BLOW_TAG, 1, true), "a party member's killing blow isn't yours: " .. lastFeed())
+  ADVANCE(30)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  FIRE("PARTY_KILL", "Player-1-00000001", "Player-1-Blow")
+  ADVANCE(30)
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(not lastFeed():find(ns.L.KILLING_BLOW_TAG, 1, true), "a killing blow after the honor is only logged, never used for the next kill: " .. lastFeed())
+  -- a blow on a creature isn't a player kill
+  FIRE("PARTY_KILL", "Player-1-00000001", "Creature-0-1-2-3-4-5")
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(not lastFeed():find(ns.L.KILLING_BLOW_TAG, 1, true), "a killing blow on a creature doesn't count")
+  -- a friend's kill, then your own killing blow and honor for the same victim 3 s later: one line
+  do
+    ADVANCE(10)
+    drainToasts()
+    ns.Events.Apply({ kind = "KILL", id = ns.NewId(), from = "Buddy Pal", class = "PRIEST", level = 40,
+      f = { victim = "Latey Comer", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" } }, false)
+    local function kills() local n, last = 0; for _, e in ipairs(real.feed) do if e.kind == "kill" then n, last = n + 1, e.text end end return n, last end
+    local n0 = kills()
+    enemyUnits.target = { "Latey", "Comer", false }
+    ns.PvP.ReadEnemy("target")
+    enemyUnits.target = nil
+    ADVANCE(3)
+    FIRE("PARTY_KILL", "Player-1-00000001", "Player-1-Latey")
+    FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+    local n1, line = kills()
+    check(n1 == n0 and ns.Plain(line):find("You and Buddy Pal killed Latey Comer", 1, true) ~= nil,
+      "a friend's kill, then your own blow for the same death: one merged line (" .. n0 .. " -> " .. n1 .. "): " .. ns.Plain(line))
+  end
+  -- a friend's kill marked as their killing blow
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Their Blow", vclass = "MAGE", vlevel = 30, vguild = "", zone = "Duskwood", blow = "1" }, "kb1"), "WHISPER", 77)
+  check(lastFeed():find("Their Blow", 1, true) and lastFeed():find(ns.L.KILLING_BLOW_TAG, 1, true), "a friend's killing blow is marked too: " .. lastFeed())
+  UnitGUID = oGuid
+  RUN_TICKERS(80) -- (send what these kills queued)
   -- received from a friend
   ns.S().show.kill = "toast"
   local anonToast = toasted(function()
@@ -625,7 +675,7 @@ do
   CreateSettingsButtonInitializer = function(name, label, click) return { button = label, click = click } end
   local ok, err = pcall(ns.Options.BuildNative)
   check(ok, "native options build: " .. tostring(err))
-  check(#pages == 6, "six pages: Alerts, Where it works, Sounds, Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
+  check(#pages == 4, "four pages: Alerts (with sounds), Appearance, Friends & sharing, Advanced (" .. #pages .. ")")
   local dropdowns = 0
   for _, c in ipairs(controls) do
     if c.kind == "dropdown" then
@@ -633,16 +683,32 @@ do
       check(#c.opts() > 0, "dropdown " .. c.s.var .. " has choices")
     end
   end
-  check(dropdowns == 30, "10 alerts + level-ups + gear + 3 places + 10 sounds + style + stacking + message style + chat tab + forget (" .. dropdowns .. ")")
-  -- one dropdown per event = show + sound
-  local kill = settings.FNF_display_kill
-  check(kill:GetValue() == "toast", "kill shows as 'Toast' (sound off by default): " .. tostring(kill:GetValue()))
-  kill:SetValue("chat_sound")
-  check(ns.S().show.kill == "chat" and ns.S().sound.kill == true, "'Chat line + sound' sets show + sound")
-  kill:SetValue("off")
-  check(ns.S().show.kill == "off" and kill:GetValue() == "off", "'Off'")
-  kill:SetValue("toast")
-  check(ns.S().show.kill == "toast" and ns.S().sound.kill == false, "back to 'Toast'")
+  check(dropdowns == 18, "4 alert groups + level-ups + one for instances + 5 sounds + style + stacking + message style + chat tab + 3 forget (" .. dropdowns .. ")")
+  -- the "Hitlist shared" alert is gone; one Test alerts button; Advanced is debugging only
+  local tests, advItems = 0, 0
+  for _, pg in ipairs(pages) do
+    for _, item in ipairs(pg.layout.items) do if item.button == ns.L.BTN_TEST then tests = tests + 1 end end
+  end
+  check(settings.FNF_display_share == nil and settings.FNF_soundPick_share == nil and settings.FNF_where_party == nil,
+    "no Hitlist shared alert, no per-place instance settings")
+  check(tests == 1 and settings.FNF_minimap ~= nil and settings.FNF_instances ~= nil, "one Test alerts button; minimap and instances settings there")
+  -- one dropdown per group of alerts = show + sound for every alert in it
+  local saveShow, saveSound = {}, {}
+  for k, v in pairs(ns.S().show) do saveShow[k] = v end
+  for k, v in pairs(ns.S().sound) do saveSound[k] = v end
+  local fights = settings.FNF_display_fights
+  check(settings.FNF_display_kill == nil and fights and settings.FNF_display_progress and settings.FNF_display_sighting and settings.FNF_display_bounty,
+    "four alert groups: fights, sightings, progress, bounty board")
+  fights:SetValue("chat_sound")
+  local sh, so = ns.S().show, ns.S().sound
+  check(sh.attacked == "chat" and sh.engage == "chat" and sh.died == "chat" and sh.kill == "chat" and so.kill and so.attacked and not so.engage,
+    "'Chat line + sound' sets the whole group (attacking someone stays quiet)")
+  fights:SetValue("off")
+  check(sh.kill == "off" and sh.engage == "off" and fights:GetValue() == "off", "'Off' for the whole group")
+  settings.FNF_display_progress:SetValue("toast_sound")
+  check(sh.level == "toast" and sh.loot == "toast" and sh.gear == "toast" and so.loot and not so.level, "progress: a plain level-up stays quiet")
+  for k, v in pairs(saveShow) do ns.S().show[k] = v end
+  for k, v in pairs(saveSound) do ns.S().sound[k] = v end
   settings.FNF_theme:SetValue("achievement")
   check(ns.Toast.Theme() == "achievement", "style dropdown sets the toast theme")
   settings.FNF_theme:SetValue("minimal")
@@ -650,21 +716,56 @@ do
   check(ns.S().flavor == false and settings.FNF_style:GetValue() == "short", "message style: short = flavor off")
   settings.FNF_style:SetValue("flavor")
   check(ns.S().flavor == true, "message style: with flavor")
-  settings.FNF_where_pvp:SetValue("chat")
-  check(ns.S().where.pvp == "chat", "battleground alerts dropdown")
-  settings.FNF_where_pvp:SetValue("hold")
+  settings.FNF_instances:SetValue("off")
+  check(ns.S().instances == "off", "one instances dropdown for dungeons, raids and battlegrounds")
+  settings.FNF_instances:SetValue("hold")
   settings.FNF_track_pvp:SetValue(true)
   check(ns.S().track.pvp == true, "track PvP in battlegrounds checkbox")
   settings.FNF_track_pvp:SetValue(false)
   local played = SOUNDS_PLAYED or 0
-  settings.FNF_soundPick_kill:SetValue("raidwarning")
-  check(ns.S().soundPick.kill == "raidwarning" and (SOUNDS_PLAYED or 0) == played + 1, "picking a sound sets it and plays it")
-  settings.FNF_soundPick_kill:SetValue("default")
+  settings.FNF_soundPick_trouble:SetValue("raidwarning")
+  check(ns.S().soundPick.trouble == "raidwarning" and (SOUNDS_PLAYED or 0) == played + 1, "picking a sound sets it and plays it")
+  settings.FNF_soundPick_trouble:SetValue("default")
+  check(settings.FNF_soundPick_victory ~= nil and settings.FNF_soundPick_pvp == nil, "two fight sounds: a friend in trouble, a friend's kill")
+  check(settings.FNF_soundPick_kill == nil and settings.FNF_milestones == nil and settings.FNF_gearMin == nil,
+    "one sound per kind of alert; no milestones switch; no gear quality choice")
   settings.FNF_mark:SetValue(false)
   check(ns.S().mark == false, "hitlist marks checkbox")
   settings.FNF_mark:SetValue(true)
+  local hideWas = ns.S().hideLowAlts
+  check(settings.FNF_hideLowAlts ~= nil, "Friends & sharing: a 'Hide characters below level 15' checkbox")
+  settings.FNF_hideLowAlts:SetValue(false)
+  check(ns.S().hideLowAlts == false, "the low alt checkbox turns the filter off")
+  settings.FNF_hideLowAlts:SetValue(true)
+  check(ns.S().hideLowAlts == true, "... and on")
+  ns.S().hideLowAlts = hideWas
   settings.FNF_debug:SetValue(true)
   check(ns.S().debug and ns.S().debugSince, "debug checkbox goes through SetDebug")
+  -- "Forget ... after": three dropdowns of days; asks first when entries would go right away
+  do
+    local keys = { "forgetAttackers", "forgetKilledOnce", "forgetKilledMore" }
+    local want = { forgetAttackers = 14, forgetKilledOnce = 0, forgetKilledMore = 0 }
+    for _, k in ipairs(keys) do
+      check(settings["FNF_" .. k] ~= nil and settings["FNF_" .. k]:GetValue() == want[k], "forget dropdown " .. k .. " defaults to " .. want[k])
+    end
+    local ctl
+    for _, c in ipairs(controls) do if c.s == settings.FNF_forgetAttackers then ctl = c end end
+    local vals = {}
+    for _, o in ipairs(ctl and ctl.opts() or {}) do vals[#vals + 1] = o.value end
+    check(table.concat(vals, ",") == "7,14,30,90,180,365,0", "forget dropdown choices: 1w 2w 1m 3m 6m 1y forever (" .. table.concat(vals, ",") .. ")")
+    real.hitlist["Dusty Attacker"] = { name = "Dusty Attacker", kills = 0, attacks = 3, victims = {}, lastSeen = time() - 20 * 86400 }
+    settings.FNF_forgetAttackers:SetValue(30) -- longer: nothing goes
+    check(ns.S().forgetAttackers == 30 and real.hitlist["Dusty Attacker"], "forget dropdown: a longer time is stored")
+    settings.FNF_forgetAttackers:SetValue(7) -- would remove Dusty Attacker: asks; no pop-up in tests counts as No
+    check(ns.S().forgetAttackers == 30 and real.hitlist["Dusty Attacker"], "forget dropdown: asks before removing, declined keeps the old setting")
+    real.hitlist["Dusty Attacker"] = nil
+    settings.FNF_forgetAttackers:SetValue(7)
+    check(ns.S().forgetAttackers == 7, "forget dropdown: 1 week is stored as 7")
+    settings.FNF_forgetKilledOnce:SetValue(365)
+    settings.FNF_forgetKilledMore:SetValue(0)
+    check(ns.S().forgetKilledOnce == 365 and ns.S().forgetKilledMore == 0, "forget dropdowns: killer settings are stored")
+    ns.S().forgetAttackers, ns.S().forgetKilledOnce, ns.S().forgetKilledMore = 14, 0, 0
+  end
   -- every button runs without error
   for _, pg in ipairs(pages) do
     for _, item in ipairs(pg.layout.items) do
@@ -725,11 +826,11 @@ ns.UI.Show("friends")
 ns.UI.Show("feed")
 check(ns.errors == 0, "no errors in window sort/paging (" .. tostring(ns.lastError) .. ")")
 
--- you are not in your own Friends list
+-- you are in the Friends ranking once, as yourself (never as one of your friends)
 ns.UI.Show("friends")
-local meListed = false
-for _, e in ipairs(ns.UI.Rows()) do if e.name == ns.me then meListed = true end end
-check(real.players[ns.me] and real.players[ns.me].friend and not meListed, "you don't show up under Friends")
+local meRows, meIsMe = 0, false
+for _, e in ipairs(ns.UI.Rows()) do if e.name == ns.me then meRows = meRows + 1; meIsMe = e.me end end
+check(meRows == 1 and meIsMe, "you show up once in the Friends ranking, as you")
 
 -- friends on the other faction: left out of the roster, their events dropped, not shown
 do
@@ -752,22 +853,6 @@ do
   for _, e in ipairs(ns.UI.Rows()) do if e.name == "Ally Friend" then allyListed = true end end
   check(not allyListed, "a known friend now on the other faction isn't listed")
   real.players["Ally Friend"] = nil
-end
-
--- stop simulation: pending fake alerts don't fire, fake toasts dismissed, real data shown
-do
-  local simFeed = #(ns.Data.SimRealm().feed)
-  ns.Sim.RunAll(false)
-  check(ns.Sim.running, "simulation running")
-  ns.Toast.Push({ kind = "died", category = "pvp", title = "fake", sim = true, force = true })
-  ns.Sim.Stop()
-  RUN_TIMERS()
-  check(#(ns.Data.SimRealm().feed) == simFeed and not ns.Sim.running and not ns.viewSim, "stopped: no more simulated events, real view")
-  local simShown = false
-  for _, f in ipairs(FRAMES) do if f.spec and f.spec.sim then simShown = true end end
-  check(not simShown, "simulated toasts dismissed")
-  SlashCmdList.FRIENDSANDFOES("sim stop")
-  check(ns.errors == 0, "no errors stopping simulation (" .. tostring(ns.lastError) .. ")")
 end
 
 -- where it works: alerts per instance type, and where your own PvP is tracked
@@ -796,16 +881,14 @@ do
   ns.Toast.Pump()
   check((ns.Toast.shown or 0) == s0 + 1, "...and show once you're out")
   drainToasts()
-  ns.S().where.party = "chat"
-  local toasted1, chats1 = shownIn("party")
-  check(not toasted1 and chats1 == 1, "dungeon: chat line only")
-  ns.S().where.party = "off"
+  ns.S().instances = "off"
   local toasted2, chats2 = shownIn("party")
-  check(not toasted2 and chats2 == 0, "dungeon: off")
-  ns.S().where.party = "show"
+  local toasted2b = shownIn("raid")
+  check(not toasted2 and chats2 == 0 and not toasted2b, "instances off: nothing in a dungeon or a raid")
+  ns.S().instances = "show"
   local toasted3 = shownIn("party")
-  check(toasted3, "dungeon: show")
-  ns.S().where.party = "hold"
+  check(toasted3, "instances: show")
+  ns.S().instances = "hold"
   -- tracking your own PvP
   here = "pvp"
   check(not ns.PvP.InWorldPvPContext(), "battlegrounds not tracked by default")
@@ -823,8 +906,8 @@ do
   ns.S().dnd.instance = false
   FriendsAndFoesDB.dataVersion = nil -- (saved data from before the upgrade steps)
 FIRE("ADDON_LOADED", "FriendsAndFoes")
-  check(ns.S().dnd.instance == nil and ns.S().where.party == "show" and ns.S().where.pvp == "show", "old instance switch migrated")
-  for k in pairs(ns.S().where) do ns.S().where[k] = "hold" end
+  check(ns.S().dnd.instance == nil and ns.S().instances == "show", "old instance switch migrated")
+  ns.S().instances = "hold"
   IsInInstance = origII
   check(ns.errors == 0, "no errors in where-it-works (" .. tostring(ns.lastError) .. ")")
 end
@@ -939,6 +1022,15 @@ do
   for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "durpvp" then df = f end end
   check(df and df.duration == 8, "PvP toasts stay 2 seconds longer")
   drainToasts()
+  -- unset: one default everywhere (5)
+  ns.S().toastDuration = nil
+  PRINTED = {}
+  SlashCmdList.FRIENDSANDFOES("duration")
+  check(PRINTED[#PRINTED] and PRINTED[#PRINTED]:find("now 5", 1, true), "/fnf duration with nothing set says now 5: " .. tostring(PRINTED[#PRINTED]))
+  ns.Toast.Push({ kind = "level", category = "progress", title = "durdef", force = true })
+  for _, f in ipairs(FRAMES) do if f.spec and f.spec.title == "durdef" then df = f end end
+  check(df and df.duration == ns.DEFAULT_TOAST_DURATION and df.duration == 5, "an unset toast duration is the default, 5")
+  drainToasts()
   ns.S().toastDuration = 3
   ns.S().toastScale = 1.2
   ns.Toast.ApplyScale()
@@ -1003,14 +1095,25 @@ do
   local lastId
   local origPS = PlaySound
   PlaySound = function(id) lastId = id; SOUNDS_PLAYED = (SOUNDS_PLAYED or 0) + 1 end
-  ns.S().soundPick.died = "coin"
+  ns.S().soundPick.trouble = "coin"
   ns.S().sound.died = true
   drainToasts()
   ns.Toast.Push({ kind = "died", category = "pvp", title = "snd" })
   local coinId
   for _, c in ipairs(ns.Toast.SOUND_CHOICES) do if c[1] == "coin" then coinId = c[3] end end
-  check(lastId == coinId, "picked sound plays for that event")
-  ns.S().soundPick.died = "default"
+  check(lastId == coinId, "the trouble sound plays for a friend killed")
+  ns.S().soundPick.trouble = "default"
+  -- on "Default", attacked / killed / a kill each keep their own sound
+  local idOf = {}
+  for _, c in ipairs(ns.Toast.SOUND_CHOICES) do idOf[c[1]] = c[3] end
+  check(ns.Toast.SoundFor("attacked", "pvp") == idOf.alarm and ns.Toast.SoundFor("died", "pvp") == idOf.raidwarning
+    and ns.Toast.SoundFor("kill", "pvp") == idOf.levelup, "fights on Default: attacked, killed and a kill sound different")
+  ns.S().soundPick.trouble = "coin"
+  check(ns.Toast.SoundFor("attacked", "pvp") == idOf.coin and ns.Toast.SoundFor("died", "pvp") == idOf.coin
+    and ns.Toast.SoundFor("kill", "pvp") == idOf.levelup, "a trouble sound plays for attacked and killed; a kill keeps its own")
+  ns.S().soundPick.victory = "whisper"
+  check(ns.Toast.SoundFor("kill", "pvp") == idOf.whisper and ns.Toast.SoundFor("attacked", "pvp") == idOf.coin, "and the kill sound is its own pick")
+  ns.S().soundPick.trouble, ns.S().soundPick.victory = "default", "default"
   drainToasts()
   ns.Toast.Push({ kind = "died", category = "pvp", title = "snd2" })
   check(lastId ~= coinId, "default plays the built-in sound")
@@ -1127,9 +1230,9 @@ end
 do
   local day = 86400
   real.hitlist["Fresh Foe"] = { name = "Fresh Foe", kills = 1, attacks = 0, victims = {}, lastSeen = time() - 2 * day, level = 30 }
-  real.hitlist["Old Foe"] = { name = "Old Foe", kills = 9, attacks = 0, victims = {}, lastSeen = time() - 100 * day, level = 20 }
+  real.hitlist["Old Foe"] = { name = "Old Foe", kills = 9, attacks = 0, victims = {}, lastSeen = time() - 400 * day, level = 20 }
   real.hitlist["Old Noted"] = { name = "Old Noted", kills = 1, attacks = 0, victims = {}, lastSeen = time() - 400 * day, note = "keep" }
-  check(not ns.Data.IsStale(real.hitlist["Fresh Foe"]) and ns.Data.IsStale(real.hitlist["Old Foe"]), "stale after 90 days unseen")
+  check(not ns.Data.IsStale(real.hitlist["Fresh Foe"]) and ns.Data.IsStale(real.hitlist["Old Foe"]), "stale after 30 days unseen")
   ns.UI.Show("hitlist")
   ns.UI.SortBy(4) -- kills, most first: Old Foe (9) would lead, but faded entries go last
   ns.UI.SortBy(4)
@@ -1142,13 +1245,14 @@ do
   end
   check(posFresh and posOld and posOld > posFresh, "faded entries are listed after active ones")
   check(ns.Data.LevelIsOld(real.hitlist["Old Foe"]) and not ns.Data.LevelIsOld(real.hitlist["Fresh Foe"]), "old levels detected")
-  -- forgetting (off by default)
-  check(ns.Data.ForgetOld(FriendsAndFoesDB) == 0 and real.hitlist["Old Foe"], "forgetting is off by default")
-  ns.S().forgetAfter = 90
+  -- forgetting
+  ns.S().forgetKilledOnce, ns.S().forgetKilledMore = 0, 0
+  check(ns.Data.ForgetOld(FriendsAndFoesDB) == 0 and real.hitlist["Old Foe"], "killers are kept forever by default")
+  ns.S().forgetKilledOnce, ns.S().forgetKilledMore = 365, 365
   ns.Data.ForgetOld(FriendsAndFoesDB)
-  check(real.hitlist["Old Foe"] == nil and real.hitlist["Fresh Foe"] and real.hitlist["Old Noted"], "forget after 90 days: removed, but fresh and noted entries kept")
-  ns.S().forgetAfter = 0
+  check(real.hitlist["Old Foe"] == nil and real.hitlist["Fresh Foe"] and real.hitlist["Old Noted"] == nil, "forget: old entries removed (a note no longer keeps one), fresh ones kept")
   real.hitlist["Fresh Foe"], real.hitlist["Old Noted"] = nil, nil
+  ns.S().forgetKilledOnce, ns.S().forgetKilledMore = 0, 0
   -- a friend not heard from in 6 months leaves the Friends list
   real.players["Gone Friend"] = { name = "Gone Friend", friend = true, k = 0, d = 0, a = 0, lastSeen = time() - 200 * day }
   ns.UI.Show("friends")
@@ -1181,23 +1285,20 @@ do
   -- gear quality
   check(ns.ItemQuality("|cnIQ3:|Hitem:1|h[x]|h|r") == 3 and ns.ItemQuality("|cffa335ee|Hitem:2|h[y]|h|r") == 4 and ns.ItemQuality("plain") == nil, "item quality from links")
   ns.S().show.gear = "toast"
-  ns.S().gearMin = 4
   before = ns.Toast.shown or 0
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cff0070dd|Hitem:5|h[Blue Thing]|h|r", count = "1" }, "gq1"), "WHISPER", 77)
   check((ns.Toast.shown or 0) == before, "epic only: blue gear skipped")
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:6|h[Epic Thing]|h|r", count = "1" }, "gq2"), "WHISPER", 77)
   check((ns.Toast.shown or 0) == before + 1, "epic only: epic gear shown")
   drainToasts()
-  ns.S().gearMin = 3
   ns.S().show.gear = "chat"
-  -- milestones switch
-  ns.S().milestones = false
+  -- milestones always pop up (no switch any more)
   ns.S().show.level = "chat"
   CHAT = {}
   before = ns.Toast.shown or 0
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 60 }, "ms1"), "WHISPER", 77)
-  check((ns.Toast.shown or 0) == before and #CHAT == 1, "milestones off: level 60 follows the chat setting")
-  ns.S().milestones = true
+  check((ns.Toast.shown or 0) == before + 1, "level 60 always pops up, even with level-ups on chat")
+  drainToasts()
   -- stacking direction and count
   ns.S().toastGrow = "up"
   ns.Toast.ApplyScale()
@@ -1219,18 +1320,18 @@ end
 do
   -- #1 "Epic only" counts only the epics of a gear batch
   drainToasts()
-  ns.S().show.gear, ns.S().gearMin = "toast", 4
+  ns.S().show.gear = "toast"
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:7|h[Epic One]|h|r", count = "3", epics = "1" }, "rv1"), "WHISPER", 77)
   local gearToast
   for _, f in ipairs(FRAMES) do if f.spec and f.spec.kind == "gear" then gearToast = f.spec end end
   check(gearToast and not ns.Plain(gearToast.title):find("more", 1, true), "epic only: '+N more' counts epics only: " .. tostring(gearToast and ns.Plain(gearToast.title)))
   drainToasts()
-  ns.S().show.gear, ns.S().gearMin = "chat", 3
+  ns.S().show.gear = "chat"
   -- #2 white and grey items are recognised
   check(ns.ItemQuality("|cffffffff|Hitem:8|h[White]|h|r") == 1 and ns.ItemQuality("|cff9d9d9d|Hitem:9|h[Grey]|h|r") == 0, "white/grey quality")
   -- #3 forgetting asks first; "No" changes nothing
   real.hitlist["Ancient One"] = { name = "Ancient One", kills = 1, victims = {}, lastSeen = time() - 400 * 86400 }
-  check(ns.Data.CountForget(FriendsAndFoesDB, 90) >= 1, "count what forgetting would remove")
+  check(ns.Data.CountForget(FriendsAndFoesDB, "forgetKilledOnce", 365) >= 1, "count what forgetting would remove")
   local saidNo = false
   ns.UI.Confirm("x", function() end, function() saidNo = true end) -- no pop-up available in tests: counts as No
   check(saidNo and real.hitlist["Ancient One"], "declined: nothing removed")
@@ -1260,17 +1361,17 @@ end
 do
   -- 1) "Epic only": the Feed still records the whole batch
   drainToasts()
-  ns.S().show.gear, ns.S().gearMin = "toast", 4
+  ns.S().show.gear = "toast"
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("GEAR", { link = "|cffa335ee|Hitem:10|h[Epic Two]|h|r", count = "3", epics = "1" }, "cr1"), "WHISPER", 77)
   check(ns.Plain(lastFeed()):find("+2 more", 1, true) ~= nil, "Feed keeps the full gear batch: " .. ns.Plain(lastFeed()))
   drainToasts()
-  ns.S().show.gear, ns.S().gearMin = "chat", 3
+  ns.S().show.gear = "chat"
   -- 3) a share doesn't import entries "Forget" would remove anyway
-  ns.S().forgetAfter = 90
-  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s9", entries = "Very Old:ROGUE:30::0:2:0:2600;Quite New:MAGE:30::0:1:0:5" }, "cr3"), "WHISPER", 77)
+  ns.S().forgetKilledOnce = 90
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("HIT", { share = "s9", entries = "Very Old:ROGUE:30::0:1:0:2600;Quite New:MAGE:30::0:1:0:5" }, "cr3"), "WHISPER", 77)
   check(real.hitlist["Very Old"] == nil and real.hitlist["Quite New"] ~= nil, "share: entries older than the forget period aren't imported")
-  ns.S().forgetAfter = 0
   real.hitlist["Quite New"] = nil
+  ns.S().forgetKilledOnce = 0
   -- 7) merging two records adds up the per-friend kill counts
   local dst = { name = "Kragg Bear", kills = 2, kv = { Bob = 2 } }
   ns.Data.MergeInto(dst, { name = "Kragg", kills = 2, kv = { Bob = 2, Alice = 1 } })
@@ -1410,7 +1511,6 @@ end
 do
   local errs = ns.errors
   local rr = ns.Data.RealRealm()
-  ns.viewSim = false
   ns.Comm.ClearPicks()
   ns.Comm.RebuildRoster()
   -- your own message: your own all-time K/D from your record
@@ -1438,15 +1538,17 @@ do
 
   -- changes are sent once, after a short wait; unchanged = not sent again
   RUN_TIMERS(); RUN_TICKERS(8); SENT = {}
-  ns.Profile.SetWanted("Rogz Fang")
+  FriendsAndFoesDB.profile.bounty = FriendsAndFoesDB.profile.bounty or { total = 0, count = 0 }
+  FriendsAndFoesDB.profile.bounty.total = ns.Count(FriendsAndFoesDB.profile.bounty.total) + 1 -- (something changed)
+  ns.Profile.Changed()
   RUN_TIMERS()
   RUN_TICKERS(8)
   local pro = {}
   for _, s in ipairs(SENT) do if s.payload:find("\tPRO\t", 1, true) then pro[#pro + 1] = s.payload end end
   check(#pro == 1, "one profile update (Battle.net only): " .. #pro)
   local decoded = pro[1] and ns.Comm.Decode(pro[1])
-  check(decoded and decoded.f.k == "12" and decoded.f.d == "4" and decoded.f.wanted == "Rogz Fang" and decoded.f.motto == nil,
-    "profile message carries K/D and most wanted (no free text)")
+  check(decoded and decoded.f.k == "12" and decoded.f.d == "4" and decoded.f.wanted == "" and decoded.f.motto == nil,
+    "profile message carries K/D; the old most-wanted field is there but empty (no free text)")
   check(pro[1] and #pro[1] <= 255, "profile fits one message")
   SENT = {}
   ns.Profile.Changed()
@@ -1469,7 +1571,7 @@ do
   buddy.k, buddy.d, buddy.sk, buddy.sd = 1, 1, nil, nil
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("PRO", { k = 20, d = 5, wanted = "Rogz-Fang", zone = "Duskwood", status = "pvp" }, "pro1"), "WHISPER", 77)
   check(buddy.sk == 20 and buddy.sd == 5, "friend's own K/D stored")
-  check(buddy.wanted == "Rogz Fang" and buddy.zone == "Duskwood" and buddy.status == "pvp", "friend's most wanted, zone, status")
+  check(buddy.wanted == nil and buddy.zone == "Duskwood" and buddy.status == "pvp", "friend's zone and status (a most wanted from an older version is ignored)")
   check(ns.Profile.NowText(buddy) == "online \194\183 Duskwood \194\183 in a fight", "now: " .. tostring(ns.Profile.NowText(buddy)))
   buddy.statusAt = time() - 600
   check(ns.Profile.NowText(buddy) == "online \194\183 Duskwood", "an old 'in a fight' is dropped")
@@ -1492,7 +1594,7 @@ do
   check(board[2].rank == 2 and board[3].rank == 2, "same K and D: same rank")
   FriendsAndFoesDB.group = { ["Someone#9"] = true }
   board = ns.Profile.Board()
-  check(#board == 1 and board[1].me, "picks active: only picked friends (and you) on the board")
+  check(#board == 3, "your alert list only picks whose alerts you get: every friend is still ranked")
   ns.Comm.ClearPicks()
 
   -- the feed knows who each PvP line is about
@@ -1510,8 +1612,6 @@ do
     if n > most or (n == most and mostName and h.name < mostName) then most, mostName = n, h.name end
   end
   check(nem and nem.name == mostName and times == most, "nemesis = the enemy with most kills on them: " .. tostring(nem and nem.name))
-  local by = ns.Profile.WantedBy("Rogz Fang")
-  check(#by == 2 and by[1] == "Buddy Pal" and by[2] == ns.me, "most wanted by you and Buddy")
 
   -- enemies are on the Hitlist (no Enemies tab); the old names open it
   ns.UI.Show("enemies")
@@ -1527,15 +1627,18 @@ do
 
   -- the window: Leaderboard tab, profiles for you, a friend and an enemy
   ns.UI.Show("board")
-  check(#ns.UI.Rows() == 3 and ns.UI.Rows()[1].name == "Buddy Pal", "Leaderboard tab lists the board, most kills first")
+  local buddyRank
+  for _, r in ipairs(ns.UI.Rows()) do if r.name == "Buddy Pal" then buddyRank = r.rank end end
+  check(ns.UI.CurrentTab() == "friends" and buddyRank == 1,
+    "the old Leaderboard name opens Friends, ranked by kills, most first")
   check(ns.Profile.KindOf(ns.me) == "me" and ns.Profile.KindOf("Buddy Pal") == "friend" and ns.Profile.KindOf("Rogz") == "enemy"
     and ns.Profile.KindOf("Nobody Atall") == nil, "profile kinds")
   local v = ns.UI.ProfileView("Buddy Pal")
   local function lineOf(view, label)
     for _, l in ipairs(view.lines) do if l[1] == label then return ns.Plain(tostring(l[2])) end end
   end
-  check(v and lineOf(v, "Kills") == "20" and lineOf(v, "Rank") == "#1 of 3" and lineOf(v, "Most wanted") == "Rogz Fang"
-    and lineOf(v, "Nemesis"):find(nem.name, 1, true) ~= nil, "friend profile: kills, rank, most wanted, nemesis")
+  check(v and lineOf(v, "Kills") == "20" and lineOf(v, "Rank") == "#1 of 3" and lineOf(v, "Most wanted") == nil
+    and lineOf(v, "Nemesis"):find(nem.name, 1, true) ~= nil, "friend profile: kills, rank, nemesis (no most wanted)")
   buddy.version = "0.6.3"
   check(ns.UI.ProfileView("Buddy Pal") and lineOf(ns.UI.ProfileView("Buddy Pal"), "Addon"):find("older", 1, true) ~= nil, "outdated addon hinted")
   v = ns.UI.ProfileView("Quiet Friend")
@@ -1543,20 +1646,16 @@ do
   v = ns.UI.ProfileView(ns.me)
   check(v and v.isMe and lineOf(v, "Kills") == "12", "your own profile")
   v = ns.UI.ProfileView("Rogz Fang")
-  check(v and v.kind == "enemy" and v.onHitlist and lineOf(v, "Most wanted by"):find("Buddy Pal", 1, true) ~= nil, "enemy profile")
+  check(v and v.kind == "enemy" and v.onHitlist and lineOf(v, "Most wanted by") == nil and v.note == nil, "enemy profile (no most wanted by, no note)")
 
   ns.UI.ShowProfile("Rogz")
   check(ns.UI.ProfileName() == "Rogz Fang", "bare first name opens the full name's profile")
-  ns.UI.ProfileSave("camps the flight path")
-  check(rr.hitlist["Rogz Fang"].note == "camps the flight path", "note saved from the enemy profile")
-  ns.Profile.SetWanted(nil)
-  ns.UI.ProfileAction()
-  check(ns.Profile.Wanted() == "Rogz Fang", "enemy profile button makes them most wanted")
-  ns.UI.ProfileAction()
-  check(ns.Profile.Wanted() == nil, "and clears it again")
+  local ctl = ns.UI.Frames().profile.controls
+  check(not ctl.action:IsShown() and ctl.post:IsShown() and ctl.edit == nil and ns.UI.ProfileSave == nil and ns.Profile.SetWanted == nil,
+    "an enemy's profile: Post bounty, no most wanted button, no note box")
+  ns.UI.ProfileAction() -- (does nothing on an enemy)
   ns.UI.ShowProfile(ns.me)
-  ns.UI.ProfileSave("anything")
-  check(FriendsAndFoesDB.profile.motto == nil, "your own profile has no free text to save")
+  check(not ctl.action:IsShown() and not ctl.post:IsShown(), "your own profile: no action button")
   ns.UI.ShowProfile("Buddy Pal")
   ns.UI.ProfileAction()
   check(ns.Comm.IsPicked("Buddy#1234"), "friend profile button picks them")
@@ -1567,21 +1666,17 @@ do
   ns.UI.SelectTab("profile")
 
   -- slash commands
-  SlashCmdList.FRIENDSANDFOES("wanted Rogz")
-  check(ns.Profile.Wanted() == "Rogz Fang", "/fnf wanted resolves a first name")
-  SlashCmdList.FRIENDSANDFOES("wanted clear")
-  check(ns.Profile.Wanted() == nil, "/fnf wanted clear")
   local printed = #PRINTED
+  SlashCmdList.FRIENDSANDFOES("wanted Rogz")
+  check(#PRINTED > printed and PRINTED[#PRINTED]:find("/fnf", 1, true) and not PRINTED[#PRINTED]:find("wanted", 1, true),
+    "/fnf wanted is gone: just the help line, which no longer lists it")
+  printed = #PRINTED
   SlashCmdList.FRIENDSANDFOES("motto Hello")
   check(PRINTED[#PRINTED] and PRINTED[#PRINTED]:find("/fnf", 1, true) and #PRINTED > printed, "/fnf motto is gone: just the help line")
   SlashCmdList.FRIENDSANDFOES("profile buddy pal")
   SlashCmdList.FRIENDSANDFOES("profile")
   check(ns.UI.ProfileName() == ns.me, "/fnf profile = your own")
   SlashCmdList.FRIENDSANDFOES("board")
-  -- simulation view: the board shows the simulated friend, no errors
-  ns.Sim.Run("kill", false)
-  ns.UI.Show("board")
-  ns.Sim.Clear()
   rr.players["Quiet Friend"], rr.players["Old Friend"] = nil, nil
   RUN_TIMERS(); RUN_TICKERS(8)
   check(ns.errors == errs, "no errors in profiles / leaderboard (" .. tostring(ns.lastError) .. ")")
@@ -1877,12 +1972,12 @@ do
   ns.UI.Show("board")
   ns.UI.SetBoardView(g.id)
   ns.UI.ShowProfile("Buddy Pal")
-  check(ns.UI.CurrentTab() == "profile" and ns.UI.BackLabel() == ns.L.TAB_BOARD, "profile from the Leaderboard: Back says Leaderboard")
+  check(ns.UI.CurrentTab() == "profile" and ns.UI.BackLabel() == ns.L.TAB_FRIENDS, "profile from Friends: Back says Friends")
   ns.UI.Back()
-  check(ns.UI.CurrentTab() == "board" and ns.UI.BoardView() == g.id, "Back: the Leaderboard, still showing the group")
+  check(ns.UI.CurrentTab() == "friends" and ns.UI.BoardView() == g.id, "Back: Friends, still showing the group")
   check(ns.UI.BackLabel() == nil, "after going back there's nothing more to go back to")
   ns.UI.Back() -- does nothing
-  check(ns.UI.CurrentTab() == "board", "Back with nowhere to go does nothing")
+  check(ns.UI.CurrentTab() == "friends", "Back with nowhere to go does nothing")
   ns.UI.Show("hitlist")
   ns.UI.ShowPlayer("Rogz Fang") -- like clicking a toast
   ns.UI.Back()
@@ -2012,12 +2107,11 @@ do
 end
 
 -- 0.7.1: kill lists (who each player killed), shared on request; Back through the views;
--- catch-up from friends who come online after you, 24 hours / 100 events
+-- catch-up from friends who come online after you, a week / 250 events
 do
   local errs = ns.errors
   local K, G = ns.Kills, ns.Groups
   local rr = ns.Data.RealRealm()
-  ns.viewSim = false
   ns.Comm.ClearPicks()
   ns.Comm.RebuildRoster()
   RUN_TIMERS(); RUN_TICKERS(60); SENT = {}
@@ -2107,6 +2201,27 @@ do
   check(#sentKinds("KLQ") == 1 and sentKinds("KLQ")[1].f.who == "Buddy Pal", "opening their kill list asks them for it")
   check(ns.UI.CurrentTab() == "kills" and ns.UI.KillsOf() == "Buddy Pal" and #ns.UI.Rows() == 4, "the kill list view shows their victims")
   check(ns.UI.Rows()[1].name == "Vex Morrow", "most kills first")
+  do
+    local vrow
+    for _, o in ipairs(FRAMES) do
+      if o.cells and o._shown and o.entry and o.entry.name == "Vex Morrow" then vrow = o end
+    end
+    check(vrow and vrow.cells[1]._text and vrow.cells[1]._text:find("|Hfnfplayer:Vex Morrow|h", 1, true),
+      "kill list: the victim's name is a link")
+    check(vrow and vrow._scripts.OnHyperlinkClick, "kill list rows answer link clicks")
+    ns.UI.SortBy(1)
+    local names = {}
+    for i, r in ipairs(ns.UI.Rows()) do
+      if i <= 3 then names[#names + 1] = r.name:lower() end -- (the 4th is a placeholder entry)
+    end
+    check(#names >= 3, "kill list: names to sort")
+    local sorted = true
+    for i = 2, #names do if names[i - 1] > names[i] then sorted = false end end
+    local sortedDesc = true
+    for i = 2, #names do if names[i - 1] < names[i] then sortedDesc = false end end
+    check(sorted or sortedDesc, "kill list: sorting by name uses the plain names " .. table.concat(names, ","))
+    ns.UI.SortBy(4)
+  end
   SENT = {}
   ns.UI.ShowKills("Buddy Pal")
   RUN_TICKERS(10)
@@ -2121,7 +2236,7 @@ do
   ns.UI.Back()
   check(ns.UI.CurrentTab() == "profile" and ns.UI.ProfileName() == "Buddy Pal", "Back: their profile")
   ns.UI.Back()
-  check(ns.UI.CurrentTab() == "board" and ns.UI.BackLabel() == nil, "Back: the Leaderboard, and that's the start")
+  check(ns.UI.CurrentTab() == "friends" and ns.UI.BackLabel() == nil, "Back: Friends, and that's the start")
   ns.UI.ShowKills("Buddy Pal")
   ns.UI.SelectTab("feed")
   check(ns.UI.BackLabel() == nil, "picking a tab yourself starts over")
@@ -2145,7 +2260,7 @@ do
   check(K.Backfill(db) == 2 and db.realms.Forever.players["Kil Ler"].slain["Poor Soul"].n == 2, "backfill from the Feed: kills only")
   check(K.Backfill(db) == 0, "backfill runs once")
 
-  -- catch-up: a friend who comes online after you is asked too; 24 hours; 100 events
+  -- catch-up: a friend who comes online after you is asked too; a week; 250 events
   ns.Comm.SetAwayFrom(time() - 7200)
   FRIENDS_ONLINE = 0
   ns.Comm.RebuildRoster()
@@ -2170,13 +2285,13 @@ do
   ns.Comm.RebuildRoster()
   RUN_TICKERS(20)
   req = sentKinds("REQ")
-  check(#req == 1 and tonumber(req[1].f.window) == 86400, "away for days: asks for the last 24 hours")
-  check(ns.Comm.CATCHUP_WINDOW == 86400, "catch-up window is 24 hours")
+  check(#req == 1 and tonumber(req[1].f.window) == 3 * 86400, "away for 3 days: asks for those 3 days")
+  check(ns.Comm.CATCHUP_WINDOW == 7 * 86400, "catch-up window is a week")
   local box = ns.Comm.Outbox()
   local keep = {}
   for i, e in ipairs(box) do keep[i] = e end
-  for i = 1, 130 do ns.Comm.Remember("LVL", "ob" .. i, { level = i }) end
-  check(#ns.Comm.Outbox() == 100, "up to 100 of your own events kept for friends: " .. #ns.Comm.Outbox())
+  for i = 1, 300 do ns.Comm.Remember("LVL", "ob" .. i, { level = i }) end
+  check(#ns.Comm.Outbox() == 250, "up to 250 of your own events kept for friends: " .. #ns.Comm.Outbox())
   wipe(box)
   for i, e in ipairs(keep) do box[i] = e end
 
@@ -2281,7 +2396,7 @@ do
   -- not your friend, yourself, the relayer itself, too old, or not picked: ignored
   from("Buddy Pal", 77, "RLY", { origin = "Total Stranger", oclass = "", olevel = "", okind = "LVL", oid = "x1", ago = 60, data = "20" }, "ry3")
   from("Buddy Pal", 77, "RLY", { origin = ns.me, oclass = "", olevel = "", okind = "LVL", oid = "x2", ago = 60, data = "20" }, "ry4")
-  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "LVL", oid = "x3", ago = 3 * 86400, data = "20" }, "ry5")
+  from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "LVL", oid = "x3", ago = 8 * 86400, data = "20" }, "ry5")
   from("Buddy Pal", 77, "RLY", { origin = "Alice Wonder", oclass = "", olevel = "", okind = "HIT", oid = "x4", ago = 60, data = "" }, "ry6")
   check(rr.players["Total Stranger"] == nil and #rr.feed == feedBefore + 1, "strangers, yourself, too old and other kinds are ignored")
   FriendsAndFoesDB.group = { ["Buddy#1234"] = true } -- you only want alerts from Buddy
@@ -2322,16 +2437,17 @@ do
   local cols = ns.UI.TabColumns("friends")
   local function cell(c, e) return ns.Plain(tostring(cols[c][3](e))) end
 
-  -- kills/deaths: the friend's own report (same as the Leaderboard), ~ when they don't report
-  local rep = { name = "Report Er", friend = true, k = 4, d = 0, sk = 4, sd = 2, lastSeen = time() }
-  local est = { name = "Esti Mate", friend = true, k = 3, d = 1, lastSeen = time() }
-  check(cols[4][1] == ns.L.COL_KILLS and cell(4, rep) == "4" and cell(5, rep) == "2", "Friends tab: their own numbers, same as the Leaderboard")
+  -- kills/deaths: the friend's own report, or counted from their alerts when they don't report
+  rr.players["Report Er"] = { name = "Report Er", friend = true, k = 4, d = 0, sk = 4, sd = 2, lastSeen = time() }
+  rr.players["Esti Mate"] = { name = "Esti Mate", friend = true, k = 3, d = 1, lastSeen = time() }
+  local rep, est
+  for _, r in ipairs(ns.Profile.Board()) do
+    if r.name == "Report Er" then rep = r elseif r.name == "Esti Mate" then est = r end
+  end
+  check(cols[4][1] == ns.L.COL_KILLS and cell(4, rep) == "4" and cell(5, rep) == "2", "Friends tab: their own numbers")
   check(cell(4, est) == "3" and cell(5, est) == "1", "Friends tab: counted numbers shown as plain numbers")
-  check(cols[5][4](rep) == 2 and cols[5][4]({ pending = true }) == -1, "Friends tab: sorts by the numbers shown")
-
-  -- version: older than yours is flagged too
-  check(cols[3][3]({ version = "0.5.4" }):find("ff7f3f", 1, true) ~= nil, "an older addon version is flagged in the Friends tab")
-  check(cols[3][3]({ version = ns.VERSION }) == ns.VERSION, "the same version isn't")
+  check(cols[5][4](rep) == 2, "Friends tab: sorts by the numbers shown")
+  rr.players["Report Er"], rr.players["Esti Mate"] = nil, nil
 
   -- last event: an older event caught up later doesn't replace a newer one, and the time shown
   -- is that event's own time
@@ -2343,8 +2459,6 @@ do
   RUN_TIMERS()
   check(buddy.lastText:find("16", 1, true) ~= nil, "an older event caught up later doesn't replace it")
   buddy.lastSeen = time() -- (heard from them just now)
-  local old = { name = "Old Event", friend = true, k = 0, d = 0, lastText = "reached level 9", lastTextAt = time() - 7200, lastSeen = time() }
-  check(cell(7, old):find("2h ago", 1, true) ~= nil, "the time shown is when that event happened, not when you last heard from them")
 
   check(ns.errors == errs, "no errors in Friends tab fixes (" .. tostring(ns.lastError) .. ")")
 end
@@ -2473,6 +2587,9 @@ do
   local shared
   for _, l in ipairs(v.lines) do if l[1] == ns.L.PROF_SHARED_BY then shared = ns.Plain(l[2]) end end
   check(shared == "Buddy Pal" and #v.lines <= 9, "enemy profile says who shared them, and still fits")
+  local sharedRaw
+  for _, l in ipairs(v.lines) do if l[1] == ns.L.PROF_SHARED_BY then sharedRaw = l[2] end end
+  check(sharedRaw and sharedRaw:find("|Hfnfplayer:Buddy Pal|h", 1, true), "Shared by: the name is a link")
   h.sharedBy = nil
 
   -- wording: alert list, /fnf alerts, kills
@@ -2484,7 +2601,7 @@ do
   SlashCmdList.FRIENDSANDFOES("group buddy")
   check(ns.Comm.IsPicked("Buddy#1234"), "the old /fnf group still works")
   ns.Comm.ClearPicks()
-  local texts = table.concat({ ns.L.WEEKLY, ns.L.TIP_WEEKLY, ns.L.MODE_NO_HONOR, ns.L.PICK_HINT_ALL, ns.L.PICK_HINT_ACTIVE, ns.L.TIP_PICK }, " ")
+  local texts = table.concat({ ns.L.WEEKLY, ns.L.TIP_WEEKLY, ns.L.TIP_PICK, ns.L.ALERTLIST_ALL, ns.L.ALERTLIST_ACTIVE }, " ")
   check(not texts:lower():find("takedown", 1, true) and not texts:lower():find("pick", 1, true), "no 'takedowns' or 'pick' left in those texts")
 
   check(ns.errors == errs, "no errors in click / wording changes (" .. tostring(ns.lastError) .. ")")
@@ -2526,14 +2643,14 @@ do
   ns.UI.Show("board")
   local row
   for _, r in ipairs(ns.UI.Rows()) do if r.name == "Zero Kills" then row = r end end
-  local kdCol = ns.UI.TabColumns("board")[5]
+  local kdCol = ns.UI.TabColumns("friends")[6]
   check(row and ns.Plain(kdCol[3](row)) == "0.00", "0 kills, 3 deaths: K/D 0.00")
   row.kd = -0.0
   check(ns.Plain(kdCol[3](row)) == "0.00", "a negative-zero K/D still shows 0.00")
   rr.players["Zero Kills"] = nil
 
   -- group board: an invite or a member without numbers shows empty cells, no placeholder symbol
-  local killsCol = ns.UI.TabColumns("board")[3]
+  local killsCol = ns.UI.TabColumns("friends")[4]
   check(ns.Plain(killsCol[3]({ invited = true, k = 0, d = 0 })) == "" and ns.Plain(killsCol[3]({ unknown = true, k = 0, d = 0 })) == "",
     "invited / not-yet-known members: empty cells")
 
@@ -2781,7 +2898,7 @@ do
   check(strtrim(ns.Plain(Art.RankText(1))) == "1" and Art.RankText(1):find("GoldIcon", 1, true), "rank 1: gold, with a gold coin after the number")
   check(Art.RankText(3):find("CopperIcon", 1, true) and Art.RankText(4) == "4" and Art.RankText(nil) == "", "rank 3 copper, 4 and up plain")
 
-  -- sounds: the game's own, only with "Window sounds" and "Sounds on"
+  -- window sounds: the game's own, always on (alert sounds have their own switch)
   SOUNDKIT = { IG_CHARACTER_INFO_OPEN = 1, IG_CHARACTER_INFO_CLOSE = 2, IG_ABILITY_PAGE_TURN = 3, IG_QUEST_LIST_SELECT = 4 }
   local before = SOUNDS_PLAYED or 0
   ns.UI.Show("hitlist")
@@ -2789,16 +2906,13 @@ do
   check((SOUNDS_PLAYED or 0) == before + 1, "turning to another tab plays a page sound")
   ns.UI.SelectTab("feed")
   check((SOUNDS_PLAYED or 0) == before + 1, "the same tab again: no sound")
-  ns.S().sound.ui = false
+  ns.S().sound.enabled = false
   ns.UI.SelectTab("hitlist")
-  check((SOUNDS_PLAYED or 0) == before + 1, "Window sounds off: silent")
-  ns.S().sound.ui, ns.S().sound.enabled = true, false
-  ns.UI.SelectTab("feed")
-  check((SOUNDS_PLAYED or 0) == before + 1, "Sounds on off: silent too")
+  check((SOUNDS_PLAYED or 0) == before + 2, "alert sounds off: window sounds still play")
   ns.S().sound.enabled = true
   SOUNDKIT = nil
   ns.UI.SelectTab("hitlist")
-  check((SOUNDS_PLAYED or 0) == before + 1, "a client without the sound list: silent, no error")
+  check((SOUNDS_PLAYED or 0) == before + 2, "a client without the sound list: silent, no error")
 
   -- parchment is only for Wanted posters: the lists keep their plain look
   local fr = ns.UI.Frames()
@@ -2815,8 +2929,8 @@ do
   check(P.labels[1]:GetText() == "Murders", "the facts beside the poster start with Murders")
   local v = ns.UI.ProfileView("Rogz Fang")
   check(not ns.Plain(v.posterSub):find("Enemy", 1, true), "no \"Enemy\" under the name: " .. v.posterSub)
-  -- the bounty: 100 per murder, 25 per attack, 250 per friend who has them as most wanted, at least 10
-  check(ns.Bounty.Price(0, 0, 0) == 10 and ns.Bounty.Price(4, 4, 0) == 500 and ns.Bounty.Price(1, 0, 2) == 600, "bounty sums")
+  -- notoriety: 100 per murder, 25 per attack, no floor in the sum (the floors are in Open)
+  check(ns.Bounty.Price(0, 0) == 0 and ns.Bounty.Price(4, 4) == 500 and ns.Bounty.Price(1, 2) == 150, "notoriety sums")
   check(P.bounty:GetText() == ns.Art.Points(v.bounty) and not P.bounty:GetText():find("|T", 1, true) and P.bountyLabel:GetText() == "Notoriety",
     "notoriety on the poster: points, no gold coin: " .. ns.Plain(P.bounty:GetText()))
   check(ns.Plain(ns.Art.Gold(12500)):match("^12,500") and ns.Plain(ns.Art.Gold(950)):match("^950") and ns.Plain(ns.Art.Gold(1000000)):match("^1,000,000"), "gold with thousands separators")
@@ -2852,6 +2966,23 @@ do
   rogz.race, rogz.raceName, rogz.sex, rogz.class = nil, nil, nil, hadClass
   RACE_ICON_TCOORDS = nil
   CLASS_ICON_TCOORDS = hadCoords
+  -- level line: unknown level leaves out "Level ?"; a known one reads "Level 35 ..."
+  local hadLevel, hadGuild = rogz.level, rogz.guild
+  rogz.level = nil
+  v = ns.UI.ProfileView("Rogz Fang")
+  check(not v.posterSub:find("?", 1, true) and not v.posterSub:find("Level", 1, true), "unknown level: no \"Level ?\" on the poster: " .. v.posterSub)
+  check(not v.sub:find("?", 1, true) and not v.sub:find("Level", 1, true), "unknown level: none in the header line either: " .. v.sub)
+  rogz.level = 35
+  v = ns.UI.ProfileView("Rogz Fang")
+  check(ns.Plain(v.posterSub):find("^Level 35 ") ~= nil, "known level: \"Level 35 ...\": " .. v.posterSub)
+  -- the render path with and without the guild and rank lines
+  rogz.guild = "The Pack"
+  ns.UI.ShowProfile("Rogz Fang")
+  check(select(1, pcall(P.CenterPoster)) and P.posterGuild:IsShown(), "poster with a guild line renders")
+  rogz.guild = nil
+  ns.UI.ShowProfile("Rogz Fang")
+  check(select(1, pcall(P.CenterPoster)) and not P.posterGuild:IsShown(), "poster without a guild line renders, the line takes no room")
+  rogz.level, rogz.guild = hadLevel, hadGuild
   -- numbers show their real value straight away (the count-up only animates on screen)
   v = ns.UI.ProfileView("Rogz Fang")
   check(fr.profile.values[1]:GetText() == tostring(v.lines[1][2]), "the numbers are right from the start")
@@ -2870,7 +3001,7 @@ do
   ns.UI.Show("board")
   ns.UI.SetBoardView("friends")
   ns.UI.SortBy(2)
-  ns.UI.SortBy(3) -- Kills, most first
+  ns.UI.SortBy(4) -- Kills, most first
   local okOrder, prev = true, 0
   for _, r in ipairs(ns.UI.Rows()) do
     if r.rank then
@@ -2902,6 +3033,54 @@ do
   UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitRace, UnitSex, UnitIsUnit = (unpack or table.unpack)(saved, 1, 9)
 end
 
+-- notoriety: level difference tiers, by the killer's own level
+do
+  local B = ns.Bounty
+  local rr = ns.Data.RealRealm()
+  local savedBounty = FriendsAndFoesDB.profile.bounty
+  local origLevel, origChat = UnitLevel, ns.Toast.Chat
+  local chats = {}
+  ns.Toast.Chat = function(line) chats[#chats + 1] = line end
+  check(B.GreyLevel(5) == 0 and B.GreyLevel(10) == 4 and B.GreyLevel(20) == 13 and B.GreyLevel(35) == 27
+    and B.GreyLevel(45) == 35 and B.GreyLevel(60) == 51, "grey levels follow the Classic rule")
+  local function kill(name, vlevel, myLevel)
+    -- a 500-point enemy (4 murders, 4 attacks) at the given level, killed alone by you
+    rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = vlevel, lastSeen = time() }
+    FriendsAndFoesDB.profile.bounty = nil
+    UnitLevel = function(u) if u == "player" then return myLevel end return 0 end
+    chats = {}
+    ADVANCE(120)
+    B.OnKill(ns.me, name)
+    UnitLevel = function(u) if u == "player" then return 99 end return 0 end -- (you dinged before it settled)
+    B.SettleAll()
+    return (B.Mine())
+  end
+  check(kill("Lv Grey", 49, 60) == 0 and #chats == 0, "a grey victim pays nothing and says nothing")
+  check(kill("Lv Low", 28, 35) == 125, "-7 (not grey): x0.25")
+  check(kill("Lv Mid", 31, 35) == 250, "-4: x0.5")
+  check(kill("Lv Even", 36, 35) == 500 and #chats == 1, "+1: x1, with a chat line")
+  check(kill("Lv High", 39, 35) == 625, "+4: x1.25")
+  check(kill("Lv Top", 45, 35) == 750, "+10: x1.5")
+  check(kill("Lv Skull", -1, 35) == 750, "a ?? victim: x1.5")
+  check(kill("Lv Nil", nil, 35) == 500, "unknown victim level: x1")
+  check(kill("Lv Zero", 0, 35) == 500, "level 0: x1")
+  check(kill("Lv NoMe", 40, 0) == 500, "unknown killer level: x1")
+  -- a shared kill: your share is halved first, then only YOUR factor applies
+  rr.players["Lv Shared"] = { name = "Lv Shared", enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = 45, lastSeen = time() }
+  FriendsAndFoesDB.profile.bounty = nil
+  UnitLevel = function(u) if u == "player" then return 35 end return 0 end
+  ADVANCE(120)
+  B.OnKill(ns.me, "Lv Shared")
+  B.OnKill("Buddy Pal", "Lv Shared")
+  B.SettleAll()
+  check(B.Mine() == 375, "shared kill: 250 x1.5 for you, got " .. B.Mine())
+  UnitLevel, ns.Toast.Chat = origLevel, origChat
+  FriendsAndFoesDB.profile.bounty = savedBounty
+  for _, n in ipairs({ "Lv Grey", "Lv Low", "Lv Mid", "Lv Even", "Lv High", "Lv Top", "Lv Skull", "Lv Nil", "Lv Zero", "Lv NoMe", "Lv Shared" }) do
+    rr.players[n] = nil
+  end
+end
+
 -- 0.9: bounties - an enemy's open bounty, collected (and shared) by whoever kills them
 do
   local errs = ns.errors
@@ -2921,7 +3100,7 @@ do
   local total, n, best = B.Mine()
   check(total == 250 and n == 1, "split two ways: 250 each, got " .. total)
   check(best and best.name == "Bounty Bob" and best.amount == 250, "your biggest bounty remembered")
-  check(B.Open("Bounty Bob") == B.MIN, "collected: the open bounty starts again")
+  check(B.Open("Bounty Bob") == B.HITLIST_MIN, "collected: the open bounty starts again")
 
   -- they murder again: the bounty grows from there
   rr.players["Bounty Bob"].k = 6
@@ -2932,25 +3111,14 @@ do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "bty1"), "WHISPER", 77)
   drainToasts()
   B.SettleAll()
-  check(B.Mine() == 250 and B.Open("Bounty Bob") == B.MIN, "a friend collected it: yours unchanged, the poster starts again")
+  check(B.Mine() == 250 and B.Open("Bounty Bob") == B.HITLIST_MIN, "a friend collected it: yours unchanged, the poster starts again")
 
   -- your own kill, through the real kill handler: collected after the friends' reports had time
   rr.players["Bounty Bob"].k = 7
   ADVANCE(120)
-  ns.Events.Emit("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" })
+  ns.Events.Emit("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "30", vguild = "", zone = "Duskwood" })
   RUN_TIMERS()
   check(B.Mine() == 350 and select(2, B.Mine()) == 2, "your own kill collects it (alone: all 100), got " .. B.Mine())
-  -- the simulation never pays out
-  ADVANCE(120)
-  rr.players["Bounty Bob"].k = 9
-  ns.Events.Emit("KILL", { victim = "Bounty Bob", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, true)
-  RUN_TIMERS()
-  check(B.Mine() == 350, "simulated kills collect nothing")
-  ns.Data.ClearSim() -- (a simulated event switches the window to the simulation)
-
-  -- most wanted adds a standing price
-  ns.Profile.SetWanted("Bounty Bob")
-  RUN_TIMERS()
 
   -- your total goes to friends with your profile; theirs comes back the same way
   check(tostring(ns.Profile.Fields().bt) == "350", "your total is in your profile message")
@@ -2979,8 +3147,6 @@ do
   local bv = ns.UI.ProfileView("Bounty Pal")
   check(bv and (lineOf(bv, ns.L.PROF_BOUNTIES) or ""):find("1,300", 1, true) ~= nil, "a friend's profile: theirs: " .. tostring(bv and bv.kind) .. " " .. tostring(bv and lineOf(bv, ns.L.PROF_BOUNTIES)) .. " sbt=" .. tostring(buddy.sbt))
 
-  ns.Profile.SetWanted(nil)
-  RUN_TIMERS()
   rr.players["Bounty Bob"] = nil
   rr.players["Bounty Pal"] = nil
   rr.hitlist["Bounty Bob"] = nil
@@ -3005,19 +3171,26 @@ do
     GEAR = { link = LINK, count = "19", epics = "19", ago = "86400", rl = "1" },
     ATK = { enc = "ffffffff", zone = ZONE, attackers = UNIT .. ";" .. UNIT, ago = "86400", rl = "1" },
     DIE = { zone = ZONE, killer = UNIT, conf = "c", assists = UNIT .. ";" .. UNIT .. ";" .. UNIT, ended = "99", ago = "86400", rl = "1" },
-    KILL = { victim = NAME, vclass = "WARRIOR", vlevel = "60", vguild = GUILD, zone = ZONE, streak = "99", ago = "86400", rl = "1" },
+    KILL = { victim = NAME, vclass = "WARRIOR", vlevel = "60", vguild = GUILD, zone = ZONE, streak = "99", ago = "86400", rl = "1", blow = "1", last = "120" },
     SIGHT = { name = NAME, class = "WARRIOR", level = "60", guild = GUILD, zone = ZONE },
     ENG = { zone = ZONE, target = UNIT, ago = "86400", rl = "1" },
     REQ = { window = "86400" },
-    PRO = { k = "99999", d = "99999", wanted = NAME, zone = ZONE, status = "pvp", t = "1999999999", bt = "999999999" },
+    PRO = { k = "99999", d = "99999", wanted = NAME, zone = ZONE, status = "pvp", t = "1999999999", bt = "999999999", btw = "999999999", bwk = "99999", rl = "1" },
+    PRL = { origin = NAME, k = "99999", d = "99999", t = "1999999999", bt = "999999999", btw = "999999999", bwk = "99999" },
+    HIT = { share = "ffffffffff", entries = NAME .. ":WARRIOR:60:" .. GUILD .. ":99999:99999:99999:99999;" .. NAME .. ":WARRIOR:60:" .. GUILD .. ":99999:99999:99999:99999", auto = "1" },
+    RLY = { origin = NAME, oclass = "WARRIOR", olevel = "60", okind = "KILL", oid = "ffffffffff", ago = "604800", alt = "1",
+      data = table.concat({ NAME, "WARRIOR", "60", GUILD, ZONE, "99", "86400", "1", "1", "120" }, "^") },
     KLQ = { who = NAME },
+    BTY = { cid = "ffffffffff", target = UNIT, amount = "999999999", state = "done", killer = NAME, age = "5184000", updage = "5184000", days = "30", blow = "pet", last = "120", poster = NAME,
+      killers = table.concat({ NAME, "Bbbbbbbbbbbb Nnnnnnnnnnnn", "Cccccccccccc Oooooooooooo", "Dddddddddddd Pppppppppppp", "Eeeeeeeeeeee Qqqqqqqqqqqq" }, ",") },
   }
   local tooLong, broken = {}, {}
   for kind, schema in pairs(C.SCHEMA) do
     check(C.KINDS[kind] ~= nil, kind .. ": registered in Comm.KINDS")
     local hasRl = false
     for _, f in ipairs(schema) do if f == "rl" then hasRl = true end end
-    check((C.KINDS[kind] and C.KINDS[kind].relay or false) == hasRl, kind .. ": may be passed on exactly when it carries 'rl'")
+    -- (PRO's rl is for PRL: its own numbers, not an event)
+    check(kind == "PRO" or (C.KINDS[kind] and C.KINDS[kind].relay or false) == hasRl, kind .. ": may be passed on exactly when it carries 'rl'")
     local fields = worst[kind]
     if fields then
       local msg = { kind = kind, id = "ffffffffff", name = NAME, class = "WARRIOR", level = 60, f = fields }
@@ -3029,7 +3202,7 @@ do
         if not back or back.kind ~= kind or back.name ~= NAME then broken[#broken + 1] = kind end
         -- every field survives (guild names may be dropped from unit lists to make it fit)
         for _, f in ipairs(schema) do
-          if back and back.f[f] ~= tostring(fields[f]) and not (f == "attackers" or f == "killer" or f == "assists" or f == "target") then
+          if back and back.f[f] ~= tostring(fields[f]) and not (f == "attackers" or f == "killer" or f == "assists" or f == "target" or f == "killers") then
             broken[#broken + 1] = kind .. "." .. f
           end
         end
@@ -3142,6 +3315,60 @@ do
   check(ns.errors == errs, "no errors with the tour (" .. tostring(ns.lastError) .. ")")
 end
 
+-- 0.9.4: "What's new" popup - once per version, only the current notes, never in combat
+do
+  local errs = ns.errors
+  local WN, db = ns.WhatsNew, FriendsAndFoesDB
+  local function hideAll() if WN.Frame() then WN.Frame():Hide() end; if ns.Tour.IsShown() then ns.Tour.Next(); ns.Tour.Next(); ns.Tour.Next() end end
+  hideAll()
+  check(WN.Entry() ~= nil and #WN.Entry().lines >= 3, "patch notes missing for " .. ns.VERSION .. ": add them in WhatsNew.lua")
+  for _, line in ipairs(WN.Entry().lines) do check(type(line) == "string" and line ~= "", "patch note text exists") end
+
+  -- an upgrading user: saved data, seenVersion unset
+  db.toured, db.seenVersion = true, nil
+  ns.UI.Show("hitlist")
+  check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_100_1, 1, true), "popup has the version header and the notes")
+  WN.Frame():Hide()
+  ns.UI.Show("hitlist")
+  check(not WN.IsShown(), "second open: not again")
+
+  -- a fresh install: silent, the tour covers it
+  db.toured, db.seenVersion = nil, nil
+  ns.UI.Show("hitlist")
+  check(not WN.IsShown() and db.seenVersion == ns.VERSION and ns.Tour.IsShown(), "fresh install: no notes, seenVersion set, tour shown")
+  hideAll()
+
+  -- an older seenVersion: only the current version's notes
+  db.seenVersion = "0.9.2"
+  ns.UI.Show("hitlist")
+  check(WN.IsShown() and db.seenVersion == ns.VERSION, "older seenVersion: shown")
+  local _, count = WN.Text():gsub("\n|cffffd100\226\128\162", "")
+  check(not WN.Text():find("0.9.3", 1, true) and count == #WN.Entry().lines, "only the current version's notes")
+  WN.Frame():Hide()
+
+  -- in combat: waits until the next open
+  local lockdown = true
+  InCombatLockdown = function() return lockdown end
+  db.seenVersion = "0.9.2"
+  ns.UI.Show("hitlist")
+  check(not WN.IsShown() and db.seenVersion == "0.9.2", "in combat: not shown, not marked seen")
+  lockdown = false
+  ns.UI.Show("hitlist")
+  check(WN.IsShown() and db.seenVersion == ns.VERSION, "next open: shown")
+  InCombatLockdown = nil
+  WN.Frame():Hide()
+
+  -- /fnf new (and its aliases) any time
+  for _, cmd in ipairs({ "new", "whatsnew", "changes" }) do
+    WN.Frame():Hide()
+    SlashCmdList.FRIENDSANDFOES(cmd)
+    check(WN.IsShown(), "/fnf " .. cmd .. " shows it")
+  end
+  WN.Frame():Hide()
+  check(ns.errors == errs, "no errors with the popup (" .. tostring(ns.lastError) .. ")")
+end
+
 -- 0.9: hover explanations - the numbers that need it have one, on every tab and profile
 do
   check(ns.UI.ColumnTip("board", ns.L.COL_KD) and ns.UI.ColumnTip("board", ns.L.COL_BOUNTY), "Leaderboard: K/D and Bounties explained")
@@ -3240,36 +3467,18 @@ do
 end
 
 
--- 1.0 fixes: a friend's simulation, bounties, friends' text, your own profile
+-- 1.0 fixes: a friend's old simulation, bounties, friends' text, your own profile
 do
   local errs = ns.errors
   local rr = ns.Data.RealRealm()
-  -- a friend's test alerts go to the simulation store without switching your window to it
-  ns.viewSim = false
-  CHAT = {}
+  -- a friend on an older version testing with /fnf sim: their made-up events are ignored
+  local buddyLevel = rr.players["Buddy Pal"].level
+  local feedN = #rr.feed
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 33 }, "Sx1"), "WHISPER", 77)
   drainToasts()
-  local told = false
-  for _, l in ipairs(CHAT) do if l:find("test alerts", 1, true) then told = true end end
-  check(not ns.viewSim and FriendsAndFoesDB.sim and FriendsAndFoesDB.sim.players["Buddy Pal"] ~= nil and told,
-    "a friend's simulation is kept apart, your window stays on real data, one chat line says so")
-  -- your real kills collect bounties even while you look at the simulation
-  ns.viewSim = true
-  local streak = FriendsAndFoesCharDB.streak
-  local total0 = ns.Bounty.Mine()
-  ns.Events.Emit("KILL", { victim = "Bount Ee", vclass = "ROGUE", vlevel = 30, vguild = "", zone = "Duskwood" })
-  ns.Bounty.SettleAll()
-  check(ns.Bounty.Mine() > total0, "a real kill collects its bounty while the simulation view is on")
-  FriendsAndFoesCharDB.streak = streak
-  ns.Data.ClearSim()
+  check(#rr.feed == feedN and rr.players["Buddy Pal"].level == buddyLevel and FriendsAndFoesDB.sim == nil,
+    "a friend's simulated events (older versions) are ignored")
 
-  -- a most wanted's price is paid once, not on every kill
-  rr.players["Want Ed"] = { name = "Want Ed", enemy = true, k = 0, d = 0, a = 0 }
-  ns.Profile.SetWanted("Want Ed")
-  local first = ns.Bounty.Open("Want Ed")
-  ns.Bounty.OnKill("Buddy Pal", "Want Ed")
-  check(first >= ns.Bounty.WANTED and ns.Bounty.Open("Want Ed") == ns.Bounty.MIN,
-    "most-wanted price paid once: " .. first .. " then " .. ns.Bounty.Open("Want Ed"))
 
   -- text from friends: plain text, class tokens and real item links only
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Clean Vic", vclass = "ROGUE|T", vlevel = 30,
@@ -3288,21 +3497,18 @@ do
     and ns.SafeLink("|cffa335ee|Hitem:12584::::::::60:::::::|h[Grand Marshal's Longsword]|h|r"):find("|Hitem:", 1, true),
     "a real item link is kept")
 
-  -- your own profile: "You", "killed you", Clear most wanted only when there's one
+  -- your own profile: "You", "killed you", no action button
   rr.hitlist["Nem Esis"] = { name = "Nem Esis", kills = 2, attacks = 0, suspect = 0, revenge = 0, victims = {}, kv = { [ns.me] = 2 } }
   local v = ns.UI.ProfileView(ns.me)
   local nemText
   for _, l in ipairs(v.lines) do if l[1] == ns.L.PROF_NEMESIS then nemText = tostring(l[2]) end end
   check(v.sub:sub(1, #ns.L.PROF_ME) == ns.L.PROF_ME and nemText and nemText:find("killed you", 1, true),
     "your profile says You, and your nemesis 'killed you': " .. tostring(nemText))
+  check(nemText and nemText:find("|Hfnfplayer:Nem Esis|h", 1, true), "Nemesis: the name is a link: " .. tostring(nemText))
   rr.hitlist["Nem Esis"] = nil
   ns.UI.Show("profile")
   local action = ns.UI.Frames().profile.controls.action
-  check(action:IsShown(), "Clear most wanted is there while you have one")
-  ns.Profile.SetWanted(nil)
-  ns.UI.Refresh()
-  check(not action:IsShown(), "no most wanted: no Clear button")
-  rr.players["Want Ed"] = nil
+  check(not action:IsShown(), "your own profile: no action button")
   check(ns.errors == errs, "no errors in the 1.0 fixes (" .. tostring(ns.lastError) .. ")")
 end
 
@@ -3624,6 +3830,2064 @@ do
   FriendsAndFoesDB.contracts = saved
   ns.S().show.contract = showWas
   check(ns.errors == errs, "no errors in the Bounty board edge cases (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9.4: most wanted and notes are gone; their saved values are cleared once
+do
+  local db = { profile = { wanted = "Rogz Fang" }, realms = { Forever = {
+    players = { ["Buddy Pal"] = { wanted = "Rogz Fang" }, ["Rogz Fang"] = { bwPaid = { x = true } } },
+    hitlist = { ["Rogz Fang"] = { note = "camps the flight path" } } } } }
+  ns.Saved.STEPS[9](db)
+  local r = db.realms.Forever
+  check(db.profile.wanted == nil and r.players["Buddy Pal"].wanted == nil and r.players["Rogz Fang"].bwPaid == nil
+    and r.hitlist["Rogz Fang"].note == nil, "upgrade: saved most wanted and notes cleared")
+  local s1 = { settings = { where = { party = "chat", raid = "off", pvp = "show" } }, sim = { feed = {} } }
+  ns.Saved.STEPS[10](s1)
+  local s2 = { settings = { where = { party = "off", raid = "hold", pvp = "hold" } } }
+  ns.Saved.STEPS[10](s2)
+  check(s1.settings.instances == "hold" and s1.settings.where == nil and s1.sim == nil and s2.settings.instances == "off",
+    "upgrade: one instances setting (the dungeon choice; chat line only -> wait), the simulation store removed")
+end
+
+-- 0.9.4: one sound per kind of alert; milestones and gear quality are fixed
+do
+  local db = { settings = { soundPick = { attacked = "alarm", died = "whisper", sighting = "mapping", loot = "coin", contract = "default" },
+    milestones = false, gearMin = 3 } }
+  ns.Saved.STEPS[11](db)
+  local sp = db.settings.soundPick
+  check(sp.trouble == "whisper" and sp.victory == "default" and sp.pvp == nil and sp.sighting == "mapping" and sp.progress == "coin" and sp.bounty == "default" and sp.attacked == nil
+    and db.settings.milestones == nil and db.settings.gearMin == nil, "upgrade: per-alert sounds become one per kind; fixed settings dropped")
+  check(#ns.Saved.STEPS == 14, "fourteen upgrade steps")
+  local g = { settings = { show = { attacked = "chat", engage = "toast", died = "off", kill = "toast", loot = "toast", gear = "chat", level = "chat" },
+    sound = { attacked = true, engage = true, died = false, kill = false, loot = true, gear = false, level = true } } }
+  ns.Saved.STEPS[12](g)
+  local gs, gn = g.settings.show, g.settings.sound
+  check(gs.engage == "chat" and gs.died == "chat" and gs.kill == "chat" and gn.died and gn.kill and not gn.engage
+    and gs.gear == "toast" and gs.level == "toast" and gn.gear and not gn.level,
+    "upgrade: each alert group takes its lead alert's setting; attacking someone and level-ups stay quiet")
+end
+
+-- 0.9.4: the alert list is a window opened from Options (not on the Friends tab); the Friends tab
+-- shows the Bounty board gold each person collected
+do
+  local errs = ns.errors
+  local cols = ns.UI.TabColumns("friends")
+  local hasAlerts, bcol = false, nil
+  for i, c in ipairs(cols) do
+    if c[1] == "Alerts" then hasAlerts = true end
+    if c[1] == ns.L.COL_BOUNTIES then bcol = i end
+  end
+  check(not hasAlerts and bcol ~= nil, "Friends tab: no Alerts column; a Bounties column")
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {
+    ["Someone Else/a1"] = { id = "a1", by = "Someone Else", target = "X Y", amount = 50000, state = "paid", killer = "Buddy Pal", t = time() },
+    ["Someone Else/a2"] = { id = "a2", by = "Someone Else", target = "X Z", amount = 1234, state = "done", killer = "Buddy Pal", t = time() },
+    ["Buddy Pal/a3"] = { id = "a3", by = "Buddy Pal", target = "X W", amount = 9999, state = "paid", killer = "Buddy Pal", t = time() },
+  }
+  check(ns.Contracts.EarnedBy("Buddy Pal") == 50000, "bounties collected: paid ones only, not their own")
+  check(ns.Plain(cols[bcol][3]({ name = "Buddy Pal" })):find("5 ", 1, true) and cols[bcol][3]({ name = "Nobody Here" }) == "",
+    "the Bounties cell: gold collected, empty for none")
+  FriendsAndFoesDB.contracts = saved
+  -- the window: one tick box per friend account; ticking adds them to the alert list
+  ns.Comm.ClearPicks()
+  ns.UI.ShowAlertList()
+  local w = ns.UI.AlertListWindow()
+  local accts = ns.UI.AlertAccounts()
+  local buddyAcct
+  for _, a in ipairs(accts) do if a.tag == "Buddy#1234" then buddyAcct = a end end
+  check(w and w:IsShown() and buddyAcct ~= nil, "alert list window lists friend accounts")
+  SlashCmdList.FRIENDSANDFOES("alerts")
+  check(w:IsShown(), "/fnf alerts opens it")
+  ns.Comm.TogglePick("Buddy#1234")
+  ns.UI.RefreshAlertList()
+  check(ns.Comm.IsPicked("Buddy#1234") and ns.Comm.GroupActive(), "ticking a friend puts them on the alert list")
+  ns.Comm.ClearPicks()
+  w:Hide()
+  check(ns.errors == errs, "no errors in the alert list window (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9.4: the killing blow decides who gets the credit; without one, the old rules
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local B, C = ns.Bounty, ns.Contracts
+
+  -- notoriety: shared equally between everyone who got the kill, whoever landed the blow
+  B.SettleAll() -- (anything left over from earlier)
+  rr.players["Kb Target"] = { name = "Kb Target", enemy = true, k = 3, d = 0, a = 0 }
+  local before = B.Mine()
+  B.OnKill(ns.me, "Kb Target", false)
+  B.OnKill("Buddy Pal", "Kb Target", true)
+  B.SettleAll()
+  check(B.Mine() == before + 150, "a friend's killing blow: notoriety is shared equally, not winner takes all (" .. (B.Mine() - before) .. ")")
+  ADVANCE(120)
+  rr.players["Kb Target"].k = 6
+  before = B.Mine()
+  B.OnKill("Buddy Pal", "Kb Target", false)
+  B.OnKill(ns.me, "Kb Target", true)
+  B.SettleAll()
+  check(B.Mine() == before + 150, "your killing blow with another killer: half, not all (" .. (B.Mine() - before) .. ")")
+  ADVANCE(120)
+  rr.players["Kb Target"].k = 8
+  before = B.Mine()
+  B.OnKill("Buddy Pal", "Kb Target", false)
+  B.OnKill(ns.me, "Kb Target", false)
+  B.SettleAll()
+  check(B.Mine() == before + 100, "no killing blow known: shared equally, as before (" .. (B.Mine() - before) .. ")")
+  rr.players["Kb Target"] = nil
+
+  -- the bounty board: a killing blow closes it, even if someone else reported the kill first
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local c = C.Post({ name = "Kb Mark", class = "ROGUE" }, 10000, 3)
+  C.OnKill("Alice Wonder", "Kb Mark", false)
+  check(c.state == "done" and c.killer == "Alice Wonder" and not c.blow, "(first to report it, no killing blow)")
+  CHAT = {}
+  C.OnKill("Buddy Pal", "Kb Mark", true)
+  local told = false
+  for _, l in ipairs(CHAT) do if l:find("Buddy Pal", 1, true) and l:find("in on the kill too", 1, true) then told = true end end
+  check(c.killer == "Buddy Pal" and c.blow and #c.killers == 2 and told, "a killing blow on the same death takes over the lead, and you are told they joined")
+  C.OnKill("Alice Wonder", "Kb Mark", false)
+  check(c.killer == "Buddy Pal", "a later kill without a killing blow doesn't take it back")
+  -- a friend's bounty: their message without a killing blow doesn't undo the one you know of
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+  bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "open", killer = "", age = 60, updage = 60, days = 3 }, "kbm1")
+  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/kb1"]
+  ns.Events.Emit("KILL", { victim = "Kb Other", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood", blow = "1" })
+  check(theirs.killer == ns.me and theirs.blow, "your killing blow on a friend's target")
+  bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, blow = "" }, "kbm2")
+  check(theirs.killer == ns.me, "the poster naming someone without a killing blow doesn't override yours")
+  bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "paid", killer = ns.me, age = 60, updage = 0, days = 3, blow = "1" }, "kbm3")
+  check(theirs.state == "paid" and theirs.killer == ns.me, "and their 'paid' goes through")
+  for _, name in ipairs({ "Kb Mark", "Kb Other" }) do rr.hitlist[name], rr.players[name] = nil, nil end
+  FriendsAndFoesDB.contracts = saved
+  ns.S().show.contract = showWas
+  RUN_TICKERS(80)
+  check(ns.errors == errs, "no errors in killing-blow credit (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9.4: pets credit their owner; with no killing blow, the latest attacker gets the credit
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local B, C = ns.Bounty, ns.Contracts
+  local BC = ns.Events.BetterCredit
+
+  -- the rank: a blow beats none; the first blow stays; smaller `last` wins; known beats unknown; ties keep the first
+  check(BC({ blow = "1" }, { last = 1 }) and not BC({ last = 1 }, { blow = "pet" }), "credit rank: a killing blow beats a last attack")
+  check(BC({ blow = "pet" }, {}) and not BC({}, { blow = "1" }), "credit rank: a pet's blow beats nothing")
+  check(not BC({ blow = "1" }, { blow = "pet" }) and not BC({ blow = "pet" }, { blow = "1" }), "credit rank: of two blows the first stays")
+  check(BC({ last = 3 }, { last = 9 }) and not BC({ last = 9 }, { last = 3 }), "credit rank: the more recent attacker wins")
+  check(BC({ last = 90 }, {}) and not BC({}, { last = 90 }), "credit rank: a known last attack beats an unknown one")
+  check(not BC({}, {}) and not BC({ last = 5 }, { last = 5 }), "credit rank: nothing known / a tie keeps the first")
+
+  -- mocks, as in the PARTY_KILL tests
+  local enemyUnits = {}
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName,
+    UnitClass = UnitClass, UnitLevel = UnitLevel, UnitIsDeadOrGhost = UnitIsDeadOrGhost, UnitIsUnit = UnitIsUnit, UnitGUID = UnitGUID }
+  local oEmit = ns.Events.Emit
+  UnitExists = function(u) return enemyUnits[u] ~= nil or o.UnitExists(u) end
+  UnitIsPlayer = function(u) if enemyUnits[u] then return true end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if enemyUnits[u] then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) local e = enemyUnits[u]; if e then return e[1], e[2] end return o.UnitName(u) end
+  UnitClass = function(u) if enemyUnits[u] then return "Rogue", "ROGUE" end return o.UnitClass(u) end
+  UnitLevel = function(u) if enemyUnits[u] then return 24 end return o.UnitLevel(u) end
+  UnitIsDeadOrGhost = function(u) local e = enemyUnits[u]; return e and e[3] or false end
+  UnitIsUnit = function() return false end
+  UnitGUID = function(u)
+    if u == "player" then return "Player-1-00000001" end
+    if u == "pet" then return "Pet-0-1-2-3-4-5" end
+    if enemyUnits[u] then return "Player-1-" .. enemyUnits[u][1] end
+  end
+  local sent
+  ns.Events.Emit = function(kind, f) if kind == "KILL" then sent = f end return oEmit(kind, f) end
+  local HONOR = "You have been awarded 7 Honor."
+
+  -- your pet's killing blow is yours, marked as the pet's
+  enemyUnits.target = { "Pet", "Prey", false }
+  ns.PvP.ReadEnemy("target")
+  enemyUnits.target = nil
+  ADVANCE(40)
+  FIRE("PARTY_KILL", "Pet-0-1-2-3-4-5", "Player-1-Pet")
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(sent and sent.blow == "pet" and sent.victim == "Pet Prey", "your pet's killing blow: sent as 'pet' with the victim named")
+  check(lastFeed():find("Pet Prey", 1, true) and lastFeed():find(ns.L.PET_BLOW_TAG, 1, true), "your pet's killing blow: the pet tag in the feed: " .. lastFeed())
+
+  -- a creature killing blow is logged once a session, not every time
+  local debugWas = ns.S().debug
+  ns.S().debug = true
+  local function creatureLogs()
+    local n = 0
+    for _, l in ipairs(FriendsAndFoesDB.debugLog or {}) do if l:find("not a player", 1, true) then n = n + 1 end end
+    return n
+  end
+  FIRE("PARTY_KILL", "Player-1-00000001", "Creature-0-1-2-3-4-5")
+  local afterFirst = creatureLogs()
+  FIRE("PARTY_KILL", "Player-1-00000001", "Creature-0-1-2-3-4-6")
+  FIRE("PARTY_KILL", "Pet-0-1-2-3-4-5", "Creature-0-1-2-3-4-7")
+  check(creatureLogs() == afterFirst, "creature killing blows: logged once a session, not every time")
+  ns.S().debug = debugWas
+
+  -- UNIT_SPELLCAST_SENT with a first name records your last attack; the KILL then carries `last`
+  enemyUnits.target = { "Cast", "Target", false }
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(ns.PvP.LastAttack("Cast Target") == nil, "no attack recorded yet")
+  ADVANCE(30)
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Cast", "cast-guid", 133)
+  ADVANCE(7)
+  local la = ns.PvP.LastAttack("Cast Target")
+  check(la and la >= 6.9 and la <= 7.1, "a spell sent at a first name records your last attack on the seen enemy: " .. tostring(la))
+  enemyUnits.target[3] = true
+  sent = nil
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
+  check(sent and sent.victim == "Cast Target" and sent.last == "7" and sent.blow == "", "the KILL message carries `last` (" .. tostring(sent and sent.last) .. ")")
+  enemyUnits.target = nil
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Nobody", "cast-guid", 133)
+  check(ns.PvP.LastAttack("Nobody") == nil and ns.PvP.LastAttack("Nobody Here") == nil, "a spell at someone unseen records nothing")
+
+  -- auto-attack / auto-shot (events) keep refreshing your last attack on your target's health changes
+  enemyUnits.target = { "Auto", "Swinger", false }
+  FIRE("PLAYER_TARGET_CHANGED")
+  ADVANCE(5)
+  FIRE("UNIT_HEALTH", "target")
+  check(ns.PvP.LastAttack("Auto Swinger") == nil, "a health change alone isn't an attack")
+  FIRE("PLAYER_ENTER_COMBAT")
+  ADVANCE(2)
+  FIRE("UNIT_HEALTH", "target")
+  check((ns.PvP.LastAttack("Auto Swinger") or 99) < 0.5, "auto-attacking: a health change refreshes your last attack")
+  FIRE("PLAYER_LEAVE_COMBAT")
+  ADVANCE(5)
+  FIRE("UNIT_HEALTH", "target")
+  check((ns.PvP.LastAttack("Auto Swinger") or 0) >= 4.9, "auto-attack off: no longer refreshed")
+  FIRE("START_AUTOREPEAT_SPELL")
+  ADVANCE(2)
+  FIRE("UNIT_HEALTH", "target")
+  check((ns.PvP.LastAttack("Auto Swinger") or 99) < 0.5, "auto-shot on: refreshed")
+  FIRE("STOP_AUTOREPEAT_SPELL")
+  ADVANCE(5)
+  FIRE("UNIT_HEALTH", "target")
+  check((ns.PvP.LastAttack("Auto Swinger") or 0) >= 4.9, "auto-shot off: no longer refreshed")
+  FIRE("PLAYER_ENTER_COMBAT")
+  FIRE("START_AUTOREPEAT_SPELL")
+  FIRE("PLAYER_REGEN_ENABLED")
+  local aa, ar = ns.PvP.AutoFlags()
+  check(not aa and not ar, "leaving combat resets both flags")
+  enemyUnits.target = nil
+
+  ns.Events.Emit = oEmit
+  for k, v in pairs(o) do _G[k] = v end
+  FriendsAndFoesCharDB.streak = 0
+
+  -- notoriety: equal shares whatever the credit says
+  B.SettleAll() -- (anything left over from earlier)
+  rr.players["Lp Target"] = { name = "Lp Target", enemy = true, k = 3, d = 0, a = 0 }
+  local amount = B.Open("Lp Target")
+  local before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", { last = 20 })
+  B.OnKill("Buddy Pal", "Lp Target", { last = 5 })
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "notoriety: the friend attacked more recently, still half for you")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 6
+  amount = B.Open("Lp Target")
+  before = B.Mine()
+  B.OnKill("Buddy Pal", "Lp Target", { last = 30 })
+  B.OnKill(ns.me, "Lp Target", { last = 3 })
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "notoriety: you attacked last, still just half (" .. (B.Mine() - before) .. " of " .. amount .. ")")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 9
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", {})
+  B.OnKill("Buddy Pal", "Lp Target", { last = 50 })
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "notoriety: credit never changes the split")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 12
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", { last = 10 })
+  B.OnKill("Buddy Pal", "Lp Target", { blow = "pet" })
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "notoriety: a pet's blow doesn't change the split either")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 15
+  amount = B.Open("Lp Target")
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", {})
+  B.OnKill("Buddy Pal", "Lp Target", {})
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "notoriety: nothing known, shared equally as before")
+  ADVANCE(120)
+  -- three killers, 300 points: 100 each, credited or not; one killer: all of it
+  rr.players["Lp Target"].k = 18
+  amount = B.Open("Lp Target")
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", {})
+  B.OnKill("Buddy Pal", "Lp Target", { blow = "1" })
+  B.OnKill("Alice Wonder", "Lp Target", { last = 5 })
+  B.SettleAll()
+  check(amount == 300 and B.Mine() == before + 100, "notoriety: 3 killers, 300 points, 100 each (" .. (B.Mine() - before) .. ")")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 21
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", { blow = "1" })
+  B.OnKill("Buddy Pal", "Lp Target", {})
+  B.OnKill("Alice Wonder", "Lp Target", {})
+  B.SettleAll()
+  check(B.Mine() == before + 100, "notoriety: 3 killers, your killing blow, still 100")
+  ADVANCE(120)
+  rr.players["Lp Target"].k = 24
+  before = B.Mine()
+  B.OnKill(ns.me, "Lp Target", { blow = "1" })
+  B.SettleAll()
+  check(B.Mine() == before + 300, "notoriety: alone, all of it")
+  rr.players["Lp Target"] = nil
+
+  -- the bounty board
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local c = C.Post({ name = "Lp Mark", class = "ROGUE" }, 10000, 3)
+  C.OnKill("Alice Wonder", "Lp Mark", { last = 40 })
+  check(c.state == "done" and c.killer == "Alice Wonder" and c.last == 40 and not c.blow, "(first report, last attack 40 s ago)")
+  C.OnKill("Buddy Pal", "Lp Mark", { last = 10 })
+  check(c.killer == "Buddy Pal" and c.last == 10, "a smaller last attack takes the contract over")
+  C.OnKill("Alice Wonder", "Lp Mark", { last = 30 })
+  check(c.killer == "Buddy Pal", "a larger last attack doesn't take it back")
+  C.OnKill("Alice Wonder", "Lp Mark", { blow = "1" })
+  check(c.killer == "Alice Wonder" and c.blow == "1", "a killing blow beats them both")
+  C.OnKill("Buddy Pal", "Lp Mark", { blow = "pet" })
+  check(c.killer == "Alice Wonder", "of two killing blows the first stays")
+  -- a friend's bounty: the poster's message with a worse credit doesn't override yours
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+  bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "open", killer = "", age = 60, updage = 60, days = 3 }, "lpm1")
+  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/lp1"]
+  ns.Events.Emit("KILL", { victim = "Lp Other", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood", last = "5" })
+  check(theirs.killer == ns.me and theirs.last == 5 and not theirs.blow, "your last attack counted on a friend's target")
+  bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, last = "40" }, "lpm2")
+  check(theirs.killer == ns.me, "the poster naming someone with an older last attack doesn't override yours")
+  bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, blow = "pet", last = "" }, "lpm3")
+  check(theirs.killer == "Alice Wonder" and theirs.blow == "pet", "...but one with a pet's blow outranks it")
+  for _, name in ipairs({ "Lp Mark", "Lp Other" }) do rr.hitlist[name], rr.players[name] = nil, nil end
+  FriendsAndFoesDB.contracts = saved
+  ns.S().show.contract = showWas
+  RUN_TICKERS(80)
+  check(ns.errors == errs, "no errors in pet and last-attack credit (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0: notoriety rules - randoms, hitlist enemies, rampage, cooling, ranks, titles, fading,
+-- takedown toasts, this week
+do
+  local errs = ns.errors
+  local B = ns.Bounty
+  local L = ns.L
+  local rr = ns.Data.RealRealm()
+  local P = FriendsAndFoesDB.profile
+  local savedB, savedW = P.bounty, FriendsAndFoesDB.weekly
+  P.bounty = nil
+  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  B.SettleAll() -- (leftover claims settle too)
+  local pushed = {}
+  local realPush = ns.Toast.Push
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  local function enemy(name, k, atk)
+    rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = k or 0, d = 0, a = 0, atk = atk or 0, lastSeen = time() }
+    return rr.players[name]
+  end
+  local function hit(name, kills, attacks)
+    rr.hitlist[name] = { name = name, attacks = attacks or 0, kills = kills or 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
+    return rr.hitlist[name]
+  end
+  local function claim(victim, killer, credit)
+    ADVANCE(120)
+    B.OnKill(killer or ns.me, victim, credit)
+    B.SettleAll()
+  end
+  local function find(header)
+    local got
+    for _, sp in ipairs(pushed) do if sp.header == header then got = sp end end
+    return got
+  end
+  local names = { "Rando One", "Hit Hank", "Hit Hugo", "Rank Ron", "Title Tim", "Wk Wendy" }
+
+  -- a random: 10, then less for repeats within 30 minutes (wall time moves with ns.eventTime)
+  FriendsAndFoesDB.repeats = nil
+  local wall = time()
+  local function at(secs) ns.eventTime = wall + secs end
+  at(0)
+  local rec = enemy("Rando One")
+  check(B.Open("Rando One") == 10 and B.Rank("Rando One") == nil, "a random is worth 10 and has no rank")
+  local before = B.Mine()
+  claim("Rando One")
+  check(B.Mine() == before + 10, "claimed a random: 10")
+  check(B.Open("Rando One") == 5, "the same random again within 30 minutes: 5")
+  FriendsAndFoesDB.repeats = nil
+  hit("Rando One", 0, 0)
+  check(B.Open("Rando One") == 10 and B.Rank("Rando One") == nil, "an empty hitlist entry is still a random")
+
+  -- a hitlist enemy: 100 per kill, 25 per attack, at least 50
+  enemy("Hit Hank", 2, 0)
+  local h = hit("Hit Hank", 2, 2)
+  check(B.Open("Hit Hank") == 250, "2 kills and 2 attacks = 250, got " .. B.Open("Hit Hank"))
+  enemy("Hit Hugo", 0, 0)
+  hit("Hit Hugo", 1, 0)
+  check(B.Open("Hit Hugo") == 50, "a hitlist enemy is worth at least 50, got " .. B.Open("Hit Hugo"))
+  check(B.Price(0, 0) == 0 and B.Price(1, 1) == 125, "the sum itself")
+
+  -- a rampage: 3 kills on your group in an hour: x1.5
+  h.attacks = 0
+  local now = ns.Now()
+  h.killTimes = { now - 5000, now - 400, now - 100 }
+  check(not B.OnRampage("Hit Hank") and B.Open("Hit Hank") == 200, "2 kills in the hour: no rampage")
+  h.killTimes = { now - 300, now - 200, now - 100 }
+  check(B.OnRampage("Hit Hank") and B.Open("Hit Hank") == 300, "3 kills in the hour: x1.5, got " .. B.Open("Hit Hank"))
+  local v = ns.UI.ProfileView("Hit Hank")
+  check(v and v.rank and v.rank:find(L.RAMPAGE_TAG, 1, true) and v.rank:find(L.RANK_WANTED, 1, true), "the profile says on a rampage: " .. tostring(v and v.rank))
+  h.killTimes = { now - 7000, now - 6000, now - 5000 }
+  check(not B.OnRampage("Hit Hank") and B.Open("Hit Hank") == 200, "3 kills but not within the hour: no rampage")
+
+  -- cooling: x0.9 per full day since their last offence
+  h.lastOffence = now - 3 * 86400 - 100
+  check(B.Open("Hit Hank") == 145, "3 quiet days: 200 x 0.9^3 = 145, got " .. B.Open("Hit Hank"))
+  h.lastOffence = now - 86400 + 100
+  check(B.Open("Hit Hank") == 200, "less than a day: no cooling")
+  h.lastOffence = now - 60 * 86400
+  check(B.Open("Hit Hank") == 50, "cooled right down: never below 50")
+  h.lastOffence = nil
+
+  -- ranks
+  enemy("Rank Ron", 0, 0)
+  hit("Rank Ron", 1, 0)
+  local function rankAt(k) rr.players["Rank Ron"].k = k; return B.Rank("Rank Ron") end
+  check(rankAt(0) == L.RANK_NUISANCE, "50: Nuisance")
+  check(rankAt(1) == L.RANK_MENACE, "100: Menace")
+  check(rankAt(2) == L.RANK_MENACE and rankAt(3) == L.RANK_WANTED, "300: Wanted")
+  check(rankAt(5) == L.RANK_WANTED and rankAt(6) == L.RANK_MOST_WANTED, "600: Most Wanted")
+  check(rankAt(9) == L.RANK_MOST_WANTED and rankAt(10) == L.RANK_PUBLIC_ENEMY, "1000: Public Enemy")
+  check(B.RankFor(99) == L.RANK_NUISANCE and B.RankFor(299) == L.RANK_MENACE, "just under a threshold")
+  check(ns.Plain(ns.UI.ProfileView("Rank Ron").rank) == L.RANK_PUBLIC_ENEMY, "the rank is on the profile")
+
+  -- titles, from what you have now
+  check(B.Title(0) == L.TITLE_TRACKER and B.Title(499) == L.TITLE_TRACKER and B.Title(500) == L.TITLE_HUNTER, "titles: Tracker, Hunter")
+  check(B.Title(1999) == L.TITLE_HUNTER and B.Title(2000) == L.TITLE_BOUNTY_HUNTER, "Bounty Hunter at 2000")
+  check(B.Title(4999) == L.TITLE_BOUNTY_HUNTER and B.Title(5000) == L.TITLE_MANHUNTER, "Manhunter at 5000")
+  check(B.Title(9999) == L.TITLE_MANHUNTER and B.Title(10000) == L.TITLE_LEGEND, "Legend at 10000")
+  enemy("Title Tim", 1, 0)
+  hit("Title Tim", 1, 0)
+  P.bounty = { total = 480, allTime = 480, count = 1, clock = time() }
+  pushed = {}
+  claim("Title Tim")
+  local tt = find(L.HEADER_TITLE)
+  check(B.Mine() == 580 and tt and tt.milestone and tt.kind == "kill" and tt.category == "pvp" and ns.Plain(tt.title):find(L.TITLE_HUNTER, 1, true),
+    "a toast for reaching a new title")
+  pushed = {}
+  rr.players["Title Tim"].k = 2
+  claim("Title Tim")
+  check(find(L.HEADER_TITLE) == nil, "no second toast within the same title")
+
+  -- your notoriety fades: 10% per full idle week; a claim starts the clock again; all-time stays
+  P.bounty = { total = 1000, allTime = 1000, count = 1, clock = time() - 6 * 86400 }
+  check(B.Mine() == 1000, "within a week: nothing fades")
+  P.bounty = { total = 1000, allTime = 1000, count = 1, clock = time() - 8 * 86400 }
+  check(B.Mine() == 900 and B.Mine() == 900, "one full week: 900, and not taken off twice")
+  P.bounty = { total = 1000, allTime = 1000, count = 1, clock = time() - 22 * 86400 }
+  check(B.Mine() == 729 and B.AllTime() == 1000, "three idle weeks: 729; all-time unchanged, got " .. B.Mine())
+  P.bounty = { total = 5000, allTime = 5000, count = 1, clock = time() - 15 * 86400 }
+  pushed = {}
+  check(B.Title(B.Mine()) == L.TITLE_BOUNTY_HUNTER and #pushed == 0, "two weeks fade a Manhunter to Bounty Hunter, quietly")
+  P.bounty = { total = 1000, allTime = 1000, count = 1, clock = time() - 22 * 86400 }
+  rr.players["Title Tim"].k = 5
+  claim("Title Tim") -- (300: it fades first, then adds)
+  check(B.Mine() == 729 + 300 and B.AllTime() == 1300 and time() - P.bounty.clock < 60, "a claim: fades first, adds, restarts the clock, got " .. B.Mine())
+  P.bounty = { total = 700 } -- (from before the fading)
+  check(B.Mine() == 700 and B.AllTime() == 700, "an older save: all you had is your all-time")
+
+  -- a takedown: a claim of 300 or more is a toast for everyone, whoever got it
+  enemy("Hit Hugo", 3, 0)
+  hit("Hit Hugo", 3, 0)
+  P.bounty = { total = 0, allTime = 0, count = 0, clock = time() }
+  pushed = {}
+  claim("Hit Hugo", "Buddy Pal", true)
+  local td = find(L.HEADER_TAKEDOWN)
+  local plain = td and ns.Plain(td.title) or ""
+  check(td and td.milestone and td.kind == "kill" and td.category == "pvp" and plain:find("Buddy Pal brought down Hit Hugo", 1, true)
+    and plain:find(L.RANK_WANTED, 1, true) and plain:find("300", 1, true), "a friend's takedown: " .. plain)
+  check(B.Mine() == 0, "...and nothing for you")
+  rr.players["Hit Hugo"].k = 6
+  pushed = {}
+  ADVANCE(120)
+  B.OnKill(ns.me, "Hit Hugo", {})
+  B.OnKill("Buddy Pal", "Hit Hugo", {})
+  B.SettleAll()
+  td = find(L.HEADER_TAKEDOWN)
+  plain = td and ns.Plain(td.title) or ""
+  check(td and plain:find("brought down Hit Hugo", 1, true) and plain:find("shared", 1, true) and plain:find("Buddy Pal", 1, true), "a shared takedown says so: " .. plain)
+  check(B.Mine() == 150, "...and you take your half (150 of 300), got " .. B.Mine())
+  rr.players["Hit Hugo"].k = 7
+  pushed = {}
+  claim("Hit Hugo", "Buddy Pal", true)
+  check(find(L.HEADER_TAKEDOWN) == nil, "100 is no takedown: no toast")
+
+  -- this week
+  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  P.bounty = { total = 0, allTime = 0, count = 0, clock = time() }
+  enemy("Wk Wendy", 2, 0)
+  hit("Wk Wendy", 2, 0)
+  claim("Wk Wendy")
+  check(B.Week() == 200 and FriendsAndFoesDB.weekly.bt == 200, "this week: 200")
+  local f = ns.Profile.Fields()
+  check(tostring(f.btw) == "200" and f.bwk == math.floor(FriendsAndFoesDB.weekly.start / 86400), "this week goes out with your profile")
+  local weekLine
+  for _, l in ipairs(ns.UI.ProfileView(ns.me).lines) do if l[1] == L.PROF_BOUNTIES_WEEK then weekLine = ns.Plain(tostring(l[2])) end end
+  check(weekLine and weekLine:find("200", 1, true), "your profile shows this week")
+  local pal = { name = "Pal Wk", friend = true }
+  local today = math.floor(time() / 86400)
+  ns.Profile.Apply(pal, { k = "1", d = "1", wanted = "", zone = "", status = "", t = "", bt = "900", btw = "350", bwk = tostring(today) })
+  check(B.FriendWeek(pal) == 350, "a friend's this week arrives")
+  ns.Profile.Apply(pal, { k = "1", d = "1", wanted = "", zone = "", status = "", t = "", bt = "900", btw = "350", bwk = tostring(today - 10) })
+  check(B.FriendWeek(pal) == 0, "a stale week shows as 0")
+  ns.Profile.Apply(pal, { k = "1", d = "1", wanted = "", zone = "", status = "", t = "", bt = "900" })
+  check(B.FriendWeek(pal) == nil, "an older version: unknown")
+  FriendsAndFoesDB.weekly.start = time() - 8 * 86400
+  check(B.Week() == 0, "the week is over: back to 0")
+  rr.players["Wk Wendy"].k = 3
+  claim("Wk Wendy")
+  check(B.Week() == 100 and time() - FriendsAndFoesDB.weekly.start < 60, "a claim after the boundary starts a new week with it, got " .. B.Week())
+  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 0, killers = {}, bt = 350 }
+  CHAT = {}
+  ns.Events.WeeklyRoll()
+  RUN_TIMERS()
+  local summary
+  for _, line in ipairs(CHAT) do if line:find("Your PvP week", 1, true) then summary = ns.Plain(line) end end
+  check(summary and summary:find("350 notoriety", 1, true), "the weekly summary has the notoriety: " .. tostring(summary))
+
+  ns.Toast.Push = realPush
+  ns.eventTime = nil
+  FriendsAndFoesDB.repeats = nil
+  for _, n in ipairs(names) do rr.players[n], rr.hitlist[n] = nil, nil end
+  P.bounty, FriendsAndFoesDB.weekly = savedB, savedW
+  RUN_TICKERS(80)
+  check(ns.errors == errs, "no errors with the notoriety rules (" .. tostring(ns.lastError) .. ")")
+end
+
+-- notoriety: diminishing returns for repeat kills of the same enemy within 30 minutes
+do
+  local errs = ns.errors
+  local B = ns.Bounty
+  local rr = ns.Data.RealRealm()
+  local P = FriendsAndFoesDB.profile
+  local savedB, savedW, savedR = P.bounty, FriendsAndFoesDB.weekly, FriendsAndFoesDB.repeats
+  P.bounty = { total = 0, allTime = 0, count = 0, clock = time() }
+  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  FriendsAndFoesDB.repeats = nil
+  B.SettleAll()
+  local pushed = {}
+  local realPush = ns.Toast.Push
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  local wall = time()
+  local function at(min) ns.eventTime = wall + min * 60 end
+  local function enemy(name, k)
+    rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = k or 0, d = 0, a = 0, atk = 0, lastSeen = time() }
+    return rr.players[name]
+  end
+  local function hit(name, kills)
+    rr.hitlist[name] = { name = name, attacks = 0, kills = kills or 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
+  end
+  -- a kill at minute m; returns what you got
+  local function kill(name, m, killers)
+    at(m)
+    ADVANCE(300)
+    local before = B.Mine()
+    for _, who in ipairs(killers or { ns.me }) do B.OnKill(who, name, {}) end
+    B.SettleAll()
+    return B.Mine() - before
+  end
+
+  -- a random: 10, 5, 2, 0 for kills 5 minutes apart; after 31 idle minutes back to 10
+  enemy("Camp Carl")
+  local got = { kill("Camp Carl", 0), kill("Camp Carl", 5), kill("Camp Carl", 10) }
+  check(got[1] == 10 and got[2] == 5 and got[3] == 2, "a random camped: 10, 5, 2, got " .. table.concat(got, ","))
+  CHAT, pushed = {}, {}
+  local counted = select(2, B.Mine())
+  check(kill("Camp Carl", 15) == 0 and B.Open("Camp Carl") == 0, "the fourth kill is worth 0")
+  check(#CHAT == 0 and #pushed == 0 and select(2, B.Mine()) == counted, "...and says nothing, counts no claim")
+  at(15 + 31)
+  check(B.Repeats("Camp Carl") == 0 and B.Open("Camp Carl") == 10, "31 quiet minutes later: worth 10 again")
+  check(kill("Camp Carl", 46) == 10, "...and pays 10")
+
+  -- every repeat extends the window: kills at 0, 25, 50 minutes -> the third is still x0.25
+  enemy("Chain Cher")
+  got = { kill("Chain Cher", 100), kill("Chain Cher", 125), kill("Chain Cher", 150) }
+  check(got[1] == 10 and got[2] == 5 and got[3] == 2, "a chain of kills 25 minutes apart: 10, 5, 2, got " .. table.concat(got, ","))
+
+  -- a hitlist enemy with no new deeds: 50, 25, 12, 0
+  enemy("Hit Hal", 0)
+  hit("Hit Hal", 1)
+  got = { kill("Hit Hal", 200), kill("Hit Hal", 201), kill("Hit Hal", 202), kill("Hit Hal", 203) }
+  check(got[1] == 50 and got[2] == 25 and got[3] == 12 and got[4] == 0, "a hitlist enemy camped: 50, 25, 12, 0, got " .. table.concat(got, ","))
+
+  -- ...but one who kills a friend in between is worth the full earned points, and the chain starts again
+  at(204)
+  rr.players["Hit Hal"].k = 1
+  check(B.Open("Hit Hal") == 100, "they killed a friend: full 100 even after being camped, got " .. B.Open("Hit Hal"))
+  check(kill("Hit Hal", 204) == 100 and B.Repeats("Hit Hal") == 0, "...paid in full, and the repeat counter is back to 0")
+  check(B.Open("Hit Hal") == 50, "the next kill with no new deeds: the full 50 again")
+
+  -- two friends reporting the same kill within a minute are one repeat
+  enemy("Dup Dan")
+  check(kill("Dup Dan", 300, { ns.me, "Buddy Pal" }) == 5, "shared: your half of 10")
+  check(B.Repeats("Dup Dan") == 1 and B.Open("Dup Dan") == 5, "two reports of one kill count as one repeat")
+
+  -- caught-up (past) kills pay nothing and are not repeats
+  enemy("Past Pat")
+  ns.past = true
+  B.OnKill("Buddy Pal", "Past Pat", {})
+  ns.past = nil
+  check(B.Repeats("Past Pat") == 0 and B.Open("Past Pat") == 10, "a caught-up kill is not a repeat")
+
+  -- the saved list is pruned and small
+  at(400)
+  kill("Camp Carl", 400)
+  local n = 0
+  for _ in pairs(FriendsAndFoesDB.repeats) do n = n + 1 end
+  check(n == 1 and #FriendsAndFoesDB.repeats["Camp Carl"] <= 4, "old chains are dropped from the saved list")
+
+  ns.Toast.Push = realPush
+  ns.eventTime = nil
+  for _, nm in ipairs({ "Camp Carl", "Chain Cher", "Hit Hal", "Dup Dan", "Past Pat" }) do rr.players[nm], rr.hitlist[nm] = nil, nil end
+  P.bounty, FriendsAndFoesDB.weekly, FriendsAndFoesDB.repeats = savedB, savedW, savedR
+  RUN_TICKERS(80)
+  check(ns.errors == errs, "no errors with repeat kills (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9.4: better syncing. Shared helpers for the blocks below: pretend these friends are online.
+local SYNC = {}
+function SYNC.friends(F)
+  local o = { num = BNGetNumFriends, info = C_BattleNet.GetFriendGameAccountInfo, acct = C_BattleNet.GetFriendAccountInfo,
+    byId = C_BattleNet.GetGameAccountInfoByID }
+  BNGetNumFriends = function() return #F, #F end
+  C_BattleNet.GetFriendGameAccountInfo = function(i)
+    local f = F[i]
+    return f and { isOnline = true, clientProgram = "WoW", characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = f.gid }
+  end
+  C_BattleNet.GetFriendAccountInfo = function(i) return { battleTag = F[i] and F[i].tag } end
+  C_BattleNet.GetGameAccountInfoByID = function(id)
+    for _, f in ipairs(F) do
+      if f.gid == id then return { characterName = f.name, realmName = "X", factionName = "Horde", gameAccountID = id } end
+    end
+  end
+  return function()
+    BNGetNumFriends, C_BattleNet.GetFriendGameAccountInfo, C_BattleNet.GetFriendAccountInfo, C_BattleNet.GetGameAccountInfoByID =
+      o.num, o.info, o.acct, o.byId
+    ns.Comm.RebuildRoster()
+    RUN_TIMERS(); RUN_TICKERS(80)
+  end
+end
+function SYNC.from(name, gid, kind, fields, id, version)
+  local p = ns.Comm.Encode({ kind = kind, id = id and ("z94" .. id) or ns.NewId(), name = name, class = "PRIEST", level = 40, f = fields })
+  if version then p = p:gsub("\t" .. ns.VERSION .. "\t", "\t" .. version .. "\t", 1) end
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", p, "WHISPER", gid)
+end
+function SYNC.sent(gid, kind)
+  local out = {}
+  for _, s in ipairs(SENT) do
+    if s.route == "bn" and s.target == gid then
+      local m = ns.Comm.Decode(s.payload)
+      if m and m.kind == kind then out[#out + 1] = m end
+    end
+  end
+  return out
+end
+function SYNC.drain() RUN_TIMERS(); RUN_TICKERS(80) end
+
+-- 1) your alts' events reach friends who ask for a catch-up
+do
+  local errs = ns.errors
+  local S = SYNC
+  local F = { { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" } }
+  local restore = S.friends(F)
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local rr = ns.Data.RealRealm()
+  local savedBox, savedOld, savedMoved = FriendsAndFoesDB.outbox, FriendsAndFoesCharDB.outbox, FriendsAndFoesCharDB.outboxMoved
+  FriendsAndFoesDB.outbox = {}
+  ns.Comm.Remember("LVL", "mine1", { level = 31 })
+  local box = ns.Comm.Outbox()
+  box[#box + 1] = { t = time() - 600, kind = "KILL", id = "altk1", who = "Testme Alt", c = "MAGE", l = 22,
+    f = { victim = "Alt Victim", vclass = "MAGE", vlevel = "40", vguild = "", zone = "Duskwood", streak = "1", rl = "" } }
+  check(box[1].who == ns.me and box[1].c == "WARRIOR", "an event remembers which character it's from")
+
+  ADVANCE(100)
+  SENT = {}
+  S.from("Buddy Pal", 77, "REQ", { window = 3600 }, "alq1")
+  S.drain()
+  local rly, lvl = S.sent(77, "RLY"), S.sent(77, "LVL")
+  check(#lvl == 1 and lvl[1].id == "mine1", "this character's own event goes out as before")
+  check(#rly == 1 and rly[1].f.origin == "Testme Alt" and rly[1].f.alt == "1" and rly[1].f.okind == "KILL" and rly[1].f.oid == "altk1"
+    and rly[1].f.oclass == "MAGE" and tonumber(rly[1].f.ago) >= 600, "your alt's event goes out as a relayed one marked alt")
+  local fits = true
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  check(fits, "and fits")
+
+  -- a friend on an older version only gets this character's events
+  ADVANCE(100)
+  SENT = {}
+  S.from("Buddy Pal", 77, "REQ", { window = 3600 }, "alq2", "0.9.3")
+  S.drain()
+  check(#S.sent(77, "RLY") == 0 and #S.sent(77, "LVL") == 1, "an older add-on doesn't get alt events")
+  -- your own share settings apply
+  ADVANCE(100)
+  SENT = {}
+  ns.S().share.pvp = false
+  S.from("Buddy Pal", 77, "REQ", { window = 3600 }, "alq3")
+  S.drain()
+  ns.S().share.pvp = true
+  check(#S.sent(77, "RLY") == 0, "sharing PvP off: the alt's kill isn't sent")
+
+  -- receiving: a friend's alt events, filed under the alt, and its tag is learned
+  local feedBefore = #rr.feed
+  local data = table.concat({ "Far Away", "ROGUE", "50", "", "Duskwood", "1" }, "^")
+  S.from("Buddy Pal", 77, "RLY", { origin = "Pal Alt", oclass = "MAGE", olevel = 22, okind = "KILL", oid = "pk1", ago = 900, data = data, alt = "1" }, "ra1")
+  S.drain()
+  local alt = rr.players["Pal Alt"]
+  local e
+  for _, x in ipairs(rr.feed) do if x.who == "Pal Alt" then e = x end end
+  check(alt and alt.friend and e and math.abs(e.t - (time() - 900)) <= 5 and #rr.feed == feedBefore + 1, "the alt's event is in your Feed under the alt, as a friend")
+  check(FriendsAndFoesDB.friendTags["Pal Alt"] == "Buddy#1234", "and its BattleTag is remembered")
+  S.from("Buddy Pal", 77, "RLY", { origin = "Pal Alt", oclass = "MAGE", olevel = 22, okind = "KILL", oid = "pk1", ago = 900, data = data, alt = "1" }, "ra2")
+  check(#rr.feed == feedBefore + 1, "the same event again: once")
+  -- not an alt claim: a stranger is still ignored
+  S.from("Buddy Pal", 77, "RLY", { origin = "Total Stranger", oclass = "", olevel = "", okind = "LVL", oid = "s1", ago = 60, data = "20", alt = "" }, "ra3")
+  check(rr.players["Total Stranger"] == nil, "without alt, a stranger is still ignored")
+  -- a name that's already tied to another account can't be claimed
+  rr.players["Other Friend"] = { name = "Other Friend", friend = true, k = 0, d = 0, a = 0, lastSeen = time() }
+  FriendsAndFoesDB.friendTags["Other Friend"] = "Other#9999"
+  S.from("Buddy Pal", 77, "RLY", { origin = "Other Friend", oclass = "", olevel = "", okind = "LVL", oid = "s2", ago = 60, data = "20", alt = "1" }, "ra4")
+  check(FriendsAndFoesDB.friendTags["Other Friend"] == "Other#9999" and #rr.feed == feedBefore + 1, "an alt claim on someone else's friend is ignored")
+  -- an enemy can't be turned into a friend
+  rr.hitlist["Evil Twin"] = { name = "Evil Twin", attacks = 1, kills = 1, suspect = 0, revenge = 0, victims = {} }
+  S.from("Buddy Pal", 77, "RLY", { origin = "Evil Twin", oclass = "", olevel = "", okind = "LVL", oid = "s3", ago = 60, data = "20", alt = "1" }, "ra5")
+  check(not (rr.players["Evil Twin"] and rr.players["Evil Twin"].friend), "someone on your hitlist can't be claimed as an alt")
+  -- your picks still apply to the alt (through Buddy's tag)
+  FriendsAndFoesDB.group = { ["Someone#1"] = true }
+  ns.Comm.RebuildRoster()
+  S.from("Buddy Pal", 77, "RLY", { origin = "Pal Twin", oclass = "", olevel = "", okind = "LVL", oid = "s4", ago = 60, data = "20", alt = "1" }, "ra6")
+  check(rr.players["Pal Twin"] == nil, "Buddy not on your alert list: his alts' events aren't taken")
+  FriendsAndFoesDB.group = { ["Buddy#1234"] = true }
+  ns.Comm.RebuildRoster()
+  S.from("Buddy Pal", 77, "RLY", { origin = "Pal Twin", oclass = "", olevel = "", okind = "LVL", oid = "s5", ago = 60, data = "20", alt = "1" }, "ra7")
+  check(rr.players["Pal Twin"] and rr.players["Pal Twin"].friend, "Buddy on your list: his alt's events are taken")
+  ns.Comm.ClearPicks()
+
+  -- the old per-character list is merged once
+  FriendsAndFoesDB.outbox = {}
+  FriendsAndFoesCharDB.outbox = { { t = time() - 300, kind = "LVL", id = "old1", f = { level = "7" } }, { t = time() - 200, kind = "LVL", id = "old2", f = { level = "8" } } }
+  FriendsAndFoesCharDB.outboxMoved = nil
+  ns.Comm.Remember("LVL", "new1", { level = 9 })
+  local merged = FriendsAndFoesDB.outbox
+  check(#merged == 3 and merged[1].id == "old1" and merged[1].who == ns.me and merged[2].id == "old2" and merged[3].id == "new1"
+    and FriendsAndFoesCharDB.outbox == nil, "the old list is merged in time order, tagged with this character, and cleared")
+  FriendsAndFoesCharDB.outbox = { { t = time(), kind = "LVL", id = "old3", f = { level = "10" } } }
+  ns.Comm.Outbox()
+  check(#FriendsAndFoesDB.outbox == 3, "merged only once")
+  FriendsAndFoesCharDB.outbox = nil
+  for i = 1, 300 do ns.Comm.Remember("LVL", "cap" .. i, { level = i }) end
+  check(#ns.Comm.Outbox() == 250, "250 events in all, for all your characters")
+
+  FriendsAndFoesDB.outbox, FriendsAndFoesCharDB.outbox, FriendsAndFoesCharDB.outboxMoved = savedBox, savedOld, savedMoved
+  for _, n in ipairs({ "Pal Alt", "Pal Twin", "Other Friend", "Far Away", "Alt Victim" }) do rr.players[n] = nil; FriendsAndFoesDB.friendTags[n] = nil end
+  rr.hitlist["Evil Twin"] = nil
+  restore()
+  check(ns.errors == errs, "no errors with alt catch-up (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 2) the hitlist digest
+do
+  local errs = ns.errors
+  local S = SYNC
+  local F = { { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" } }
+  local restore = S.friends(F)
+  ns.Comm.ClearPicks()
+  local rr = ns.Data.RealRealm()
+  local savedHit, savedAt = rr.hitlist, FriendsAndFoesDB.digestAt
+  rr.hitlist = {}
+  FriendsAndFoesDB.digestAt = nil
+  for i = 1, 60 do
+    rr.hitlist["Digest" .. i .. " Foe"] = { name = "Digest" .. i .. " Foe", class = "ROGUE", level = 40 + i % 20, guild = "Some: Guild; Name|x",
+      attacks = i, kills = 1, revenge = 0, suspect = 0, victims = { ["Some Victim"] = true }, lastSeen = time() - i * 3600 }
+  end
+  rr.hitlist["Quiet Qed"] = { name = "Quiet Qed", attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, lastSeen = time() }
+  local buddy = ns.Data.Player("Buddy Pal")
+  buddy.friend, buddy.version = true, ns.VERSION
+
+  local function meetAgain()
+    BNGetNumFriends = function() return 0, 0 end
+    ns.Comm.RebuildRoster()
+    BNGetNumFriends = function() return #F, #F end
+    SENT = {}
+    ns.Comm.RebuildRoster()
+    S.drain()
+  end
+  local function digests()
+    local out = {}
+    for _, m in ipairs(S.sent(77, "HIT")) do if m.f.auto == "1" then out[#out + 1] = m end end
+    return out
+  end
+  meetAgain()
+  local d = digests()
+  local entries, fits = {}, true
+  for _, m in ipairs(d) do
+    for raw in m.f.entries:gmatch("[^;]+") do entries[#entries + 1] = raw end
+  end
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  check(#d >= 2 and #entries == ns.Comm.DIGEST_MAX and fits, "a friend you meet gets the 40 most active entries in a few small messages: " .. #d .. " / " .. #entries)
+  check(entries[1]:find("^Digest1 Foe:ROGUE:") ~= nil and not entries[1]:find("|", 1, true) and select(2, entries[1]:gsub(":", ":")) == 8
+    and not table.concat(entries, ";"):find("Quiet", 1, true), "the newest first, one packed form, nothing empty")
+  check(FriendsAndFoesDB.digestAt["Buddy#1234"] ~= nil, "remembered per BattleTag")
+  meetAgain()
+  check(#digests() == 0, "meeting again soon: not sent again")
+  FriendsAndFoesDB.digestAt["Buddy#1234"] = time() - 8 * 86400
+  meetAgain()
+  check(#digests() >= 2, "after a week: sent again")
+
+  -- an older add-on gets none, until its messages show a version that has it
+  FriendsAndFoesDB.digestAt = nil
+  buddy.version = "0.9.3"
+  meetAgain()
+  check(#digests() == 0, "a friend on 0.9.3 doesn't get one")
+  SENT = {}
+  S.from("Buddy Pal", 77, "LVL", { level = 33 }, "dg1", "0.9.3")
+  S.drain()
+  check(#digests() == 0, "still not after another message from 0.9.3")
+  S.from("Buddy Pal", 77, "LVL", { level = 34 }, "dg2")
+  S.drain()
+  check(#digests() >= 2, "once a message shows 0.9.4, the digest follows")
+
+  -- receiving: merged, no toast, no Feed line
+  local feed = #rr.feed
+  local t = toasted(function()
+    S.from("Buddy Pal", 77, "HIT", { share = "dd1", entries = "Digest Newcomer:HUNTER:59:Their Guild:3:2:0:5:Buddy Pal;Digest1 Foe:ROGUE:50::99:7:1:1:Buddy Pal", auto = "1" }, "dg3")
+  end)
+  check(not t and #CHAT == 0 and #rr.feed == feed, "a digest: no toast, no chat line, no Feed line")
+  check(rr.hitlist["Digest Newcomer"] and rr.hitlist["Digest Newcomer"].kills == 2 and rr.hitlist["Digest1 Foe"].attacks == 99
+    and rr.hitlist["Digest Newcomer"].sharedBy == "Buddy Pal", "but merged into your hitlist as a share is")
+  -- (a manual share from an older version still gets its Feed line)
+  local snd = SOUNDS_PLAYED or 0
+  local savedShow = ns.S().show.kill
+  ns.S().show.kill, ns.S().sound.enabled = "toast", true
+  local t2 = toasted(function()
+    S.from("Buddy Pal", 77, "HIT", { share = "dd2", entries = "Digest Second:HUNTER:59:Their Guild:3:2:0:5", auto = "" }, "dg4")
+  end)
+  check(#rr.feed == feed + 1, "a share without auto still gets its Feed line")
+  check(not t2 and #CHAT == 1 and CHAT[1]:find("sharing their hitlist", 1, true) and (SOUNDS_PLAYED or 0) == snd,
+    "an old version's manual share: one chat line, no toast, no sound")
+  ns.S().show.kill = savedShow
+
+  rr.hitlist, FriendsAndFoesDB.digestAt = savedHit, savedAt
+  for name in pairs(rr.players) do if name:find("^Digest") then rr.players[name] = nil end end
+  restore()
+  check(ns.errors == errs, "no errors with the digest (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 3) bounty contracts passed on
+do
+  local errs = ns.errors
+  local S, C = SYNC, ns.Contracts
+  local F = { { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" }, { gid = 78, name = "Alice Wonder", tag = "Alice#5678" } }
+  local restore = S.friends(F)
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local rr = ns.Data.RealRealm()
+  local savedStore = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local store = FriendsAndFoesDB.contracts
+  rr.players["Alice Wonder"] = rr.players["Alice Wonder"] or { name = "Alice Wonder", k = 0, d = 0, a = 0 }
+  rr.players["Alice Wonder"].friend, rr.players["Alice Wonder"].version = true, ns.VERSION
+  ns.Data.Player("Buddy Pal").version = ns.VERSION
+  local function bty(cid, state, poster, extra)
+    local f = { cid = cid, target = ns.EncodeUnit({ name = "Bounty Mark", class = "ROGUE", level = 50 }), amount = "50000", state = state,
+      killer = "", age = "100", updage = "100", days = "7", blow = "", last = "", poster = poster or "" }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    return f
+  end
+
+  -- Buddy passes on Alice's contract: kept under Alice, not as one received directly
+  S.from("Buddy Pal", 77, "BTY", bty("rc1", "open", "Alice Wonder"), "b1")
+  local c = store["Alice Wonder/rc1"]
+  check(c and c.by == "Alice Wonder" and c.state == "open" and not c.direct and store["Buddy Pal/rc1"] == nil, "a passed-on contract is kept under its poster")
+  check(rr.hitlist["Bounty Mark"] ~= nil, "and its target goes on your hitlist")
+  -- poster not your friend, or you: ignored
+  S.from("Buddy Pal", 77, "BTY", bty("rc2", "open", "Total Stranger"), "b2")
+  S.from("Buddy Pal", 77, "BTY", bty("rc3", "open", ns.me), "b3")
+  S.from("Buddy Pal", 77, "BTY", bty("rc4", "paid", "Alice Wonder"), "b4")
+  check(next(store, next(store)) == nil and store["Total Stranger/rc2"] == nil, "a stranger's, your own, and a 'paid' one passed on are ignored")
+  -- Alice's own message is direct, and the contract can't go back
+  S.from("Alice Wonder", 78, "BTY", bty("rc1", "done", "", { killer = "Buddy Pal", updage = "10", amount = "60000" }), "b5")
+  check(c.direct and c.state == "done" and c.amount == 60000, "from the poster: direct")
+  S.from("Buddy Pal", 77, "BTY", bty("rc1", "open", "Alice Wonder", { updage = "5000", amount = "99999" }), "b6")
+  check(c.state == "done" and c.amount == 60000, "an older copy passed on can't roll it back")
+  -- a second contract only ever passed on (never direct) isn't passed on again
+  S.from("Buddy Pal", 77, "BTY", bty("rc7", "open", "Alice Wonder"), "b7")
+  check(store["Alice Wonder/rc7"] ~= nil, "(another passed-on one)")
+
+  SENT = {}
+  check(C.SendRelayed("Buddy Pal") == 1, "passing on: only the one you got directly")
+  S.drain()
+  local out = S.sent(77, "BTY")
+  check(#out == 1 and out[1].f.poster == "Alice Wonder" and out[1].f.cid == "rc1" and out[1].f.state == "done", "to Buddy, naming Alice as the poster")
+  check(C.SendRelayed("Alice Wonder") == 0, "never to the poster")
+  -- limits and the version check
+  for i = 1, 15 do
+    store["Alice Wonder/lim" .. i] = { id = "lim" .. i, by = "Alice Wonder", target = "Lim" .. i .. " Mark", amount = 1000, state = "open", t = time(), upd = time() + i, days = 7, direct = true }
+  end
+  SENT = {}
+  check(C.SendRelayed("Buddy Pal") == C.RELAY_MAX, "at most " .. C.RELAY_MAX .. " are passed on")
+  S.drain()
+  local fits = true
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  check(fits, "and they fit")
+  ns.Data.Player("Buddy Pal").version = "0.9.3"
+  SENT = {}
+  C.Greet({ "Buddy Pal" })
+  S.drain()
+  local relayed = 0
+  for _, m in ipairs(S.sent(77, "BTY")) do if m.f.poster ~= "" then relayed = relayed + 1 end end
+  check(relayed == 0, "a friend on 0.9.3 gets none")
+  ns.Data.Player("Buddy Pal").version = ns.VERSION
+  SENT = {}
+  C.Greet({ "Buddy Pal" })
+  S.drain()
+  relayed = 0
+  for _, m in ipairs(S.sent(77, "BTY")) do if m.f.poster ~= "" then relayed = relayed + 1 end end
+  check(relayed == C.RELAY_MAX, "greeting a friend on 0.9.4 passes them on")
+
+  FriendsAndFoesDB.contracts = savedStore
+  rr.hitlist["Bounty Mark"], rr.players["Bounty Mark"] = nil, nil
+  for i = 1, 15 do rr.hitlist["Lim" .. i .. " Mark"] = nil end
+  restore()
+  check(ns.errors == errs, "no errors passing on contracts (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 4) profiles passed on
+do
+  local errs = ns.errors
+  local S, P = SYNC, ns.Profile
+  local F = { { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" }, { gid = 78, name = "Alice Wonder", tag = "Alice#5678" } }
+  local restore = S.friends(F)
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local rr = ns.Data.RealRealm()
+  local function friend(name, rl, t)
+    local p = rr.players[name] or { name = name, k = 0, d = 0, a = 0 }
+    rr.players[name] = p
+    p.friend, p.lastSeen, p.faction = true, time(), "Horde"
+    P.Apply(p, { k = "12", d = "3", wanted = "", zone = "Old Zone", status = "", t = t or tostring(time() - 3600), bt = "40", btw = "10", bwk = "2", rl = rl })
+    return p
+  end
+  check(P.Fields().rl == "1", "your own profile says friends may pass it on")
+  ns.S().share.relay = false
+  check(P.Fields().rl == "", "and not when you've switched that off")
+  ns.S().share.relay = true
+  local carol = friend("Carol Ghost", "1")
+  local dora = friend("Dora Dark", "")
+  local erin = friend("Erin Elf", "1", "")
+  local alice = friend("Alice Wonder", "1")
+  check(carol.relayOk and not dora.relayOk and not erin.relayOk, "kept to pass on only when they allow it and say when the numbers are from")
+  local list = P.RelayList("Buddy Pal")
+  check(#list == 1 and list[1].name == "Carol Ghost", "passed on: Carol only (not Dora, Erin, nor Alice who is online)")
+
+  rr.players["Buddy Pal"].version = ns.VERSION
+  SENT = {}
+  P.Greet({ "Buddy Pal" })
+  S.drain()
+  local prl = S.sent(77, "PRL")
+  check(#prl == 1 and prl[1].f.origin == "Carol Ghost" and prl[1].f.k == "12" and prl[1].f.d == "3" and prl[1].f.bt == "40"
+    and tonumber(prl[1].f.t) == carol.statAt, "greeting Buddy: Carol's numbers go too")
+  rr.players["Buddy Pal"].version = "0.9.3"
+  SENT = {}
+  P.Greet({ "Buddy Pal" })
+  S.drain()
+  check(#S.sent(77, "PRL") == 0, "not to an add-on without it")
+  rr.players["Buddy Pal"].version = ns.VERSION
+  for i = 1, 15 do friend("Many" .. i .. " Friend", "1", tostring(time() - i * 60)) end
+  check(#P.RelayList("Buddy Pal") == P.PRL_MAX and P.RelayList("Buddy Pal")[1].name == "Many1 Friend", "at most " .. P.PRL_MAX .. ", the freshest first")
+  SENT = {}
+  P.Greet({ "Buddy Pal" })
+  S.drain()
+  check(#S.sent(77, "PRL") == P.PRL_MAX, "that many are sent")
+  for i = 1, 15 do rr.players["Many" .. i .. " Friend"] = nil end
+
+  -- receiving
+  local now = time()
+  S.from("Buddy Pal", 77, "PRL", { origin = "Carol Ghost", k = "20", d = "4", t = tostring(now - 60), bt = "50", btw = "", bwk = "" }, "pl1")
+  check(carol.sk == 20 and carol.sd == 4 and carol.sbt == 50 and math.abs(carol.statAt - (now - 60)) <= 2, "newer numbers are applied")
+  check(carol.zone == "Old Zone" and not carol.relayOk, "never a zone, and not passed on again")
+  S.from("Buddy Pal", 77, "PRL", { origin = "Carol Ghost", k = "99", d = "9", t = tostring(now - 7200), bt = "", btw = "", bwk = "" }, "pl2")
+  check(carol.sk == 20, "older numbers are ignored")
+  S.from("Buddy Pal", 77, "PRL", { origin = "Alice Wonder", k = "99", d = "9", t = tostring(now - 5), bt = "", btw = "", bwk = "" }, "pl3")
+  check(alice.sk == 12, "a friend who is online speaks for themselves")
+  S.from("Buddy Pal", 77, "PRL", { origin = "Total Stranger", k = "99", d = "9", t = tostring(now - 5), bt = "", btw = "", bwk = "" }, "pl4")
+  S.from("Buddy Pal", 77, "PRL", { origin = ns.me, k = "99", d = "9", t = tostring(now - 5), bt = "", btw = "", bwk = "" }, "pl5")
+  S.from("Buddy Pal", 77, "PRL", { origin = "Dora Dark", k = "x", d = "9", t = tostring(now - 5), bt = "", btw = "", bwk = "" }, "pl6")
+  check(rr.players["Total Stranger"] == nil and dora.sk == 12, "strangers, yourself and broken numbers are ignored")
+  check(#P.RelayList("Buddy Pal") == 0, "(Carol is not passed on again)")
+  -- a profile of their own, directly, makes it passable again
+  P.Apply(carol, { k = "21", d = "4", wanted = "", zone = "", status = "", t = tostring(now), bt = "", btw = "", bwk = "", rl = "1" })
+  check(P.RelayList("Buddy Pal")[1].name == "Carol Ghost", "her own next profile makes it passable again")
+
+  for _, n in ipairs({ "Carol Ghost", "Dora Dark", "Erin Elf" }) do rr.players[n] = nil end
+  rr.players["Alice Wonder"].relayOk = nil
+  restore()
+  check(ns.errors == errs, "no errors passing on profiles (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 5) gaps while both are online
+do
+  local errs = ns.errors
+  local S, C = SYNC, ns.Comm
+  local ALL = { { gid = 291, name = "Gap Pal", tag = "Gap#1" }, { gid = 292, name = "Gap Quiet", tag = "Quiet#2" } }
+  local F = { ALL[1], ALL[2] }
+  local restore = S.friends(F)
+  C.ClearPicks()
+  local function setOnline(on)
+    for i = #F, 1, -1 do F[i] = nil end
+    if on then for i, f in ipairs(ALL) do F[i] = f end end
+  end
+  local function cycle(wait)
+    setOnline(false)
+    C.RebuildRoster()
+    ADVANCE(wait)
+    setOnline(true)
+    SENT = {}
+    C.RebuildRoster()
+    S.drain()
+  end
+  C.RebuildRoster()
+  S.drain()
+  C.SetAwayFrom(time() - 7200)
+  cycle(5)
+  local first = S.sent(291, "REQ")
+  check(#first == 1 and math.abs(tonumber(first[1].f.window) - 7200) <= 5, "back after a short while, first time this session: asked as usual")
+  -- Gap Pal sends an event that happened 10 minutes ago; Gap Quiet sends nothing
+  S.from("Gap Pal", 291, "LVL", { level = 33, ago = 600 }, "gp1")
+  S.drain()
+  check(C.LastEventFrom("Gap Pal") and math.abs(C.LastEventFrom("Gap Pal") - (time() - 600)) <= 2 and C.LastEventFrom("Gap Quiet") == nil,
+    "the newest event time is kept per friend")
+  S.from("Gap Pal", 291, "LVL", { level = 34, ago = 3000 }, "gp2")
+  check(math.abs(C.LastEventFrom("Gap Pal") - (time() - 600)) <= 2, "an older one doesn't replace it")
+  cycle(60)
+  check(#S.sent(291, "REQ") == 0, "gone for a minute: not asked")
+  cycle(130)
+  local back = S.sent(291, "REQ")
+  check(#back == 1 and math.abs(tonumber(back[1].f.window) - 605) <= 3, "gone for two minutes: asked for what came after the newest event: " .. tostring(back[1] and back[1].f.window))
+  check(#S.sent(292, "REQ") == 0, "a friend with no event from them yet: not asked again (as before)")
+
+  -- once an hour: only friends who sent nothing for an hour, and who we have an event time for
+  SENT = {}
+  check(C.AskSilent() == 0, "everyone was heard from lately: nobody asked")
+  ADVANCE(3700)
+  SENT = {}
+  check(C.AskSilent() == 1, "an hour of silence: Gap Pal is asked")
+  S.drain()
+  local silent = S.sent(291, "REQ")
+  check(#silent >= 1 and tonumber(silent[1].f.window) >= 600 and #S.sent(292, "REQ") == 0, "with the small window; Gap Quiet (no event time) is left alone")
+  S.from("Gap Pal", 291, "PRO", { k = "1", d = "1", wanted = "", zone = "", status = "", t = "", bt = "", btw = "", bwk = "", rl = "" }, "gp3")
+  ADVANCE(100)
+  SENT = {}
+  RUN_TICKERS(1)
+  S.drain()
+  check(#S.sent(291, "REQ") == 0, "the hourly timer: he sent something a minute ago, so nothing")
+  ADVANCE(3700)
+  SENT = {}
+  RUN_TICKERS(1)
+  S.drain()
+  check(#S.sent(291, "REQ") == 1, "the hourly timer: an hour of silence, asked: " .. #S.sent(291, "REQ"))
+
+  restore()
+  local rr = ns.Data.RealRealm()
+  rr.players["Gap Pal"], rr.players["Gap Quiet"] = nil, nil
+  check(ns.errors == errs, "no errors filling gaps (" .. tostring(ns.lastError) .. ")")
+end
+-- the digest only brings enemies who hurt the sender, you, or a friend you share
+do
+  local errs = ns.errors
+  local S = SYNC
+  local F = { { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" } }
+  local restore = S.friends(F)
+  ns.Comm.ClearPicks()
+  local rr = ns.Data.RealRealm()
+  local savedHit, savedAt = rr.hitlist, FriendsAndFoesDB.digestAt
+  rr.hitlist = {}
+  FriendsAndFoesDB.digestAt = nil
+  local buddy = ns.Data.Player("Buddy Pal")
+  buddy.friend, buddy.version = true, ns.VERSION
+  ns.Data.Player("Mutual Friend").friend = true
+  local function share(entries, auto, id)
+    S.from("Buddy Pal", 77, "HIT", { share = id, entries = entries, auto = auto }, id)
+  end
+  local function row(name, who) return name .. ":ROGUE:50:Gx:4:2:0:3" .. (who and (":" .. who) or "") end
+
+  share(table.concat({
+    row("Fw Sender", "Buddy Pal,Some Stranger"),
+    row("Fw Mine", "Some Stranger," .. ns.me),
+    row("Fw Common", "Mutual Friend"),
+    row("Fw Stranger", "Some Stranger,Other Stranger"),
+    row("Fw Bare"),
+  }, ";"), "1", "fw1")
+  check(rr.hitlist["Fw Sender"] and rr.hitlist["Fw Mine"] and rr.hitlist["Fw Common"], "kept: hurt the sender, you, or a friend you share")
+  check(not rr.hitlist["Fw Stranger"], "dropped: only hurt strangers")
+  check(not rr.hitlist["Fw Bare"], "dropped: an automatic entry without the victims field")
+  check(rr.hitlist["Fw Sender"].sharedBy == "Buddy Pal" and rr.hitlist["Fw Sender"].kills == 2 and rr.hitlist["Fw Sender"].attacks == 4, "kept ones merge as before")
+  check(rr.hitlist["Fw Sender"].hitWho["Buddy Pal"] and not rr.hitlist["Fw Sender"].hitWho["Some Stranger"]
+    and rr.hitlist["Fw Mine"].hitWho[ns.me] and not rr.hitlist["Fw Mine"].hitWho["Some Stranger"]
+    and rr.hitlist["Fw Common"].hitWho["Mutual Friend"], "only the names that passed are kept")
+
+  -- an old manual share (no auto) merges as it always did
+  share(row("Fw Old"), "", "fw2")
+  check(rr.hitlist["Fw Old"] and rr.hitlist["Fw Old"].kills == 2, "a manual share without the field still merges")
+
+  -- an attack records who was hit (a friend's, and your own)
+  S.from("Buddy Pal", 77, "ATK", { enc = "fwa1", zone = "Duskwood", attackers = "Fw Attacker:ROGUE:60:" }, "fwa1")
+  local ha = rr.hitlist["Fw Attacker"]
+  check(ha and ha.hitWho and ha.hitWho["Buddy Pal"], "an attack records who was attacked")
+  for i = 1, 14 do S.from("Buddy Pal", 77, "ATK", { enc = "fwb" .. i, zone = "Duskwood", attackers = "Fw Attacker:ROGUE:60:" }, "fwb" .. i) end
+  for i = 1, 14 do ns.Events.NoteWho(ha, "Victim" .. i) end
+  local n = 0
+  for _ in pairs(ha.hitWho) do n = n + 1 end
+  check(n <= 10, "hitWho is capped: " .. n)
+
+  -- the sender: entries with no victims aren't sent; names are packed (you first), and it all fits
+  FriendsAndFoesDB.digestAt = nil
+  rr.hitlist = {}
+  for i = 1, 45 do
+    rr.hitlist["Longname" .. i .. " Verylongsurnamehere"] = { name = "Longname" .. i .. " Verylongsurnamehere", class = "ROGUE", level = 60,
+      guild = "A Rather Long Guild Name Indeed", attacks = i, kills = 1, revenge = 0, suspect = 0, lastSeen = time() - i * 60,
+      victims = { ["Aaaaaaaaaaaa Bbbbbbbbbbbbb"] = true }, kv = { ["Aaaaaaaaaaaa Bbbbbbbbbbbbb"] = 3, ["Cc, Dd:x"] = 1 },
+      hitWho = { [ns.me] = 5, ["Eeeeeeeeeeee Ffffffffffff"] = 9, ["Gggggggggggg Hhhhhhhhhhhh"] = 8 } }
+  end
+  rr.hitlist["Fw Nobody"] = { name = "Fw Nobody", attacks = 5, kills = 0, suspect = 0, revenge = 0, victims = {}, lastSeen = time() }
+  local list = ns.Comm.DigestList()
+  local hasNobody = false
+  for _, h in ipairs(list) do if h.name == "Fw Nobody" then hasNobody = true end end
+  check(#list == ns.Comm.DIGEST_MAX and not hasNobody, "an entry with no victims isn't in the digest")
+  buddy.version = ns.VERSION
+  BNGetNumFriends = function() return 0, 0 end
+  ns.Comm.RebuildRoster()
+  BNGetNumFriends = function() return #F, #F end
+  SENT = {}
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local fits, got = true, nil
+  for _, s in ipairs(SENT) do if #s.payload > 255 then fits = false end end
+  for _, m in ipairs(S.sent(77, "HIT")) do
+    if m.f.auto == "1" and not got then got = m.f.entries:match("[^;]+") end
+  end
+  local who = got and got:match("^[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:(.*)$")
+  check(fits and who and who:match("^" .. ns.me) and select(2, who:gsub(",", ",")) == 2 and not who:find("[:;|\t]"),
+    "long names: packed under 255 bytes, you first, 3 names: " .. tostring(who))
+
+  rr.hitlist, FriendsAndFoesDB.digestAt = savedHit, savedAt
+  for name in pairs(rr.players) do if name:find("^Fw ") or name == "Mutual Friend" then rr.players[name] = nil end end
+  restore()
+  check(ns.errors == errs, "no errors with the filtered digest (" .. tostring(ns.lastError) .. ")")
+end
+
+-- how long players stay on the hitlist: three settings (attackers 14 days, killers forever by default)
+do
+  local day = 86400
+  local errs = ns.errors
+  local s = ns.S()
+  local saved = { s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore }
+  local savedContracts = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local function put(name, kills, attacks, days)
+    real.hitlist[name] = { name = name, kills = kills, attacks = attacks, victims = {}, lastSeen = time() - days * day }
+  end
+  local function clear()
+    for _, n in ipairs({ "Ftest Atk13", "Ftest Atk15", "Ftest One89", "Ftest One91", "Ftest Rep364", "Ftest Rep366", "Ftest Keeper", "Ftest Old" }) do real.hitlist[n] = nil end
+  end
+  local function fill()
+    put("Ftest Atk13", 0, 2, 13); put("Ftest Atk15", 0, 2, 15)
+    put("Ftest One89", 1, 0, 89); put("Ftest One91", 1, 0, 91)
+    put("Ftest Rep364", 2, 0, 364); put("Ftest Rep366", 5, 0, 366)
+  end
+  local function has(n) return real.hitlist[n] ~= nil end
+  local function set(a, o, m) s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = a, o, m end
+  -- defaults: attackers 14 days, killers forever
+  set(nil, nil, nil)
+  fill()
+  check(ns.Data.CountForget(FriendsAndFoesDB) == 1, "default count: " .. ns.Data.CountForget(FriendsAndFoesDB))
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(has("Ftest Atk13") and not has("Ftest Atk15"), "attacker: kept at 13 days, removed at 15 (default)")
+  check(has("Ftest One91") and has("Ftest Rep366"), "killers are never removed by default")
+  clear()
+  -- each setting is honoured on its own
+  set(14, 90, 365)
+  fill()
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(has("Ftest One89") and not has("Ftest One91"), "one-time killers at 90: kept at 89, removed at 91")
+  check(has("Ftest Rep364") and not has("Ftest Rep366"), "repeat killers at 365: kept at 364, removed at 366")
+  check(has("Ftest Atk13") and not has("Ftest Atk15"), "attackers unaffected by the killer settings")
+  clear()
+  -- counting with a pending value changes only that kind
+  fill()
+  set(0, 0, 0)
+  check(ns.Data.CountForget(FriendsAndFoesDB, "forgetKilledOnce", 90) == 1, "count with a pending one-time killer value")
+  check(ns.Data.CountForget(FriendsAndFoesDB, "forgetAttackers", 7) == 2, "count with a pending attacker value")
+  check(ns.Data.CountForget(FriendsAndFoesDB, "forgetKilledMore", 0) == 0, "count with Forever")
+  clear()
+  -- Forever keeps everyone
+  set(0, 0, 0)
+  put("Ftest Atk15", 0, 2, 5000)
+  check(ns.Data.ForgetOld(FriendsAndFoesDB) == 0 and has("Ftest Atk15"), "Forever keeps all")
+  clear()
+  -- an open contract keeps an old attacker; once it is closed they can go
+  set(14, 0, 0)
+  put("Ftest Keeper", 0, 1, 200)
+  FriendsAndFoesDB.contracts["Pal/1"] = { id = "1", by = "Pal", target = "Ftest Keeper", amount = 100, state = "open", t = time() }
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(has("Ftest Keeper"), "an open bounty keeps an old attacker")
+  FriendsAndFoesDB.contracts["Pal/1"].state = "cancelled"
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(not has("Ftest Keeper"), "no open bounty: forgotten")
+  -- seeing them again resets the clock
+  put("Ftest Atk15", 0, 2, 15)
+  real.hitlist["Ftest Atk15"].lastSeen = time()
+  ns.Data.ForgetOld(FriendsAndFoesDB)
+  check(has("Ftest Atk15"), "seen again: kept")
+  clear()
+  -- grey-out after 30 days
+  check(not ns.Data.IsStale({ lastSeen = time() - 29 * day }) and ns.Data.IsStale({ lastSeen = time() - 31 * day }), "grey after 30 days unseen")
+  -- upgrade step 14: the old mode becomes three numbers and goes away
+  local function upgrade(mode)
+    s.forget, s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = mode, 99, 99, 99
+    FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+    ns.Saved.Upgrade(FriendsAndFoesDB)
+  end
+  upgrade("never")
+  check(s.forget == nil and s.forgetAttackers == 0 and s.forgetKilledOnce == 0 and s.forgetKilledMore == 0, "upgrade: never -> all forever")
+  upgrade("double")
+  check(s.forget == nil and s.forgetAttackers == 28 and s.forgetKilledOnce == 0 and s.forgetKilledMore == 0, "upgrade: double -> attackers 28 days")
+  upgrade("normal")
+  check(s.forget == nil and s.forgetAttackers == 14 and s.forgetKilledOnce == 0 and s.forgetKilledMore == 0, "upgrade: normal -> the defaults")
+  s.forget = nil
+  s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = 7, 30, 90
+  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+  ns.Saved.Upgrade(FriendsAndFoesDB)
+  check(s.forgetAttackers == 7 and s.forgetKilledOnce == 30 and s.forgetKilledMore == 90, "upgrade: new settings are left alone")
+  -- the login run says so once when it removed players; silent when nothing goes
+  do
+    local said, oldChat = {}, ns.Toast.Chat
+    ns.Toast.Chat = function(text) said[#said + 1] = ns.Plain(text) end
+    set(14, 90, 0)
+    put("Ftest Atk15", 0, 2, 20); put("Ftest One91", 1, 0, 100)
+    ns.Data.ForgetAtLogin()
+    check(#said == 1 and said[1]:find("2", 1, true), "login forgetting: one line with the count: " .. tostring(said[1]))
+    ns.Data.ForgetAtLogin()
+    check(#said == 1, "nothing removed: nothing printed")
+    ns.Toast.Chat = oldChat
+    clear()
+  end
+  s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = saved[1], saved[2], saved[3]
+  FriendsAndFoesDB.contracts = savedContracts
+  check(ns.errors == errs, "no errors in forgetting (" .. tostring(ns.lastError) .. ")")
+end
+RUN_TICKERS(80)
+
+-- the Bounty board: several players who got the kill complete a bounty together
+do
+  local errs = ns.errors
+  local C = ns.Contracts
+  local rr = ns.Data.RealRealm()
+  local saved = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+  local function chatHas(text)
+    for _, l in ipairs(CHAT) do if l:find(text, 1, true) then return true end end
+    return false
+  end
+  local function has(list, name)
+    for _, n in ipairs(list or {}) do if n == name then return true end end
+    return false
+  end
+  local t0 = time()
+
+  -- two friends kill the target within a minute: both share it
+  local c = C.Post({ name = "Share Foe", class = "ROGUE", level = 60 }, 100000, 3)
+  CHAT = {}
+  ns.eventTime = t0
+  C.OnKill("Buddy Pal", "Share Foe")
+  check(c.state == "done" and #c.killers == 1 and chatHas("fulfilled your bounty"), "the first kill: done, you are told to pay")
+  CHAT = {}
+  ns.eventTime = t0 + 20
+  C.OnKill("Alice Wonder", "Share Foe")
+  check(c.state == "done" and #c.killers == 2 and has(c.killers, "Buddy Pal") and has(c.killers, "Alice Wonder")
+    and c.killer == "Buddy Pal", "a second kill within 60 s joins: both killers, the lead stays")
+  check(C.ShareOf(c) == 50000, "the gold is shared equally: half each")
+  check(chatHas("was in on the kill too") and not chatHas("fulfilled your bounty"), "the poster gets one more chat line for the late killer")
+  C.OnKill("Alice Wonder", "Share Foe")
+  check(#c.killers == 2, "the same killer twice counts once")
+  ns.eventTime = t0 + 120
+  C.OnKill("Third Wheel", "Share Foe")
+  check(#c.killers == 2 and not has(c.killers, "Third Wheel"), "a kill 2 minutes later doesn't join")
+  ns.eventTime = nil
+
+  -- the toasts
+  ns.S().show.contract = "toast"
+  local pushed = {}
+  local push = ns.Toast.Push
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  C.ToastDone(c)
+  local theirs = { id = "tt1", by = "Cara Dune", target = "Toast Foe", amount = 90000, state = "done", killer = ns.me, killers = { ns.me, "Alice Wonder" }, doneAt = t0 }
+  C.ToastDone(theirs)
+  theirs.killers, theirs.killer = { "Alice Wonder", "Buddy Pal" }, "Alice Wonder"
+  C.ToastDone(theirs)
+  ns.Toast.Push = push
+  ns.S().show.contract = "chat"
+  local p1, p2, p3 = ns.Plain(pushed[1].title), ns.Plain(pushed[2].title), ns.Plain(pushed[3].title)
+  check(p1:find("Buddy Pal and Alice Wonder fulfilled your bounty", 1, true) and ns.Plain(pushed[1].text):find("Pay each of them", 1, true),
+    "poster's toast: both names, pay each: " .. p1)
+  check(p2:find("You and Alice Wonder fulfilled Cara Dune's bounty", 1, true) and ns.Plain(pushed[2].text):find("each, promised", 1, true),
+    "a killer's toast: you and the others, the share each: " .. p2 .. " / " .. ns.Plain(pushed[2].text))
+  check(p3:find("Alice Wonder and Buddy Pal fulfilled Cara Dune's bounty", 1, true), "anyone else's: the names: " .. p3)
+
+  -- the confirm-paid dialog lists everyone and the share
+  local asked
+  local confirm = ns.UI.Confirm
+  ns.UI.Confirm = function(text) asked = text end
+  local row = setmetatable({ key = ns.me .. "/" .. c.id, name = c.target }, { __index = c })
+  ns.UI.ContractAction(row)
+  ns.UI.Confirm = confirm
+  check(asked and ns.Plain(asked):find("Buddy Pal and Alice Wonder", 1, true) and ns.Plain(asked):find("each", 1, true),
+    "confirm paid lists everyone and the share each: " .. tostring(asked and ns.Plain(asked)))
+
+  -- marking it paid: sent once with both, and each killer collects their share
+  SENT = {}
+  local k = ns.me .. "/" .. c.id
+  check(C.MarkPaid(k) and c.state == "paid", "the poster marks it paid once for everyone")
+  RUN_TICKERS(40)
+  local seen
+  for _, s in ipairs(SENT) do
+    local m = s.payload:find("^3\tBTY\t") and ns.Comm.Decode(s.payload)
+    if m and m.f.state == "paid" then seen = m end
+  end
+  check(seen and seen.f.killers == "Buddy Pal,Alice Wonder" and seen.f.killer == "Buddy Pal", "the BTY killers field round-trips: " .. tostring(seen and seen.f.killers))
+  check(C.EarnedBy("Buddy Pal") == 50000 and C.EarnedBy("Alice Wonder") == 50000 and C.EarnedBy("Third Wheel") == 0,
+    "paid: each killer's Bounties column counts their share")
+  C.OnKill("Late Comer", "Share Foe")
+  check(#c.killers == 2 and c.state == "paid", "a paid bounty doesn't change")
+  c.doneAt, c.upd = t0 - 60 * 86400, t0 - 60 * 86400
+  local cell
+  for _, r in ipairs(C.List()) do if r.name == "Share Foe" then cell = r end end
+  local closedCell
+  for _, col in ipairs(ns.UI.TabColumns("contracts")) do
+    if col[1] == ns.L.COL_CLOSED_BY then closedCell = ns.Plain(col[3](cell)) end
+  end
+  check(closedCell == "Buddy Pal, Alice Wonder", "the board's Closed by shows everyone: " .. tostring(closedCell))
+  c.killers = { "Aa Bb", "Cc Dd", "Ee Ff", "Gg Hh", "Ii Jj" }
+  c.killer = "Aa Bb"
+  for _, r in ipairs(C.List()) do if r.name == "Share Foe" then cell = r end end
+  for _, col in ipairs(ns.UI.TabColumns("contracts")) do
+    if col[1] == ns.L.COL_CLOSED_BY then closedCell = ns.Plain(col[3](cell)) end
+  end
+  check(closedCell:find("+3", 1, true) and not closedCell:find("Gg Hh", 1, true), "a long list is cut with +N: " .. closedCell)
+
+  -- the poster among the killers doesn't owe themselves
+  local own = C.Post({ name = "Own Foe", class = "MAGE", level = 60 }, 80000, 3)
+  ns.eventTime = t0
+  C.OnKill("Buddy Pal", "Own Foe")
+  ns.eventTime = t0 + 10
+  C.OnKill(ns.me, "Own Foe")
+  ns.eventTime = nil
+  check(own.state == "done" and #own.killers == 2 and #C.Payees(own) == 1 and C.Payees(own)[1] == "Buddy Pal" and C.ShareOf(own) == 40000,
+    "the poster among the killers: only the other is owed, half the gold")
+  C.MarkPaid(ns.me .. "/" .. own.id)
+  check(C.EarnedBy("Buddy Pal") == 40000 and C.EarnedBy(ns.me) == 0, "the poster's own share isn't counted as earned")
+  -- the poster kills first, a friend within 60 s (no killing blow known): they join and are owed
+  local pf = C.Post({ name = "Pf Foe", class = "MAGE", level = 60 }, 60000, 3)
+  ns.eventTime = t0
+  C.OnKill(ns.me, "Pf Foe")
+  check(pf.state == "paid" and #C.Payees(pf) == 0, "(the poster got them first: closed)")
+  CHAT = {}
+  ns.eventTime = t0 + 30
+  C.OnKill("Buddy Pal", "Pf Foe")
+  check(pf.state == "done" and C.Payees(pf)[1] == "Buddy Pal" and C.ShareOf(pf) == 30000 and chatHas("fulfilled your bounty"),
+    "a friend within 60 s of the poster's own kill joins: done, they are owed half, the poster is told to pay")
+  ns.eventTime = t0 + 200
+  C.OnKill("Late Friend", "Pf Foe")
+  check(#pf.killers == 2, "a friend 2 minutes after the poster's kill doesn't join")
+  local pf2 = C.Post({ name = "Pf Two", class = "MAGE", level = 60 }, 60000, 3)
+  ns.eventTime = t0
+  C.OnKill(ns.me, "Pf Two")
+  ns.eventTime = t0 + 5
+  C.OnKill("Alice Wonder", "Pf Two")
+  C.MarkPaid(ns.me .. "/" .. pf2.id)
+  ns.eventTime = t0 + 10
+  C.OnKill("Buddy Pal", "Pf Two")
+  check(pf2.state == "paid" and #pf2.killers == 2, "once the poster marked it paid, no one joins")
+  ns.eventTime = nil
+  local solo = C.Post({ name = "Solo Foe", class = "MAGE", level = 60 }, 80000, 3)
+  C.OnKill(ns.me, "Solo Foe")
+  check(solo.state == "paid" and #C.Payees(solo) == 0, "the poster alone: closed with nothing to pay")
+
+  -- a friend's bounty: your kill, then the poster's list merges with yours (union, never fewer, at most 5)
+  bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "mg1")
+  local m = FriendsAndFoesDB.contracts["Buddy Pal/m1"]
+  C.OnKill(ns.me, "Merge Foe")
+  check(m.state == "done" and #m.killers == 1 and m.killers[1] == ns.me, "(you got them)")
+  bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "done", killer = "Alice Wonder", killers = "Alice Wonder,Cara Dune", age = 60, updage = 0, days = 5 }, "mg2")
+  check(#m.killers == 3 and m.killers[1] == "Alice Wonder" and m.killers[2] == "Cara Dune" and m.killers[3] == ns.me,
+    "the poster's list and yours are merged, theirs first: " .. table.concat(m.killers, ","))
+  check(C.ShareOf(m) == 3000, "(a third each)")
+  bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "done", killer = "Alice Wonder", killers = "Cara Dune", age = 60, updage = 0, days = 5 }, "mg3")
+  check(#m.killers == 3, "a shorter list never shrinks yours")
+  bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "done", killer = "Aa Bb", killers = "Aa Bb,Cc Dd,Ee Ff,Gg Hh,Ii Jj,Kk Ll", age = 60, updage = 0, days = 5 }, "mg4")
+  check(#m.killers == 5 and m.killers[1] == "Aa Bb", "at most 5 killers, the poster's first")
+  bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "paid", killer = "Aa Bb", killers = "Aa Bb,Cc Dd", age = 60, updage = 0, days = 5 }, "mg5")
+  check(m.state == "paid" and #m.killers == 5, "(paid by the poster)")
+
+  -- an older client: no killers field, only the one killer
+  bty({ cid = "m2", target = "Old Foe:MAGE:50:", amount = 700, state = "done", killer = "Alice Wonder", age = 60, updage = 5, days = 5 }, "mg6")
+  local old = FriendsAndFoesDB.contracts["Buddy Pal/m2"]
+  check(old and old.state == "done" and old.killer == "Alice Wonder" and #old.killers == 1 and old.killers[1] == "Alice Wonder" and C.ShareOf(old) == 700,
+    "an old-format message (no killers field) still works")
+  local legacy = { by = "Buddy Pal", state = "paid", killer = "Alice Wonder", amount = 700 }
+  FriendsAndFoesDB.contracts["Buddy Pal/legacy"] = legacy
+  check(C.EarnedBy("Alice Wonder") == 700 + 30000 and C.ShareOf(legacy) == 700, "a saved contract without a list: the one killer, the full amount")
+
+  -- 5 long names still fit in one message
+  local longc = C.Post({ name = "Long Foe", class = "MAGE", level = 60 }, 500000, 3)
+  longc.killers = { "Abcdefghijkl Mnopqrstuvwx", "Bbbbbbbbbbbb Nnnnnnnnnnnn", "Cccccccccccc Oooooooooooo", "Dddddddddddd Pppppppppppp", "Eeeeeeeeeeee Qqqqqqqqqqqq" }
+  longc.killer, longc.state, longc.doneAt, longc.guild = longc.killers[1], "done", t0, "Abcdefghijklmnopqrstuvwx"
+  RUN_TICKERS(80)
+  SENT = {}
+  C.MarkPaid(ns.me .. "/" .. longc.id)
+  RUN_TICKERS(80)
+  local longMsg
+  for _, s in ipairs(SENT) do
+    if s.payload:find("^3\tBTY\t") and s.payload:find("Long Foe", 1, true) then longMsg = s.payload end
+  end
+  local back = longMsg and ns.Comm.Decode(longMsg)
+  check(longMsg and #longMsg <= 255 and back and back.f.killers:find("^Abcdefghijkl Mnopqrstuvwx"), "a bounty with 5 long names fits in 255 bytes: " .. tostring(longMsg and #longMsg))
+
+  for _, name in ipairs({ "Share Foe", "Own Foe", "Pf Foe", "Pf Two", "Solo Foe", "Merge Foe", "Old Foe", "Long Foe" }) do
+    rr.hitlist[name], rr.players[name] = nil, nil
+  end
+  FriendsAndFoesDB.contracts = saved
+  ns.S().show.contract = showWas
+  ns.eventTime = nil
+  check(ns.errors == errs, "no errors in shared bounties (" .. tostring(ns.lastError) .. ")")
+end
+RUN_TICKERS(80)
+
+-- assists by support (AST): you healed or buffed a friend who got the kill
+do
+  local errs = ns.errors
+  local B, C, P = ns.Bounty, ns.Contracts, ns.PvP
+  local rr = ns.Data.RealRealm()
+  local function has(list, name)
+    for _, n in ipairs(list or {}) do if n == name then return true end end
+    return false
+  end
+  local oEmit = ns.Events.Emit
+  local asts = {}
+  ns.Events.Emit = function(kind, f) if kind == "AST" then asts[#asts + 1] = f end return oEmit(kind, f) end
+  local savedContracts = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local mine = rr.players[ns.me]
+  local streakWas = FriendsAndFoesCharDB.streak
+
+  -- a friend's live (or caught-up, `ago`) KILL as the add-on applies it
+  local nextId = 0
+  local function friendKill(victim, ago)
+    nextId = nextId + 1
+    ns.Events.Apply({ kind = "KILL", id = "ast" .. nextId, from = "Buddy Pal", class = "PRIEST", level = 31, ago = ago,
+      f = { victim = victim, vclass = "ROGUE", vlevel = "30", vguild = "", zone = "Testland", streak = "1", blow = "", last = "", rl = "" } }, false)
+  end
+  local function foe(name, k)
+    rr.players[name] = { name = name, enemy = true, k = k or 3, d = 0, a = 0 }
+  end
+
+  -- the support is recorded for a friend, not for an enemy (that's a last attack)
+  B.SettleAll()
+  foe("As One")
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Buddy Pal", "cast-guid", 2061)
+  check(P.SupportedRecently("Buddy Pal") and P.SupportedRecently("Buddy Pal", 5) and not P.SupportedRecently("Alice Wonder"),
+    "a spell at a friend records support for them only")
+  FIRE("UNIT_SPELLCAST_SENT", "player", ns.me, "cast-guid", 2061)
+  check(not P.SupportedRecently(ns.me), "a spell at yourself records nothing")
+  ADVANCE(6)
+  check(P.SupportedRecently("Buddy Pal") and not P.SupportedRecently("Buddy Pal", 5), "support: the seconds asked about count")
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Buddy", "cast-guid", 2061)
+  check(P.SupportedRecently("Buddy Pal", 5), "a bare first name matching exactly one friend counts")
+
+  -- a friend's live kill after your heal: one AST, you share the notoriety and the bounty
+  local amount = B.Open("As One")
+  local c = C.Post({ name = "As One", class = "ROGUE", level = 30 }, 50000, 3)
+  local before, kills, k0 = B.Mine(), mine and mine.k or 0, FriendsAndFoesCharDB.streak or 0
+  asts = {}
+  SENT = {}
+  friendKill("As One")
+  RUN_TICKERS(40)
+  local onWire = 0
+  for _, s in ipairs(SENT) do if s.payload:find("\tAST\t", 1, true) then onWire = onWire + 1 end end
+  check(#asts == 1 and asts[1].victim == "As One" and asts[1].helped == "Buddy Pal" and onWire >= 1, "a friend's kill after your heal: one AST, sent to friends")
+  B.SettleAll()
+  check(amount > 0 and B.Mine() == before + math.floor(amount / 2), "the supporter shares the notoriety equally (" .. (B.Mine() - before) .. " of " .. amount .. ")")
+  check(has(c.killers, ns.me) and has(c.killers, "Buddy Pal"), "the supporter is a payee of the bounty")
+  check((mine and mine.k or 0) == kills and (FriendsAndFoesCharDB.streak or 0) == k0, "no kill, no streak for the supporter")
+  friendKill("As One")
+  check(#asts == 1, "never twice for the same victim")
+
+  -- no AST: the heal was too long ago, you got the kill yourself, or the kill is a caught-up one
+  ADVANCE(120)
+  foe("As Two")
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Buddy Pal", "cast-guid", 2061)
+  ADVANCE(31)
+  asts = {}
+  friendKill("As Two")
+  check(#asts == 0, "a heal 31 s ago: no AST")
+
+  foe("As Three")
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Buddy Pal", "cast-guid", 2061)
+  ns.Events.Emit("KILL", { victim = "As Three", vclass = "ROGUE", vlevel = "24", vguild = "", zone = "Testland", blow = "", last = "" })
+  friendKill("As Three")
+  check(#asts == 0, "you reported the kill yourself: no AST")
+  FriendsAndFoesCharDB.streak = k0
+
+  foe("As Four")
+  FIRE("UNIT_SPELLCAST_SENT", "player", "Buddy Pal", "cast-guid", 2061)
+  friendKill("As Four", 300)
+  check(#asts == 0, "a caught-up kill: no AST")
+  friendKill("As Four")
+  check(#asts == 1, "(the same victim, live: it counts)")
+
+  -- receiving an AST: the sender joins the claim and the contract, a feed line, no kill for them
+  ADVANCE(120)
+  B.SettleAll()
+  foe("As Five")
+  local c5 = C.Post({ name = "As Five", class = "ROGUE", level = 30 }, 50000, 3)
+  amount = B.Open("As Five")
+  before = B.Mine()
+  local buddy = rr.players["Buddy Pal"]
+  local bk = buddy.k
+  B.OnKill(ns.me, "As Five", {})
+  C.OnKill("Alice Wonder", "As Five", {})
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("AST", { victim = "As Five", vclass = "ROGUE", vlevel = "24", zone = "Testland", helped = "Alice Wonder" }, "ast-r1"), "WHISPER", 77)
+  B.SettleAll()
+  check(B.Mine() == before + math.floor(amount / 2), "a received AST: the sender is counted in the claim, you share with them")
+  check(has(c5.killers, "Buddy Pal") and has(c5.killers, "Alice Wonder"), "a received AST: the sender is on the contract's killers")
+  local function feedHas(...) for i = #rr.feed, 1, -1 do local t = rr.feed[i].text or ""; local ok = true; for _, s in ipairs({ ... }) do if not t:find(s, 1, true) then ok = false end end; if ok then return true end end return false end
+  check(buddy.k == bk, "a received AST: no kill for the sender")
+  check(feedHas("helped", "Alice Wonder", "As Five"), "feed: sender helped X kill Y")
+  check(not (rr.hitlist["As Five"] and (rr.hitlist["As Five"].kills or 0) > 0), "no hitlist change from an AST")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("AST", { victim = "As Five", vclass = "ROGUE", vlevel = "24", zone = "Testland", helped = ns.me }, "ast-r2"), "WHISPER", 77)
+  check(feedHas("helped you kill", "As Five"), "feed: helped you kill")
+
+  -- round trip, under 255 bytes
+  local NAME = "Abcdefghijkl Mnopqrstuvwx"
+  local msg = { kind = "AST", id = "ffffffffff", name = NAME, class = "WARRIOR", level = 60,
+    f = { victim = NAME, vclass = "WARRIOR", vlevel = "60", zone = string.rep("Z", 48), helped = NAME } }
+  local wire = ns.Comm.Fit(msg)
+  local back = wire and ns.Comm.Decode(wire)
+  check(wire and #wire <= 255 and back and back.f.helped == NAME and back.f.victim == NAME and back.kind == "AST", "AST round-trips under 255 bytes: " .. tostring(wire and #wire))
+  check(not ns.Comm.KINDS.AST.relay, "AST isn't passed on")
+  local box = #ns.Comm.Outbox()
+  ns.Comm.Remember("AST", "x", msg.f)
+  check(#ns.Comm.Outbox() == box, "AST isn't kept for catch-up")
+
+  for _, n in ipairs({ "As One", "As Two", "As Three", "As Four", "As Five" }) do rr.players[n], rr.hitlist[n] = nil, nil end
+  ns.Events.Emit = oEmit
+  FriendsAndFoesDB.contracts = savedContracts
+  ns.S().show.contract = showWas
+  FriendsAndFoesCharDB.streak = streakWas
+  check(ns.errors == errs, "no errors in assists by support (" .. tostring(ns.lastError) .. ")")
+end
+RUN_TICKERS(80)
+
+-- one death counts at most once per player, whatever path the report takes (and what the log says)
+do
+  local errs = ns.errors
+  local B, C = ns.Bounty, ns.Contracts
+  local rr = ns.Data.RealRealm()
+  local function has(list, name)
+    local n = 0
+    for _, v in ipairs(list or {}) do if v == name then n = n + 1 end end
+    return n
+  end
+  local function logHas(tag, sub)
+    for _, l in ipairs(FriendsAndFoesDB.debugLog or {}) do
+      if l:find("[" .. tag .. "]", 1, true) and (not sub or l:find(sub, 1, true)) then return true end
+    end
+    return false
+  end
+  local debugWas = ns.S().debug
+  ns.S().debug = true
+  FriendsAndFoesDB.debugLog = {}
+  local savedContracts = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local showWas = ns.S().show.contract
+  ns.S().show.contract = "chat"
+  local buddy = rr.players["Buddy Pal"]
+  local function foe(name) rr.players[name] = { name = name, enemy = true, k = 3, d = 0, a = 0 } end
+  local function killFields(victim, ago)
+    return { victim = victim, vclass = "ROGUE", vlevel = "24", vguild = "", zone = "Testland", streak = "1", blow = "", last = "", ago = ago }
+  end
+  local function bn(kind, fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload(kind, fields, id), "WHISPER", 77) end
+  local function slainN(v) return buddy.slain and buddy.slain[v] and buddy.slain[v].n or 0 end
+  local function feedN(v)
+    local n = 0
+    for _, e in ipairs(rr.feed) do
+      if e.foes and e.foes[1] == v and e.kind == "kill" and e.who == "Buddy Pal" and not (e.text or ""):find("helped", 1, true) then n = n + 1 end
+    end
+    return n
+  end
+  local function relayData(victim)
+    return table.concat({ victim, "ROGUE", "24", "", "Testland", "1", "300", "", "", "" }, "^")
+  end
+  B.SettleAll()
+
+  -- 1. the same message over Battle.net and whisper
+  foe("Du One")
+  local c1 = C.Post({ name = "Du One", class = "ROGUE", level = 24 }, 50000, 3)
+  local k0 = buddy.k
+  bn("KILL", killFields("Du One"), "du1")
+  FIRE("CHAT_MSG_ADDON", "FNF1", payload("KILL", killFields("Du One"), "du1"), "WHISPER", "Buddy Pal")
+  check(buddy.k == k0 + 1 and slainN("Du One") == 1 and feedN("Du One") == 1 and has(c1.killers, "Buddy Pal") == 1 and #c1.killers == 1,
+    "one death, two routes: the kill, kill list, feed and bounty killers count once")
+  check(logHas("DUP", "Buddy Pal:du1"), "the second route is logged as DUP with its key")
+  check(logHas("KILL", "Du One") and logHas("BOUNTY-CLAIM", "Du One") and logHas("CONTRACT-DONE", "Du One"), "the kill, the claim and the contract closing are logged")
+
+  -- 2. a live KILL, then the same event in a catch-up (the sender's own id)
+  bn("KILL", killFields("Du One", "300"), "du1")
+  check(buddy.k == k0 + 1 and slainN("Du One") == 1 and feedN("Du One") == 1, "a live KILL, then the same one caught up: counted once")
+
+  -- 3. a live KILL, then a relayed copy (origin and its id match the direct key)
+  ns.Comm.OnRelay("Alice Wonder", { origin = "Buddy Pal", oclass = "PRIEST", olevel = "31", okind = "KILL", oid = "du1", ago = "300", data = relayData("Du One") })
+  check(buddy.k == k0 + 1 and slainN("Du One") == 1 and feedN("Du One") == 1, "a live KILL, then a relayed copy: counted once")
+  foe("Du Two")
+  ns.Comm.OnRelay("Alice Wonder", { origin = "Buddy Pal", oclass = "PRIEST", olevel = "31", okind = "KILL", oid = "du2", ago = "300", data = relayData("Du Two") })
+  local k1 = buddy.k
+  bn("KILL", killFields("Du Two"), "du2")
+  ns.Comm.OnRelay("Alice Wonder", { origin = "Buddy Pal", oclass = "PRIEST", olevel = "31", okind = "KILL", oid = "du2", ago = "300", data = relayData("Du Two") })
+  check(buddy.k == k1 and slainN("Du Two") == 1, "a relayed copy first, then the live one and the relay again: counted once")
+  check(logHas("DUP", "Buddy Pal:du2"), "the dropped copies are logged as DUP")
+
+  -- 4. an alt's event delivered twice (RLY alt=1)
+  local relay = { origin = "Buddy Alt", oclass = "PRIEST", olevel = "20", okind = "KILL", oid = "du3", ago = "300", alt = "1", data = relayData("Du Alt Foe") }
+  ns.Comm.OnRelay("Buddy Pal", relay)
+  local alt = rr.players["Buddy Alt"]
+  local ak = alt and alt.k
+  ns.Comm.OnRelay("Buddy Pal", relay)
+  ns.Comm.OnRelay("Alice Wonder", relay)
+  check(not alt or alt.k == ak, "an alt's kill passed on twice: counted once")
+
+  -- 5. your own event echoed back to you
+  local mine = rr.players[ns.me]
+  local mk, feedWas = mine and mine.k or 0, #rr.feed
+  ns.Comm.OnRelay("Buddy Pal", { origin = ns.me, oclass = "MAGE", olevel = "60", okind = "KILL", oid = "du4", ago = "300", data = relayData("Du Echo") })
+  check((mine and mine.k or 0) == mk and #rr.feed == feedWas, "your own kill echoed back: not counted again")
+  check(logHas("RELAY-DROP", "own event"), "...and the reason is logged")
+
+  -- 6. a friend's KILL plus their AST for the same victim
+  foe("Du Five")
+  local c5 = C.Post({ name = "Du Five", class = "ROGUE", level = 24 }, 50000, 3)
+  local k2 = buddy.k
+  bn("KILL", killFields("Du Five"), "du5")
+  bn("AST", { victim = "Du Five", vclass = "ROGUE", vlevel = "24", zone = "Testland", helped = "Alice Wonder" }, "du5a")
+  check(buddy.k == k2 + 1 and slainN("Du Five") == 1 and has(c5.killers, "Buddy Pal") == 1, "a friend's KILL and their own AST: one kill, one killer entry")
+  check(logHas("AST-GOT", "Du Five"), "a received AST is logged")
+
+  -- 7. two honor messages for one death (the second names nobody: no second kill of the victim)
+  local enemyUnits = {}
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName,
+    UnitClass = UnitClass, UnitLevel = UnitLevel, UnitIsDeadOrGhost = UnitIsDeadOrGhost, UnitIsUnit = UnitIsUnit, UnitGUID = UnitGUID }
+  local oEmit = ns.Events.Emit
+  UnitExists = function(u) return enemyUnits[u] ~= nil or o.UnitExists(u) end
+  UnitIsPlayer = function(u) if enemyUnits[u] then return true end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if enemyUnits[u] then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) local e = enemyUnits[u]; if e then return e[1], e[2] end return o.UnitName(u) end
+  UnitClass = function(u) if enemyUnits[u] then return "Rogue", "ROGUE" end return o.UnitClass(u) end
+  UnitLevel = function(u) if enemyUnits[u] then return 24 end return o.UnitLevel(u) end
+  UnitIsDeadOrGhost = function(u) local e = enemyUnits[u]; return e and e[3] or false end
+  UnitIsUnit = function() return false end
+  UnitGUID = function(u)
+    if u == "player" then return "Player-1-00000001" end
+    if enemyUnits[u] then return "Player-1-" .. enemyUnits[u][1] end
+  end
+  local victims = {}
+  ns.Events.Emit = function(kind, f) if kind == "KILL" then victims[#victims + 1] = f.victim end return oEmit(kind, f) end
+  ADVANCE(200)
+  enemyUnits.target = { "Du", "Six", false }
+  FIRE("PLAYER_TARGET_CHANGED")
+  enemyUnits.target[3] = true
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", "You have been awarded 7 Honor.")
+  FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", "You have been awarded 7 Honor.")
+  local named = 0
+  for _, v in ipairs(victims) do if v == "Du Six" then named = named + 1 end end
+  check(named == 1, "two honor messages for one corpse: the victim is named in one KILL only (" .. named .. ")")
+  check(logHas("KILL-DETECT", "nameless honor"), "kill detection logs where the victim name came from")
+  enemyUnits.target = nil
+  ns.Events.Emit = oEmit
+  for k, v in pairs(o) do _G[k] = v end
+  FriendsAndFoesCharDB.streak = 0
+
+  -- 8. notoriety: an old (caught-up) kill pays nothing; a late repeat of a settled claim pays nothing
+  ADVANCE(200)
+  B.SettleAll()
+  foe("Du Seven")
+  local before = B.Mine()
+  ns.past = true
+  B.OnKill(ns.me, "Du Seven", {})
+  ns.past = nil
+  B.SettleAll()
+  check(B.Mine() == before and logHas("BOUNTY-PAST", "Du Seven"), "a caught-up kill pays no notoriety (and says so in the log)")
+  foe("Du Eight")
+  B.OnKill(ns.me, "Du Eight", {})
+  B.SettleAll()
+  local paid = B.Mine() - before
+  check(paid > 0 and logHas("BOUNTY-SETTLE", "your share"), "a live kill pays, and the settle logs your share")
+  ADVANCE(70)
+  B.OnKill(ns.me, "Du Eight", {})
+  B.OnKill("Buddy Pal", "Du Eight", {})
+  B.SettleAll()
+  check(B.Mine() - before == paid and logHas("BOUNTY-LATE", "Du Eight"), "the same death reported 70 s later: no second claim")
+  ADVANCE(150)
+  B.OnKill(ns.me, "Du Eight", {})
+  B.SettleAll()
+  check(B.Mine() - before > paid, "a real second kill much later claims again")
+
+  -- 9. the bounty board: a late duplicate doesn't close again or toast again
+  foe("Du Nine")
+  local c9 = C.Post({ name = "Du Nine", class = "ROGUE", level = 24 }, 50000, 3)
+  C.OnKill("Buddy Pal", "Du Nine", {})
+  local nk = #c9.killers
+  CHAT = {}
+  ns.Events.Apply({ kind = "KILL", id = "du9", from = "Buddy Pal", class = "PRIEST", level = 31, ago = 400, f = killFields("Du Nine", "400") }, false)
+  C.OnKill("Buddy Pal", "Du Nine", {})
+  check(c9.state == "done" and #c9.killers == nk and #CHAT == 0, "a late duplicate kill: the bounty isn't closed or announced again")
+
+  -- the log: rejected bounty message, digest counts
+  bn("BTY", { cid = "x", target = "Du Foe:ROGUE:24:", amount = "0", state = "open", killer = "", age = "0", updage = "0", days = "3", blow = "", last = "", poster = "", killers = "" }, "du-bty")
+  check(logHas("CONTRACT-DROP", "amount"), "a rejected bounty message is logged with its reason")
+  bn("HIT", { share = "dd01", entries = "Du Dig:ROGUE:24::1:1:0:1:Buddy Pal", auto = "1" }, "du-hit")
+  check(logHas("DIGEST-GOT", "entries 1"), "a digest is logged with its counts")
+
+  for _, n in ipairs({ "Du One", "Du Two", "Du Five", "Du Six", "Du Seven", "Du Eight", "Du Nine", "Du Dig", "Du Alt Foe", "Du Echo" }) do rr.players[n], rr.hitlist[n] = nil, nil end
+  FriendsAndFoesDB.contracts = savedContracts
+  ns.S().show.contract = showWas
+  ns.S().debug = debugWas
+  check(ns.errors == errs, "no errors in once-per-death (" .. tostring(ns.lastError) .. ")")
+end
+RUN_TICKERS(80)
+
+-- the Friends tab leaves out friends' characters below level 15 (bank alts, fresh alts)
+do
+  local errs = ns.errors
+  local rr = ns.Data.RealRealm()
+  local S = ns.S()
+  local was = S.hideLowAlts
+  local tagsWas = FriendsAndFoesDB.friendTags
+  FriendsAndFoesDB.friendTags = {}
+  local function mk(name, level, tag)
+    rr.players[name] = { name = name, friend = true, level = level, k = 1, d = 0, sk = 1, sd = 0, lastSeen = time() - 500 }
+    if tag then FriendsAndFoesDB.friendTags[name] = tag end
+  end
+  mk("Lowa Hider", 10, "Lowa#1001")
+  mk("Highr Shown", 20, "Highr#1002")
+  mk("Nolevel Pal", nil, "Nolvl#1003")
+  mk("Zed Tiny", 3, "Zed#9001")
+  mk("Zed Main", 40, "Zed#9001")
+  mk("Zed Mid", 25, "Zed#9001")
+  rr.players["Zed Mid"].lastSeen = time() - 9000
+  local myRec = rr.players[ns.me]
+  local myLevel = myRec and myRec.level
+  if myRec then myRec.level = 5 end
+  local function names()
+    ns.UI.Show("friends")
+    local out = {}
+    for _, r in ipairs(ns.UI.Rows()) do out[r.name] = r end
+    return out
+  end
+
+  S.hideLowAlts = true
+  local rows = names()
+  check(rows["Lowa Hider"] == nil and rows["Highr Shown"] ~= nil, "Friends tab: a level 10 friend character is hidden, a level 20 one shown")
+  check(rows[ns.me] ~= nil and rows[ns.me].me, "Friends tab: your own low level character is still shown")
+  check(rows["Nolevel Pal"] ~= nil, "Friends tab: unknown level is shown")
+  ns.Comm.everyone["Pending Newbie"] = { tag = "Pend#1004", zone = "Elwynn Forest" }
+  rows = names()
+  check(rows["Pending Newbie"] == nil, "Friends tab: a Battle.net friend online without the add-on is not listed")
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("LVL", { level = 30 }, "pnl1"), "WHISPER", 77)
+  check(names()["Buddy Pal"] ~= nil, "Friends tab: a friend who sent an add-on message is listed")
+  ns.Comm.everyone["Pending Newbie"] = nil
+
+  -- ranks stay 1..n after the filter
+  local ranks = {}
+  for _, r in pairs(names()) do if r.rank then ranks[#ranks + 1] = r.rank end end
+  table.sort(ranks)
+  local contiguous = #ranks > 0
+  for i, v in ipairs(ranks) do if v > i then contiguous = false end end
+  check(contiguous and ranks[1] == 1, "Friends tab: ranks have no gaps after filtering")
+
+  -- online on a hidden alt: the account's best shown character says so
+  ns.Comm.everyone["Zed Tiny"] = { tag = "Zed#9001", zone = "Elwynn Forest" }
+  rows = names()
+  check(rows["Zed Tiny"] == nil and rows["Zed Main"] ~= nil, "alt: the hidden alt is not listed")
+  local cols = ns.UI.TabColumns("friends")
+  local nowCell = cols[#cols][3]
+  check(ns.Plain(nowCell(rows["Zed Main"])) == ns.L.FRIEND_ONLINE_ALT and ns.L.FRIEND_ONLINE_ALT == "online (on an alt)",
+    "alt: the level 40 main shows 'online (on an alt)'")
+  check(not rows["Zed Mid"].onAlt and ns.Plain(nowCell(rows["Zed Mid"])) ~= ns.L.FRIEND_ONLINE_ALT, "alt: only the highest-level character of the account")
+  ns.Comm.everyone["Zed Tiny"] = nil
+  rows = names()
+  check(not rows["Zed Main"].onAlt, "alt: nothing said when their account isn't online on a hidden alt")
+  -- all of an account's characters low: nothing shown
+  mk("Lone Alt", 2, "Lone#1005")
+  ns.Comm.everyone["Lone Alt"] = { tag = "Lone#1005" }
+  check(names()["Lone Alt"] == nil, "alt: an account with only low characters shows nothing")
+  ns.Comm.everyone["Lone Alt"] = nil
+
+  -- option off: everyone
+  S.hideLowAlts = false
+  rows = names()
+  check(rows["Lowa Hider"] and rows["Zed Tiny"] and rows["Lone Alt"], "option off: low characters are listed")
+  S.hideLowAlts = true
+
+  -- group boards aren't filtered
+  local calls, orig = 0, ns.Profile.HideLowAlts
+  ns.Profile.HideLowAlts = function(r) calls = r and (calls + 1) or calls; return orig(r) end
+  local g = ns.Groups.Create("Low Level Crew")
+  if g then
+    ns.UI.Show("friends")
+    ns.UI.SetBoardView(g.id)
+    local before = calls
+    local grows = ns.UI.Rows()
+    check(calls == before and #grows >= 1 and grows[1].me ~= nil, "group board: rows aren't filtered")
+    ns.UI.SetBoardView("friends")
+    ns.Groups.Leave(g)
+  else
+    check(true, "group board: (no group could be made here)")
+  end
+  ns.Profile.HideLowAlts = orig
+
+  check(ns.Profile.MIN_LEVEL == 15 and ns.DEFAULTS.hideLowAlts == true, "the filter starts on, at level 15")
+
+  for _, n in ipairs({ "Lowa Hider", "Highr Shown", "Nolevel Pal", "Zed Tiny", "Zed Main", "Zed Mid", "Lone Alt" }) do rr.players[n] = nil end
+  if myRec then myRec.level = myLevel end
+  FriendsAndFoesDB.friendTags = tagsWas
+  S.hideLowAlts = was
+  ns.UI.Show("friends")
+  check(ns.errors == errs, "no errors in the low alt filter (" .. tostring(ns.lastError) .. ")")
+end
+
+-- one toast and one Feed line per death, however many friends report the kill
+do
+  local errs = ns.errors
+  drainToasts()
+  ns.S().show.kill = "toast"
+  ns.S().flavor = true
+  FriendsAndFoesCharDB.streak = 0
+  local function kill(from, victim, extra)
+    local f = { victim = victim, vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    ns.Events.Apply({ kind = "KILL", id = ns.NewId(), from = from, class = "PRIEST", level = 40, f = f }, false)
+  end
+  local function kills() local n, last = 0; for _, e in ipairs(real.feed) do if e.kind == "kill" then n, last = n + 1, e.text end end return n, last end
+  local function count() return ns.Toast.shown or 0, (kills()) end
+  local t0, f0 = count()
+  local aliceK = ns.Data.Player("Alice Wonder").k
+
+  kill("Buddy Pal", "Dup One")
+  ADVANCE(5)
+  kill("Alice Wonder", "Dup One")
+  local t1, f1 = count()
+  check(t1 == t0 + 1 and f1 == f0 + 1, "two friends, one death: one toast, one Feed line (" .. (t1 - t0) .. ", " .. (f1 - f0) .. ")")
+  local line = ns.Plain(select(2, kills()))
+  check(line:find("Buddy Pal and Alice Wonder killed Dup One", 1, true) ~= nil, "the line names both: " .. line)
+  check(ns.Data.Player("Alice Wonder").k == aliceK + 1, "each killer still gets their own count")
+  kill("Carol Third", "Dup One")
+  line = ns.Plain(select(2, kills()))
+  check((kills()) == f1 and line:find("Buddy Pal, Alice Wonder and Carol Third killed", 1, true) ~= nil, "a third killer joins the same line: " .. line)
+
+  kill("Buddy Pal", "Dup One") -- the same friend again: a new death
+  check((kills()) == f1 + 1, "the same friend twice: a second line")
+
+  drainToasts()
+  local t2, f2 = count()
+  kill("Buddy Pal", "Dup Two")
+  ADVANCE(5)
+  local realSeen = ns.PvP.SeenAliveSince
+  ns.PvP.SeenAliveSince = function() return true end
+  kill("Alice Wonder", "Dup Two")
+  ns.PvP.SeenAliveSince = realSeen
+  local t3, f3 = count()
+  check(f3 == f2 + 2 and t3 == t2 + 2, "seen alive in between: a new death, its own toast and line")
+
+  kill("Buddy Pal", "Dup Three")
+  ADVANCE(70)
+  kill("Alice Wonder", "Dup Three")
+  check((kills()) == f3 + 2, "70 s apart: a new death")
+
+  drainToasts()
+  FriendsAndFoesCharDB.streak = 0
+  local t4, f4 = count()
+  ns.Events.Emit("KILL", { victim = "Dup Four", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
+  kill("Alice Wonder", "Dup Four")
+  local t5, f5 = count()
+  check(f5 == f4 + 1 and t5 == t4, "your own kill and a friend's: one line, no toast of yours")
+  line = ns.Plain(select(2, kills()))
+  check(line:find("You and Alice Wonder killed Dup Four", 1, true) ~= nil, "'You and ...': " .. line)
+
+  drainToasts()
+  kill("Buddy Pal", "Dup Five")
+  local t6, f6 = count()
+  kill("Alice Wonder", "Dup Five", { streak = "5" })
+  local t7, f7 = count()
+  check(t7 == t6 + 1 and f7 == f6, "a second killer's streak milestone still toasts (" .. (t7 - t6) .. ")")
+  check(ns.errors == errs, "no errors in one toast per death (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 0.9.4 UI fixes: the Bounty board's row stays on its tab; profile rank = Friends tab rank; alert list
+do
+  local errs = ns.errors
+  local fr = ns.UI.Frames()
+  ns.UI.Show("contracts")
+  check(fr.contractBar:IsShown(), "Bounty board: its bottom row shows")
+  ns.UI.ShowProfile("Rogz Fang")
+  check(ns.UI.CurrentTab() == "profile" and not fr.contractBar:IsShown(), "an enemy's profile from the Bounty board: the board's row is gone")
+  ns.UI.Show("contracts")
+  check(fr.contractBar:IsShown(), "back on the Bounty board: the row is back")
+  ns.UI.Show("hitlist")
+  check(not fr.contractBar:IsShown(), "other tabs: no Bounty board row")
+
+  -- rank: same filtered list as the Friends tab
+  local rr = ns.Data.RealRealm()
+  local hideWas = ns.S().hideLowAlts
+  rr.players["Low Alt"] = { name = "Low Alt", friend = true, k = 500, d = 0, a = 0, level = 5, class = "MAGE", lastSeen = time() }
+  local function rankOf(name)
+    for _, l in ipairs(ns.UI.ProfileView(name).lines) do
+      if l[1] == ns.L.PROF_RANK then return ns.Plain(l[2]) end
+    end
+  end
+  ns.S().hideLowAlts = false
+  local all = #ns.Profile.Board()
+  local pos0
+  for _, r in ipairs(ns.Profile.Board()) do if r.name == "Buddy Pal" then pos0 = r.rank end end
+  check(rankOf("Buddy Pal") == ns.L.PROF_RANK_OF:format(pos0, all), "filter off: rank among everyone (" .. tostring(rankOf("Buddy Pal")) .. ")")
+  check(rankOf("Low Alt") ~= "-" and rankOf("Low Alt"):find("#", 1, true) ~= nil, "filter off: a low alt is ranked")
+  ns.S().hideLowAlts = true
+  local shown = ns.Profile.HideLowAlts(ns.Profile.Board())
+  local pos
+  for _, r in ipairs(shown) do if r.name == "Buddy Pal" then pos = r.rank end end
+  check(#shown == all - 1 and rankOf("Buddy Pal") == ns.L.PROF_RANK_OF:format(pos, #shown), "filter on: rank and total are the Friends tab's (" .. tostring(rankOf("Buddy Pal")) .. ")")
+  check(rankOf("Low Alt") == "-" or rankOf("Low Alt") == ns.Plain(rankOf("Low Alt")) and not rankOf("Low Alt"):find("#", 1, true), "filter on: a hidden low alt shows no rank (" .. tostring(rankOf("Low Alt")) .. ")")
+  ns.S().hideLowAlts = hideWas
+  rr.players["Low Alt"] = nil
+
+  -- alert list: just the names, no "online" tag
+  ns.Comm.ClearPicks()
+  ns.UI.ShowAlertList()
+  local w = ns.UI.AlertListWindow()
+  local onlineAcct
+  for i, a in ipairs(ns.UI.AlertAccounts()) do if a.online then onlineAcct = i end end
+  if onlineAcct then
+    local label = ns.Plain(w.rows and w.rows[onlineAcct].label:GetText() or "")
+    check(not label:find(ns.L.FRIEND_ONLINE, 1, true), "alert list: an online account has no online text (" .. label .. ")")
+  end
+  w:Hide()
+  check(ns.errors == errs, "no errors in the UI fixes (" .. tostring(ns.lastError) .. ")")
+end
+
+-- Recent PvP on profiles: wrapped in full, paged
+do
+  local errs = ns.errors
+  local feed = ns.Data.ViewRealm().feed
+  local base = #feed
+  local pg = ns.UI.Frames().profile.recentPager
+  for _, count in ipairs({ 0, 3, 25 }) do
+    for _, name in ipairs({ ns.me, "Buddy Pal", "Rogz Fang" }) do
+      while #feed > base do table.remove(feed) end
+      for i = 1, count do
+        ns.Data.Feed("attacked", "Rogz Fang and Helper Guy ganked Buddy Pal and Testme Tester near the Tarren Mill graveyard, again and again, number " .. i, name, { name })
+      end
+      ns.UI.ShowProfile(name)
+      check(ns.errors == errs, "recent PvP renders (" .. name .. ", " .. count .. "): " .. tostring(ns.lastError))
+      if count == 25 then
+        check(pg.pages and pg.pages > 1 and pg.label:IsShown() and pg.next:IsShown(), "25 entries on " .. name .. ": more than one page")
+        check(pg.label:GetText() == ns.L.PROF_PAGE:format(1, pg.pages), "page label starts at 1/n")
+        pg.next._scripts.OnClick()
+        check(pg.page == 2 and pg.label:GetText() == ns.L.PROF_PAGE:format(2, pg.pages), "Next advances the page")
+        ns.UI.ShowProfile(name == "Buddy Pal" and ns.me or "Buddy Pal")
+        ns.UI.ShowProfile(name)
+        check(pg.page == 1, "a different profile opens on page 1")
+      elseif count == 3 and name == "Rogz Fang" then
+        -- (older entries from earlier tests may already be in the feed: only a single page hides the arrows)
+        check((pg.pages > 1) == pg.next:IsShown() and (pg.pages > 1) == pg.label:IsShown(), "arrows only with more than one page")
+      end
+    end
+  end
+  while #feed > base do table.remove(feed) end
+  ns.UI.ShowProfile(ns.me)
+  check(ns.errors == errs, "no errors in the recent PvP paging (" .. tostring(ns.lastError) .. ")")
+end
+
+-- clickable names: Feed rows and Recent PvP entries carry player links; clicking one opens the profile
+do
+  local errs = ns.errors
+  local feed = ns.Data.ViewRealm().feed
+  local base = #feed
+  ns.Data.Feed("attacked", "Rogz Fang ganked Buddy Pal near the mill", "Buddy Pal", { "Rogz Fang" })
+  ns.UI.Show("feed")
+  local linked
+  for _, o in ipairs(FRAMES) do
+    if o.cells and o._shown and o.entry and o.entry.text and o.entry.text:find("near the mill", 1, true) then
+      linked = o.cells[2]._text
+    end
+  end
+  check(linked and linked:find("|Hfnfplayer:Rogz Fang|h", 1, true) and linked:find("|Hfnfplayer:Buddy Pal|h", 1, true),
+    "feed row: player names are links (" .. tostring(linked) .. ")")
+  ns.UI.ShowProfile("Buddy Pal")
+  local p = ns.UI.Frames().profile
+  local seen
+  for _, fs in ipairs(p.recent) do
+    if fs._text and fs._text:find("|Hfnfplayer:Rogz Fang|h", 1, true) then seen = true end
+  end
+  check(seen, "recent PvP entry: names are links")
+  check(p._scripts.OnHyperlinkClick and p._scripts.OnHyperlinkEnter and p._scripts.OnHyperlinkLeave, "the profile answers link clicks and hovers")
+  ns.UI.Show("hitlist")
+  p._scripts.OnHyperlinkClick(p, "fnfplayer:Rogz Fang")
+  check(ns.UI.CurrentTab() == "profile" and ns.UI.ProfileName() == "Rogz Fang", "clicking a name link opens that profile")
+  p._scripts.OnHyperlinkClick(p, "item:1234")
+  check(ns.UI.ProfileName() == "Rogz Fang", "other links are ignored")
+  p._scripts.OnHyperlinkEnter(p, "fnfplayer:Rogz Fang")
+  p._scripts.OnHyperlinkLeave(p)
+  -- the open profile's own name is never a link on its page
+  ns.UI.ShowProfile("Rogz Fang")
+  local selfLink, otherLink, headerLink = false, false, false
+  for _, fs in ipairs(p.recent) do
+    if fs._text and fs._text:find("|Hfnfplayer:Rogz Fang|h", 1, true) then selfLink = true end
+    if fs._text and fs._text:find("|Hfnfplayer:Buddy Pal|h", 1, true) then otherLink = true end
+  end
+  for _, fs in ipairs({ p.title, p.sub, p.posterName, p.posterSub }) do
+    if fs._text and fs._text:find("|H", 1, true) then headerLink = true end
+  end
+  check(not selfLink and otherLink and not headerLink, "recent PvP on a profile: no link to itself, a link to the other player")
+  check(ns.UI.LinkName("Rogz Fang", "Rogz Fang", "Rogz Fang") == "Rogz Fang"
+    and ns.UI.LinkName("Rogz Fang", "Rogz Fang", "Other"):find("|Hfnfplayer:Rogz Fang|h", 1, true), "LinkName skips the open profile")
+  while #feed > base do table.remove(feed) end
+  ns.UI.ShowProfile(ns.me)
+  check(ns.errors == errs, "no errors in the name links (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

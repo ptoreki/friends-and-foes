@@ -93,7 +93,6 @@ function UI.Dropdown(parent, width, itemsOrFn, get, set)
   end
   return f
 end
-UI.RefreshSettings = function() if ns.Options then ns.Options.Refresh() end end
 
 ---------------------------------------------------------------------------
 -- window
@@ -124,6 +123,18 @@ local FALLBACK_BACKDROP = {
   tile = true, tileSize = 32, edgeSize = 32,
   insets = { left = 11, right = 12, top = 12, bottom = 11 },
 }
+
+-- The dark dialog art is partly see-through; put a solid fill under it so
+-- nothing behind the window shows through.
+function UI.SolidBackground(f)
+  if not f.CreateTexture then return end
+  local t = f:CreateTexture(nil, "BACKGROUND", nil, -8)
+  t:SetPoint("TOPLEFT", 11, -12)
+  t:SetPoint("BOTTOMRIGHT", -12, 11)
+  t:SetColorTexture(0.05, 0.05, 0.05, 0.97)
+  f.solidBg = t
+  return t
+end
 
 -- Blizzard's plain window frame if available, else a dialog box
 function UI.CreateWindow()

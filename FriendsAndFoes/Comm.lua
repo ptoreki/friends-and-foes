@@ -89,15 +89,23 @@ local SCHEMA = {
   GEAR = { "link", "count", "epics", "ago", "rl" }, -- epics: how many of the batch were epic or better
   ATK  = { "enc", "zone", "attackers", "ago", "rl" },
   DIE  = { "zone", "killer", "conf", "assists", "ended", "ago", "rl" },        -- ended: kill streak this death ended
-  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak", "ago", "rl" }, -- streak: kills in a row incl. this
-  HIT  = { "share", "entries" },
+  KILL = { "victim", "vclass", "vlevel", "vguild", "zone", "streak", "ago", "rl", "blow", "last" }, -- streak: kills in a row incl. this; blow (0.9.4): "1" = the killer's own killing blow, "pet" = their pet's; last: seconds since their last attack on the victim (0-120, "" = unknown)
+  -- a hitlist chunk, "name:class:level:guild:attacks:kills:revenge:hours;..."; auto (0.9.4): "1" =
+  -- the automatic digest a friend sends when you meet (merged quietly, no toast)
+  HIT  = { "share", "entries", "auto" },
+  -- assist (0.9.4): the sender supported (healed, buffed) a friend's live kill without honor of
+  -- their own; helped = that friend. Live only: not kept for catch-up, not passed on.
+  AST  = { "victim", "vclass", "vlevel", "zone", "helped" },
   SIGHT = { "name", "class", "level", "guild", "zone" }, -- a hitlist player spotted by the sender
   ENG  = { "zone", "target", "ago", "rl" }, -- the sender started a fight with an enemy player
   REQ  = { "window" }, -- "I just came online: what happened in the last <window> seconds?"
   -- the sender's profile (0.7): own all-time kills/deaths (empty if they don't share PvP),
-  -- most wanted enemy, zone, status ("" | "afk" | "pvp"). Older clients ignore unknown kinds.
+  -- wanted (most wanted until 0.9.3; always empty now), zone, status ("" | "afk" | "pvp").
+  -- Older clients ignore unknown kinds.
   -- t: when the K/D was last true, on the sender's clock (so relayed copies compare fairly)
-  PRO  = { "k", "d", "wanted", "zone", "status", "t", "bt" }, -- bt (0.9): bounties collected, gold
+  PRO  = { "k", "d", "wanted", "zone", "status", "t", "bt", "btw", "bwk", "rl" }, -- bt (0.9): notoriety (now, after fading); btw: notoriety claimed this week, bwk: that week's start in days (stale = 0); rl (0.9.4): "1" = friends may pass these numbers on (PRL)
+  -- a friend's numbers passed on (0.9.4): only stats, as of time t on their own clock
+  PRL  = { "origin", "k", "d", "t", "bt", "btw", "bwk" },
   -- shared groups (0.7, Groups.lua): a group and some of its members ("First Last:a:j:r;...",
   -- times in base 36 after `base`), and relayed stats ("First Last:k:d:time;...")
   GRP  = { "gid", "name", "owner", "base", "members" },
@@ -110,11 +118,12 @@ local SCHEMA = {
   -- and the answer: one event someone else sent you, with who it's from (origin) and its own
   -- fields joined by "^" in `data`
   RLQ  = { "window", "names" },
-  RLY  = { "origin", "oclass", "olevel", "okind", "oid", "ago", "data" },
+  -- alt (0.9.4): "1" = the origin is the sender's own other character (same Battle.net account)
+  RLY  = { "origin", "oclass", "olevel", "okind", "oid", "ago", "data", "alt" },
   -- the bounty board (0.9.3, Contracts.lua): one of the sender's contracts. target is a unit,
   -- amount in copper, state open|done|paid|cancelled, killer who did it, age/updage: seconds
   -- since it was posted / last changed
-  BTY  = { "cid", "target", "amount", "state", "killer", "age", "updage", "days" }, -- days: how long it's open
+  BTY  = { "cid", "target", "amount", "state", "killer", "age", "updage", "days", "blow", "last", "poster", "killers" }, -- killers (1.0): everyone who got the kill, comma-separated, the lead (= killer) first; days: how long it's open; blow: "1" = the killer landed the killing blow, "pet" = their pet; last: seconds since the killer's last attack on the target; poster (0.9.4): empty = the sender posted it, else the sender passes on that friend's contract
 }
 Comm.SCHEMA = SCHEMA
 
@@ -128,12 +137,13 @@ Comm.KINDS = {
   HIT = { since = "0.2.0" }, SIGHT = { since = "0.6.0" }, ENG = { since = "0.6.1", relay = true },
   REQ = { since = "0.6.3" }, PRO = { since = "0.7.0" }, GRP = { since = "0.7.0" }, GST = { since = "0.7.0" },
   KLQ = { since = "0.7.1" }, KLA = { since = "0.7.1" }, RLQ = { since = "0.7.1" }, RLY = { since = "0.7.1" },
-  BTY = { since = "0.9.3" },
+  BTY = { since = "0.9.3" }, PRL = { since = "0.9.4" }, AST = { since = "0.9.4" },
 }
 
 -- Features and the first version that has them, for "does this friend's add-on do X?"
 Comm.FEATURES = {
   profiles = "0.7.0", groups = "0.7.0", killLists = "0.7.1", relay = "0.7.1", bounties = "0.9.0", contracts = "0.9.3",
+  digest = "0.9.4", contractRelay = "0.9.4", profileRelay = "0.9.4", altCatchup = "0.9.4",
 }
 
 -- true if this version of the add-on has the feature (nil version: unknown, so no)
@@ -152,7 +162,7 @@ end
 -- pick for alerts, and only over Battle.net (no whisper copy)
 local GROUP_KINDS = { GRP = true, GST = true, KLQ = true, KLA = true, BTY = true }
 
-local PRIORITY_OF = { BTY = "normal", RLQ = "normal", RLY = "bulk", KLQ = "normal", KLA = "bulk", GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
+local PRIORITY_OF = { PRL = "bulk", BTY = "normal", RLQ = "normal", RLY = "bulk", KLQ = "normal", KLA = "bulk", GRP = "normal", GST = "normal", PRO = "normal", REQ = "normal", ATK = "high", ENG = "high", DIE = "high", KILL = "high", AST = "high", SIGHT = "high", LVL = "normal", LOOT = "normal", GEAR = "normal", HIT = "bulk" }
 local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 
 ---------------------------------------------------------------------------
@@ -194,7 +204,8 @@ end
 -- Encodes, dropping guild names if needed to fit the 255-byte limit. nil if it still doesn't fit.
 -- Still too long (long names, a long zone): helpers are dropped one at a time, last first - the
 -- killer and the rest of the message always go (a death with 3 helpers could otherwise be lost).
-local TRIM_LISTS = { "assists" }
+local TRIM_LISTS = { "assists", "killers" }
+local TRIM_SEP = { assists = ";", killers = "," }
 function Comm.Fit(msg)
   local payload = Comm.Encode(msg)
   if #payload > MAX_PAYLOAD then payload = Comm.Encode(msg, true) end
@@ -204,7 +215,8 @@ function Comm.Fit(msg)
     for _, field in ipairs(TRIM_LISTS) do
       local list = msg.f[field]
       while #payload > MAX_PAYLOAD and type(list) == "string" and list ~= "" do
-        list = list:match("^(.*);[^;]*$") or "" -- drop the last one
+        local sep = TRIM_SEP[field]
+        list = list:match("^(.*)" .. sep .. "[^" .. sep .. "]*$") or "" -- drop the last one
         sent.f[field] = list
         payload = Comm.Encode(sent, true)
       end
@@ -320,8 +332,41 @@ end
 -- roster, and the groups you share with them, even if you didn't pick them. Keyed by game
 -- account, so a friend re-keyed from "First" to "First Last" isn't greeted twice.
 local greeted = {} -- gameAccountID -> "roster" | "everyone"
+local wasOnline = {}  -- name -> true: who was online at the last roster build
+local offlineAt = {}  -- name -> GetTime() when they dropped out of the roster (for "came back")
+local lastEventFrom = {} -- name -> real time of the newest event received from them (catch-up gaps)
+local lastHeardFrom = {} -- name -> GetTime() of the last message of any kind from them
+
+-- Things that only work for friends whose add-on has a feature (Comm.FEATURES): run now if the
+-- version we know of them has it, else when a message from them shows a version that does. Their
+-- version is only known from their messages, and it may have changed since you last met.
+local waiting = {} -- name -> { feature -> fn }
+function Comm.WhenSupported(name, feature, fn)
+  if Comm.Supports(name, feature) then
+    fn()
+    return true
+  end
+  waiting[name] = waiting[name] or {}
+  waiting[name][feature] = fn
+  return false
+end
+
+local function releaseWaiting(name, version)
+  local w = waiting[name]
+  if not w then return end
+  for feature, fn in pairs(w) do
+    if Comm.VersionSupports(version, feature) then
+      w[feature] = nil
+      ns.Try("greet-" .. feature, fn)
+    end
+  end
+  if next(w) == nil then waiting[name] = nil end
+end
+
 function Comm.GreetNew()
   local profile, groups, present = {}, {}, {}
+  local now = GetTime()
+  local gaps = {} -- name -> seconds they were gone, for friends who came back
   for name, e in pairs(everyone) do
     if e.gid then
       present[e.gid] = true
@@ -330,13 +375,28 @@ function Comm.GreetNew()
       if level == "roster" and greeted[e.gid] ~= "roster" then profile[#profile + 1] = name end
       greeted[e.gid] = level
     end
+    if offlineAt[name] then
+      gaps[name] = now - offlineAt[name]
+      offlineAt[name] = nil
+    end
   end
   for gid in pairs(greeted) do
     if not present[gid] then greeted[gid] = nil end -- offline: greet again when back
   end
+  for name in pairs(wasOnline) do
+    if not everyone[name] then
+      offlineAt[name] = offlineAt[name] or now
+      waiting[name] = nil
+    end
+  end
+  wipe(wasOnline)
+  for name in pairs(everyone) do wasOnline[name] = true end
   if not ns.me then return end
   if #profile > 0 and ns.Profile then ns.Profile.Greet(profile) end
-  for _, name in ipairs(profile) do Comm.AskCatchUpFrom(name) end -- what they did while you were away
+  for _, name in ipairs(profile) do
+    Comm.AskCatchUpFrom(name, gaps[name]) -- what they did while you were away (or while they were gone)
+    Comm.WhenSupported(name, "digest", function() Comm.SendDigest(name) end)
+  end
   if #groups > 0 and ns.Groups then ns.Groups.Greet(groups) end
   if #groups > 0 and ns.Contracts then ns.Contracts.Greet(groups) end -- your bounty board contracts
 end
@@ -526,11 +586,11 @@ function Comm.SendPayload(payload, prio)
   for name in pairs(roster) do sendTo(name, payload, prio) end
 end
 
--- one message to one friend
-function Comm.SendTo(name, msg)
+-- one message to one friend (prio: to override the kind's usual one)
+function Comm.SendTo(name, msg, prio)
   local payload = Comm.Fit(msg)
   if not payload then return end
-  sendTo(name, payload, PRIORITY_OF[msg.kind] or "normal")
+  sendTo(name, payload, prio or PRIORITY_OF[msg.kind] or "normal")
   ns.Debug("SEND", msg.kind, msg.id, "to " .. tostring(name))
 end
 
@@ -543,68 +603,146 @@ function Comm.Broadcast(msg)
 end
 
 ---------------------------------------------------------------------------
--- hitlist sharing (one-time, manual)
+-- hitlist digest (0.9.4): when you meet a friend whose add-on has it, they get your most active
+-- hitlist entries, at most once a week per friend (per BattleTag, so alts count as one). It
+-- merges quietly into their hitlist: no toast, no Feed line. Bulk priority, a few messages.
 ---------------------------------------------------------------------------
-local SHARE_MAX_ENTRIES = 40
+local DIGEST_MAX = 40            -- entries in a digest
+local DIGEST_EVERY = 7 * 24 * 3600 -- per friend
+Comm.DIGEST_MAX, Comm.DIGEST_EVERY = DIGEST_MAX, DIGEST_EVERY
 
-local function encodeEntry(h)
-  local hours = h.lastSeen and math.floor((time() - h.lastSeen) / 3600) or ""
+local function digestText(s) return (tostring(s or ""):gsub("[:;\t|]", " ")) end
+
+-- up to 3 people this enemy killed or attacked: you first, then who they killed (most first), then
+-- who they attacked (latest first); "" when nothing is recorded (such an entry isn't sent)
+local function digestWho(h)
+  local out, seen = {}, {}
+  local function add(n)
+    if type(n) ~= "string" or #out >= 3 then return end
+    n = (n:gsub("[,:;\t|]", ""))
+    if n == "" or seen[n] then return end
+    seen[n] = true
+    out[#out + 1] = n
+  end
+  local kills, att = ns.Data.KillsOn(h), {}
+  for n, t in pairs(type(h.hitWho) == "table" and h.hitWho or {}) do att[#att + 1] = { n, tonumber(t) or 0 } end
+  table.sort(att, function(a, b) if a[2] ~= b[2] then return a[2] > b[2] end return a[1] < b[1] end)
+  for _, v in ipairs(kills) do if v[1] == ns.me then add(v[1]) end end
+  for _, v in ipairs(att) do if v[1] == ns.me then add(v[1]) end end
+  for _, v in ipairs(kills) do add(v[1]) end
+  for _, v in ipairs(att) do add(v[1]) end
+  return table.concat(out, ",")
+end
+
+local function digestEntry(h)
+  local hours = h.lastSeen and math.max(0, math.floor((time() - h.lastSeen) / 3600)) or ""
+  local level = tonumber(h.level)
   return table.concat({
-    (tostring(h.name):gsub("[:;\t]", " ")), h.class or "", h.level or "",
-    ((h.guild or ""):gsub("[:;\t]", " ")), h.attacks or 0, h.kills or 0, h.revenge or 0, hours,
+    digestText(h.name), type(h.class) == "string" and h.class:match("^%u+$") or "", (level and level > 0) and math.floor(level) or "",
+    digestText(h.guild), ns.Count(h.attacks), ns.Count(h.kills), ns.Count(h.revenge), hours, digestWho(h),
   }, ":")
 end
 
--- returns number of entries queued
-function Comm.ShareHitlist()
+-- your hitlist entries that did something (a kill or an attack), most recent first, at most `max`
+function Comm.DigestList(max)
   local list = {}
-  for _, h in pairs(ns.Data.RealRealm().hitlist) do list[#list + 1] = h end
-  table.sort(list, function(a, b) return (a.lastSeen or 0) > (b.lastSeen or 0) end)
+  for _, h in pairs(ns.Data.RealRealm().hitlist) do
+    if (ns.Count(h.kills) > 0 or ns.Count(h.attacks) > 0) and digestWho(h) ~= "" then list[#list + 1] = h end
+  end
+  local function recent(h) return math.max(tonumber(h.lastSeen) or 0, tonumber(h.lastOffence) or 0) end
+  table.sort(list, function(a, b)
+    local ra, rb = recent(a), recent(b)
+    if ra ~= rb then return ra > rb end
+    return tostring(a.name) < tostring(b.name)
+  end)
+  while #list > (max or DIGEST_MAX) do table.remove(list) end
+  return list
+end
 
+-- sends the digest to one friend if they're due one; returns how many messages were queued
+function Comm.SendDigest(name)
+  if not (name and roster[name]) or ns.S().share.pvp == false then return 0 end
+  local key = Comm.TagFor(name) or name
+  local db = FriendsAndFoesDB
+  db.digestAt = db.digestAt or {}
+  local now = time()
+  if db.digestAt[key] and now - db.digestAt[key] < DIGEST_EVERY then return 0 end
+  local list = Comm.DigestList()
+  if #list == 0 then return 0 end
   local _, class = UnitClass("player")
   local shareId = ns.NewId()
-  local batch = {}
-  local count = 0
-
+  local function build(batch)
+    return { kind = "HIT", id = ns.NewId(), class = class, level = UnitLevel("player"),
+      f = { share = shareId, entries = table.concat(batch, ";"), auto = "1" } }
+  end
+  local batch, msgs = {}, 0
   local function flush()
     if #batch == 0 then return end
-    local msg = { kind = "HIT", id = ns.NewId(), class = class, level = UnitLevel("player"),
-      f = { share = shareId, entries = table.concat(batch, ";") } }
-    Comm.SendPayload(Comm.Encode(msg), "bulk")
-    wipe(batch)
+    sendTo(name, Comm.Encode(build(batch)), PRIORITY_OF.HIT)
+    msgs = msgs + 1
+    batch = {}
   end
-
-  for i = 1, math.min(#list, SHARE_MAX_ENTRIES) do
-    local e = encodeEntry(list[i])
+  for _, h in ipairs(list) do
+    local e = digestEntry(h)
     batch[#batch + 1] = e
-    local probe = Comm.Encode({ kind = "HIT", id = "x", class = class, level = 60,
-      f = { share = shareId, entries = table.concat(batch, ";") } })
-    if #probe > MAX_PAYLOAD - 8 then
+    if #Comm.Encode(build(batch)) > MAX_PAYLOAD - 5 then
       table.remove(batch)
       flush()
       batch[1] = e
+      if #Comm.Encode(build(batch)) > MAX_PAYLOAD - 5 then batch = {} end -- (one that can't fit alone)
     end
-    count = count + 1
   end
   flush()
-  return count
+  if msgs > 0 then
+    db.digestAt[key] = now
+    for k, t in pairs(db.digestAt) do
+      if now - t > 4 * DIGEST_EVERY then db.digestAt[k] = nil end
+    end
+  end
+  ns.Debug("DIGEST", name, #list, msgs)
+  return msgs
 end
 
 ---------------------------------------------------------------------------
 -- catch-up: when you log in, friends who are online send you their own events from while you
--- were away (up to 12 hours). They land in your Feed and hitlist without alerts.
+-- were away (up to a week; the account keeps the last OUTBOX_MAX events of all your characters).
+-- They land in your Feed and hitlist without alerts. Events of your other characters go too (as
+-- relayed ones, see below), so a friend learns what your alt did as well.
 ---------------------------------------------------------------------------
-local CATCHUP_WINDOW = 24 * 3600
+local CATCHUP_WINDOW = 7 * 24 * 3600
 local CATCHUP_MIN_AWAY = 120 -- a /reload or a quick relog doesn't ask
-local OUTBOX_MAX = 100
+local OUTBOX_MAX = 250 -- (each one is a message to every friend who logs in: kept modest)
 local CATCHUP_KINDS = { LVL = true, LOOT = true, GEAR = true, ATK = true, ENG = true, DIE = true, KILL = true }
 Comm.CATCHUP_WINDOW = CATCHUP_WINDOW
 
--- your own recent events, per character
-local function outbox()
+-- Your recent events, account-wide (FriendsAndFoesDB.outbox, time order, OUTBOX_MAX in all): each
+-- entry says which of your characters it's from (who, with its class c and level l). Until 0.9.4
+-- each character kept its own list: that old list is merged in once, at login.
+local function mergeOldOutbox()
   local c = FriendsAndFoesCharDB
-  c.outbox = c.outbox or {}
-  local box, now = c.outbox, time()
+  if not c or c.outboxMoved or not ns.me then return end
+  c.outboxMoved = true
+  local old = c.outbox
+  c.outbox = nil
+  if type(old) ~= "table" or #old == 0 then return end
+  local db = FriendsAndFoesDB
+  db.outbox = db.outbox or {}
+  local _, class = UnitClass("player")
+  local level = UnitLevel("player")
+  for _, e in ipairs(old) do
+    e.who, e.c, e.l = e.who or ns.me, e.c or class, e.l or level
+    db.outbox[#db.outbox + 1] = e
+  end
+  table.sort(db.outbox, function(a, b) return (a.t or 0) < (b.t or 0) end)
+  ns.Debug("OUTBOX-MERGED", ns.me, #old)
+end
+Comm.MergeOldOutbox = mergeOldOutbox
+
+local function outbox()
+  mergeOldOutbox()
+  local db = FriendsAndFoesDB
+  db.outbox = db.outbox or {}
+  local box, now = db.outbox, time()
   while #box > 0 and (now - (box[1].t or 0) > CATCHUP_WINDOW or #box > OUTBOX_MAX) do table.remove(box, 1) end
   return box
 end
@@ -617,8 +755,9 @@ function Comm.Remember(kind, id, fields)
     local v = fields[k]
     if k ~= "ago" and (type(v) == "string" or type(v) == "number") then f[k] = v end
   end
+  local _, class = UnitClass("player")
   local box = outbox()
-  box[#box + 1] = { t = time(), kind = kind, id = id, f = f }
+  box[#box + 1] = { t = time(), kind = kind, id = id, f = f, who = ns.me, c = class, l = UnitLevel("player") }
   outbox()
 end
 
@@ -660,8 +799,21 @@ end
 
 -- a friend came online after you did: they may have played while you were offline, so ask them
 -- too (once per session; events you already got live are skipped by the receiving side)
-function Comm.AskCatchUpFrom(name)
-  if not (loginAsked and awayFrom) or askedThisSession[name] then return false end
+-- gap: seconds they were gone, if they just came back after being offline this session. Then
+-- (a disconnect, a relog) they're asked again, only for what came after the newest event you have
+-- from them; a friend you have no event from yet isn't asked again.
+local REAPPEAR_GAP = 120
+function Comm.AskCatchUpFrom(name, gap)
+  if askedThisSession[name] then
+    local last = lastEventFrom[name]
+    if not (gap and gap >= REAPPEAR_GAP and last) then return false end
+    local window = math.floor(math.min(time() - last + 5, CATCHUP_WINDOW))
+    if window < 1 then return false end
+    sendTo(name, Comm.Encode(reqMessage(window)), PRIORITY_OF.REQ)
+    ns.Debug("CATCHUP-ASK-BACK", name, window)
+    return true
+  end
+  if not (loginAsked and awayFrom) then return false end
   askedThisSession[name] = true
   local away = time() - awayFrom
   if away < CATCHUP_MIN_AWAY then return false end
@@ -672,6 +824,31 @@ function Comm.AskCatchUpFrom(name)
   return true
 end
 
+-- Once an hour: a friend who is online but sent you nothing at all for an hour may have lost a
+-- message, so they're asked for what came after the newest event you have from them (nothing
+-- missed: they answer with nothing). Friends who sent anything lately are left alone.
+local SILENT_AFTER = 3600
+local lastSilent = 0 -- (when the hourly round last ran)
+local SILENT_MAX = 20 -- friends asked in one round
+function Comm.AskSilent()
+  local now, n = GetTime(), 0
+  for _, name in ipairs(Comm.RosterNames()) do
+    local last, heard = lastEventFrom[name], lastHeardFrom[name]
+    if last and n < SILENT_MAX and (not heard or now - heard >= SILENT_AFTER) then
+      local window = math.floor(math.min(time() - last + 5, CATCHUP_WINDOW))
+      if window >= 1 then
+        sendTo(name, Comm.Encode(reqMessage(window)), PRIORITY_OF.REQ)
+        n = n + 1
+      end
+    end
+  end
+  if n > 0 then ns.Debug("CATCHUP-ASK-SILENT", n) end
+  return n
+end
+
+-- newest event time (your clock) received from a friend this session, or nil
+function Comm.LastEventFrom(name) return lastEventFrom[name] end
+
 -- for tests: pretend you went offline at `t` and the login ask is done
 function Comm.SetAwayFrom(t)
   awayFrom, loginAsked = t, true
@@ -680,7 +857,10 @@ end
 
 -- a friend just logged in: send them our own events from the window they missed
 local answered = {}
-function Comm.AnswerCatchUp(name, window)
+local relayPayload -- (below)
+-- version: what their message said (else the one we know of them): events of your other
+-- characters only go to friends whose add-on takes them (altCatchup)
+function Comm.AnswerCatchUp(name, window, version)
   window = math.min(tonumber(window) or 0, CATCHUP_WINDOW)
   if window <= 0 then return 0 end
   if answered[name] and GetTime() - answered[name] < 60 then return 0 end
@@ -694,14 +874,22 @@ function Comm.AnswerCatchUp(name, window)
   local now, n = time(), 0
   local _, class = UnitClass("player")
   local share = ns.S().share
+  local rec = ns.Data.FindPlayer(key)
+  local altsOk = Comm.VersionSupports(version or (rec and rec.version), "altCatchup")
   for _, e in ipairs(outbox()) do
     local ago = now - e.t
     local cat = ns.Events.SHARE[e.kind]
     if ago <= window and cat and share[cat] then
-      local f = {}
-      for k, v in pairs(e.f) do f[k] = v end
-      f.ago = math.max(1, ago)
-      local payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = UnitLevel("player"), f = f })
+      local payload
+      if not e.who or e.who == ns.me then
+        local f = {}
+        for k, v in pairs(e.f) do f[k] = v end
+        f.ago = math.max(1, ago)
+        payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = UnitLevel("player"), f = f })
+      elseif altsOk then
+        -- another of your characters: passed on as theirs (only your own share settings apply)
+        payload = relayPayload({ o = e.who, c = e.c, l = e.l, k = e.kind, id = e.id, f = e.f }, ago, false, true)
+      end
       if payload then
         sendTo(key, payload, "bulk")
         n = n + 1
@@ -798,7 +986,8 @@ function Comm.AskRelay(window, onlyName)
 end
 
 -- one event passed on, as an RLY payload (guild names dropped if it doesn't fit; nil if still not)
-local function relayPayload(e, ago, dropGuilds)
+-- (alt: the origin is your own other character)
+function relayPayload(e, ago, dropGuilds, alt)
   local parts = {}
   for _, k in ipairs(SCHEMA[e.k]) do
     if k ~= "ago" and k ~= "rl" then
@@ -810,10 +999,10 @@ local function relayPayload(e, ago, dropGuilds)
   local _, class = UnitClass("player")
   local payload = Comm.Encode({ kind = "RLY", id = ns.NewId(), class = class, level = UnitLevel("player"),
     f = { origin = e.o, oclass = e.c or "", olevel = e.l or "", okind = e.k, oid = e.id,
-      ago = math.max(1, ago), data = table.concat(parts, SEP) } })
+      ago = math.max(1, ago), data = table.concat(parts, SEP), alt = alt and "1" or "" } })
   if #payload <= MAX_PAYLOAD then return payload end
   if dropGuilds then return nil end
-  return relayPayload(e, ago, true)
+  return relayPayload(e, ago, true, alt)
 end
 
 -- a friend asked: pass on what the friends they named did (not their own events: they know those)
@@ -852,17 +1041,32 @@ end
 function Comm.OnRelay(relayer, f)
   local origin = ns.CleanName(f.origin)
   local kind, oid = f.okind, f.oid
-  if not (origin and CATCHUP_KINDS[kind] and type(oid) == "string" and oid ~= "" and not oid:find("^S")) then return end
-  if origin == ns.me or origin == relayer then return end
-  -- only your own friends' events, and your picks still count
+  if not (origin and CATCHUP_KINDS[kind] and type(oid) == "string" and oid ~= "" and not oid:find("^S")) then ns.Debug("RELAY-DROP", relayer, "bad origin or kind", tostring(kind)) return end
+  if origin == ns.me or origin == relayer then ns.Debug("RELAY-DROP", relayer, origin, "their own or your own event") return end
   local rec = ns.Data.FindPlayer(origin)
-  if not ((rec and rec.friend and not rec.self) or everyone[origin]) then return end
-  if Comm.GroupActive() and not Comm.Allowed(Comm.TagFor(origin)) then return end
+  local tag
+  if f.alt == "1" then
+    -- another character of the friend who sent this (same Battle.net account): their friend too.
+    -- Never someone you know as an enemy, and never a name already tied to another account.
+    if (rec and rec.enemy and not rec.friend) or ns.Data.FindHit(origin) then ns.Debug("RELAY-DROP", relayer, origin, "alt: an enemy or hitlist player") return end
+    tag = Comm.TagFor(relayer)
+    local known = (FriendsAndFoesDB.friendTags or {})[origin]
+    if known and tag and known ~= tag then ns.Debug("RELAY-DROP", relayer, origin, "alt: tied to another account") return end
+    if Comm.GroupActive() and not Comm.Allowed(tag) then ns.Debug("RELAY-DROP", relayer, origin, "alt: not allowed in your group") return end
+  else
+    -- only your own friends' events, and your picks still count
+    if not ((rec and rec.friend and not rec.self) or everyone[origin]) then ns.Debug("RELAY-DROP", relayer, origin, "not your friend") return end
+    if Comm.GroupActive() and not Comm.Allowed(Comm.TagFor(origin)) then ns.Debug("RELAY-DROP", relayer, origin, "not allowed in your group") return end
+  end
   local ago = tonumber(f.ago)
-  if not ago or ago < 1 or ago > CATCHUP_WINDOW then return end
+  if not ago or ago < 1 or ago > CATCHUP_WINDOW then ns.Debug("RELAY-DROP", relayer, origin, "bad age " .. tostring(f.ago)) return end
   local key = origin .. ":" .. oid
-  if got()[key] then return end -- already have it (live, from them, or from another friend)
+  if got()[key] then ns.Debug("DUP", key, "relayed copy of something already received") return end -- already have it (live, from them, or from another friend)
   got()[key] = time()
+  if tag then
+    rememberTag(origin, tag) -- (so your alert list picks apply to this character too)
+    ns.Data.Player(origin).friend = true
+  end
   local fields, vals, i = {}, ns.Split(f.data or "", SEP), 0
   for _, k in ipairs(SCHEMA[kind]) do
     if k ~= "ago" and k ~= "rl" then
@@ -883,7 +1087,14 @@ ns.OnReady(function()
   db.lastOnline = time()
   awayFrom = last or (time() - CATCHUP_WINDOW)
   pruneGot()
+  ns.Try("outbox-merge", mergeOldOutbox)
   C_Timer.NewTicker(60, function() FriendsAndFoesDB.lastOnline = time() end)
+  lastSilent = GetTime()
+  C_Timer.NewTicker(3600, function()
+    if GetTime() - lastSilent < 3500 then return end
+    lastSilent = GetTime()
+    ns.Try("catchup-silent", Comm.AskSilent)
+  end)
   -- the roster is built a few seconds after login
   C_Timer.After(15, function()
     ns.Try("catchup", Comm.AskCatchUp, last)
@@ -929,7 +1140,7 @@ local function accept(text, routeName, via)
   local sender = senderOf(msg, routeName)
   if not sender then return end
   local key = sender .. ":" .. msg.id
-  if seen[key] then return end
+  if seen[key] then ns.Debug("DUP", key, via .. " (the same message came by another route)") return end
   seen[key] = GetTime()
   seenCount = seenCount + 1
   if seenCount > 400 then
@@ -943,8 +1154,12 @@ local function accept(text, routeName, via)
   end
   msg.from = sender
   ns.Debug("RECV", via, routeName, sender, msg.kind, msg.id)
+  lastHeardFrom[sender] = GetTime()
+  -- (their version is known now)
+  if waiting[sender] then releaseWaiting(sender, msg.version) end
+  if waiting[routeName] then releaseWaiting(routeName, msg.version) end
   if msg.kind == "REQ" then
-    Comm.AnswerCatchUp(sender, msg.f.window)
+    Comm.AnswerCatchUp(sender, msg.f.window, msg.version)
     return sender
   end
   if msg.kind == "RLQ" then
@@ -958,10 +1173,16 @@ local function accept(text, routeName, via)
   if CATCHUP_KINDS[msg.kind] then
     local ago = tonumber(msg.f.ago)
     if ago and ago > 0 then
-      if got()[key] then return sender end -- already seen live
+      if got()[key] then ns.Debug("DUP", key, "catch-up copy of something already seen") return sender end -- already seen live
       msg.ago = math.min(ago, CATCHUP_WINDOW)
     end
+    if not ago and got()[key] then ns.Debug("DUP", key, "live copy of something already received (relayed)") return sender end
     got()[key] = time()
+    if not msg.id:find("^S") then
+      -- the newest of their events you have, as it really happened (for gaps while you're both online)
+      local at = time() - (msg.ago or 0)
+      if at > (lastEventFrom[sender] or 0) then lastEventFrom[sender] = at end
+    end
     -- kept to pass on to your other friends later, if the sender allows it
     if msg.f.rl == "1" and not msg.id:find("^S") then Comm.Hear(sender, msg) end
   end

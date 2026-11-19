@@ -23,42 +23,10 @@ local function groupCommand(arg)
     UI.TogglePick(name)
     return
   end
-  ns.Comm.RebuildRoster()
-  print(prefix .. (ns.Comm.GroupActive() and L.PICK_HINT_ACTIVE or L.PICK_HINT_ALL))
-  local names = ns.Comm.EveryoneNames()
-  if #names == 0 then print("  " .. L.SHARE_NO_FRIENDS) end
-  for _, name in ipairs(names) do
-    local tag = ns.Comm.TagFor(name)
-    local mark = ns.Comm.Allowed(tag) and "|cff33ff33[x]|r " or "[ ] "
-    print("  " .. mark .. name .. " (" .. tostring(tag or "?") .. ")")
-  end
-  print("  " .. L.PICK_USAGE)
+  UI.ShowAlertList() -- (the window; /fnf alerts <name> and /fnf alerts all still work)
 end
 
 SLASH_FRIENDSANDFOES1 = "/fnf"
--- /fnf wanted [name | clear]: no name = your current target
-local function wantedCommand(arg)
-  local prefix = "|cff33ff99" .. L.ADDON .. "|r "
-  if arg:lower() == "clear" then
-    ns.Profile.SetWanted(nil)
-    print(prefix .. L.WANTED_CLEARED)
-    return
-  end
-  local name = ns.CleanName(arg)
-  if not name then
-    local info = ns.PvP.ReadEnemy("target")
-    name = info and info.name
-  end
-  if not name then
-    print(prefix .. L.WANTED_USAGE)
-    return
-  end
-  -- a bare first name means the one enemy you know by it, if there's exactly one
-  local players = ns.Data.RealRealm().players
-  name = ns.Data.Resolve(players, name)
-  print(prefix .. L.WANTED_SET:format(ns.Profile.SetWanted(name)))
-  UI.Refresh()
-end
 
 -- "<group name> <rest>": the longest group name the text starts with
 local function splitGroup(text)
@@ -121,15 +89,13 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   if msg == "" then
     UI.Toggle()
   elseif msg == "board" or msg == "leaderboard" then
-    UI.Show("board")
+    UI.Show("friends") -- (the Leaderboard is part of the Friends tab now)
   elseif msg == "groups" or msg:find("^groups ") then
     groupsCommand(strtrim(raw:sub(7)))
     UI.Refresh()
   elseif msg == "profile" or msg:find("^profile ") then
     local who = strtrim(raw:sub(8))
     UI.ShowProfile(who ~= "" and (ns.CleanName(who) or who) or ns.me)
-  elseif msg == "wanted" or msg:find("^wanted ") then
-    wantedCommand(strtrim(raw:sub(7)))
   elseif msg == "settings" or msg == "config" or msg == "options" then
     UI.OpenSettings()
   elseif msg == "unlock" then
@@ -140,15 +106,14 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     ns.Toast.Test()
   elseif msg == "status" then
     ns.PrintStatus()
-  elseif msg == "share" then
-    UI.ShareHitlist()
   elseif msg == "debug" then
     ns.SetDebug(not ns.S().debug)
     print(prefix .. "debug: " .. (ns.S().debug and "on" or "off"))
-    UI.RefreshSettings()
   elseif msg == "tour" then
     UI.Show()
     ns.Tour.Show(FriendsAndFoesFrame)
+  elseif msg == "new" or msg == "whatsnew" or msg == "changes" then
+    ns.WhatsNew.ShowCurrent()
   elseif msg == "report" then
     ns.Report.Show()
   elseif msg == "debug clear" then
@@ -170,7 +135,7 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
       ns.S().toastDuration = n
       print(prefix .. L.DURATION_SET:format(n))
     else
-      print(prefix .. L.DURATION_USAGE:format(tonumber(ns.S().toastDuration) or 3))
+      print(prefix .. L.DURATION_USAGE:format(tonumber(ns.S().toastDuration) or ns.DEFAULT_TOAST_DURATION))
     end
   elseif msg == "minimap reset" then
     local mm = ns.S().minimap
@@ -198,7 +163,7 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
   elseif msg == "group" or msg:find("^group ") then
     groupCommand(strtrim(msg:sub(6))) -- (the old name of /fnf alerts)
   elseif msg == "sim" or msg:find("^sim ") then
-    ns.Sim.Command(strtrim(msg:sub(4)))
+    ns.Toast.Test() -- (the old simulation: now the same quick test as /fnf test)
   else
     print(prefix .. L.HELP)
   end

@@ -1,51 +1,75 @@
 # Friends & Foes
 
-**Summary (short description field):**
-See your Battle.net friends' level-ups, epic loot and world PvP fights, and put a bounty on everyone who ganks your group.
-
-**Longer summary (for an intro paragraph, Wago's description, or a forum post):**
-Friends & Foes keeps your friend group connected in WoW Forever, even when you're not playing side by side. When a friend levels up, loots an epic or gets new gear, you hear about it. When they're attacked near you, killed, or score a kill in world PvP, you get an alert with who and where. Everyone who kills one of you, or attacks one of you first, goes on a shared hitlist, with a Wanted poster and notoriety that grows with every murder. They get a skull on their nameplate, and you're told when you or a friend spots them again. Want them gone? Post a bounty in gold on the Bounty board, and pay whoever gets them. Every alert can be a toast, a chat line or off, and it stays quiet until something worth knowing happens.
+**Summary (short description field, CurseForge and Wago):**
+World PvP alerts, a shared hitlist and bounties for you and your Battle.net friends in WoW Forever.
 
 ---
 
 ## Friends & Foes
-Stay connected with your friends in WoW Forever. See their level-ups, epic loot and world PvP fights, and never forget who ganked your group.
-> **Beta:** still being tested. Report anything odd (see below).
-### What you get
-- **Friends' progress:** level-ups, epic loot and new gear. Big moments (level 60, epic BoE, revenge, kill streaks) always pop up.
-- **World PvP alerts:** a friend attacked, attacking someone, killed, or getting a kill, with who and where.
-- **Hitlist:** anyone who kills you or a friend, or attacks one of you first. Hover them to see who of your friends they killed and how often. They get a nameplate skull, and you're alerted when you or a friend spots them.
-- **Wanted posters & notoriety:** every enemy who hurts your group has a Wanted poster with their face, what they've done, and their notoriety (points, just for fun). Kill them to claim it, shared with the friends who help.
-- **Bounty board:** put your own bounty on an enemy player in gold, silver and copper, for as many days as you like (up to 30). Your friends get a toast, and whoever kills them gets paid by you, by trade in the game. Finished bounties stay on the board with who closed them. A promise between friends: the add-on never moves gold.
-- **Leaderboard:** world PvP kills, deaths, K/D and notoriety claimed for you and your friends, all-time.
-- **Shared groups:** follow a group's stats together, with group totals. Members pass numbers along, so not everyone needs to be friends with everyone.
-- **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted, where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy for your friends to see.
-- **Tracking:** kills and deaths per player, plus a weekly summary with your nemesis.
-- **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short (*"Bob killed by Rogz · Duskwood"*).
+
+**Know when a friend is in a fight, remember who ganked your group, and make them pay.**
+
+Friends & Foes connects you and your Battle.net friends in WoW Forever, even when you're not playing side by side. When a friend is attacked, killed or gets a kill in world PvP, you know who did it and where. Everyone who hurts one of you goes on a shared hitlist with a Wanted poster, and you can put a bounty on their head.
+
+### World PvP alerts
+- A friend is **attacked**, **killed**, **attacks someone** or **gets a kill**: one alert with who and where.
+- When several of you kill the same enemy, you get **one** alert naming everyone.
+- When the game says who landed the **killing blow** (yours, your DoT's or your pet's), the victim is named exactly and the kill is marked.
+- **Milestones always pop up:** level 60, a looted epic BoE, revenge for a friend, kill streaks.
+
+### The hitlist
+- Anyone who **kills** one of you, or **attacks** one of you first, goes on it.
+- A **skull** on their nameplate, their record in the tooltip, and an alert when you or a friend spots them.
+- Friends' hitlists help fill yours, but only with enemies who hurt you, them or a friend you have in common.
+- You choose how long they're remembered: by default attackers for 2 weeks, killers forever.
+
+### Wanted posters & notoriety
+- Every enemy who hurts your group has a **Wanted poster**: their face (once you've seen them), what they've done, and a rank from *Nuisance* to *Public Enemy*.
+- Killing them earns you **notoriety** (points, just for fun): far more for a ganker on your hitlist than for a random, more while they're **on a rampage**.
+- Killing the same player again within 30 minutes is worth less each time (half, a quarter, then nothing), so camping doesn't pay. Fighting back makes them worth full value again.
+- **Level counts:** grey players give nothing and lower levels give less, while players above your level give up to half again as much.
+- Shared equally with everyone who got the kill, including a friend who **healed** you through the fight.
+- Climb from *Tracker* to *Legend*. Big takedowns get a toast for the whole group. Your notoriety fades if you stop hunting.
+
+### Bounty board
+- Put your own bounty on an enemy player, in **gold, silver and copper**, for **1 to 30 days**. Your friends see it and get a toast.
+- Whoever kills them completes it; several of you share it equally. You pay them by **trade in the game**, then mark it paid.
+- Finished bounties stay on the board with who closed them.
+- A promise between friends: the add-on never moves gold, and it's in-game gold only.
+
+### Your friends
+- The **Friends** tab ranks you and your friends who run the add-on: kills, deaths, K/D, notoriety, bounty gold collected, and where everyone is right now. Low-level bank alts are hidden.
+- **Shared groups:** follow a group's stats together, even with friends of friends.
+- **Profiles:** click any name for their record, nemesis, victims, recent fights and the bounties on them.
+- **Friends' progress:** level-ups, epic loot and new epic gear.
+
+### Missed something?
+Alerts are live, but when you log in, your friends fill you in on the **last week** quietly, including what they did on their alts and what your other friends did while you were never online together.
+
 ### Getting started
-Install it, and have your friends install it too. Battle.net friends playing WoW Forever on your faction are found automatically; no grouping needed. Type **/fnf** or click the minimap button.
+Install it, and have your friends install it too. Battle.net friends playing WoW Forever on your faction are found automatically; no grouping needed. Type **/fnf** or click the minimap button. **Options → AddOns → Friends & Foes → Test alerts** shows you what everything looks like.
+
 ### Options
-In **Options → AddOns → Friends & Foes**:
-- Per event: toast, chat line or off, with or without sound, and which sound.
-- How often level-ups show, and which gear quality counts.
-- Dungeons, raids and battlegrounds: show alerts, wait until you're out, or turn them off.
+- Four kinds of alerts (fights, sightings, progress, bounties): toast, chat line or off, with or without sound, and your own sounds.
 - Toast style (**Modern**, **Classic**, **Alliance** or **Horde**), size, duration, position and stacking.
-- What you share, and which friends you share with.
+- Dungeons, raids and battlegrounds: show alerts, wait until you're out, or off.
+- What you share, and with which friends (your alert list).
+- How long attackers and killers stay on your hitlist.
+
 ### Good to know
-- Everything runs inside the game. No accounts or outside programs.
-- A kill is any honorable kill you got honor for: add-ons can't see who landed the killing blow.
-- Alerts are live only, but when you log in, online friends fill your Feed and hitlist with what
-  you missed. Options can't be opened in combat.
-Includes ProfanityLib (by Deathwing) to filter offensive words out of group names. Licensed under the GNU GPL v3.
+- Everything runs inside the game. No accounts, websites or outside programs, and only your Battle.net friends ever see your data.
+- WoW Forever add-ons can't read the combat log, so each player's add-on reports what happened to *them*. The more of your friends run it, the more you see.
+- Includes ProfanityLib (by Deathwing) to filter offensive words out of group names. Licensed under the GNU GPL v3.
 
 **Something not working?** Turn on **Debug logging** (Options → Advanced, or **/fnf debug**), play until it happens, then type **/fnf report**, copy the box and paste it into a comment or issue.
 
 ---
 
 ## Screenshots to upload (in this order, with these captions)
-1. **An enemy's Wanted poster** (someone you've seen, so their face shows): *"Every ganker gets a Wanted poster."*
-2. **The Leaderboard** with a few friends and the Notoriety column: *"Who's the deadliest of your friends?"*
-3. **A toast** for a friend's kill or death (/fnf test): *"Know when a friend is in a fight, and where."*
+1. **An enemy's Wanted poster** (someone you've seen, so their face shows, ideally Wanted or higher): *"Every ganker gets a Wanted poster."*
+2. **A kill toast** naming two friends (or /fnf test): *"Know when a friend is in a fight, and where."*
+3. **The Bounty board** with an open and a finished bounty: *"Put a price on their head. Pay whoever gets them."*
 4. **The Hitlist**: *"Everyone who ganked your group, and who they got."*
-5. **Your own profile** with your character: *"Your record, your nemesis, your notoriety."*
-6. **The options page**: *"Every alert: toast, chat line or off."*
+5. **The Friends tab** with a few friends ranked: *"Who's the deadliest of your friends?"*
+6. **Your own profile** with your character and title: *"Your record, your nemesis, your notoriety."*
+7. **The Alerts options page**: *"Every alert: toast, chat line or off."*

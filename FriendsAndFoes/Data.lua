@@ -13,13 +13,6 @@ local function ensure(r)
   return r
 end
 
--- Simulated events (/fnf sim) write to a separate scratch store, never to real data.
-function Data.SimRealm()
-  local db = FriendsAndFoesDB
-  db.sim = db.sim or {}
-  return ensure(db.sim)
-end
-
 -- Storage key. Forever has no realms (GetRealmName is an internal server name that can differ
 -- between friends and logins) and names are unique region-wide, so everything shares one store.
 function Data.StoreKey()
@@ -34,22 +27,9 @@ function Data.RealRealm()
   return ensure(realms[key])
 end
 
--- where writes go right now
-function Data.Realm()
-  if ns.simulating then return Data.SimRealm() end
-  return Data.RealRealm()
-end
-
--- what the window shows
-function Data.ViewRealm()
-  if ns.viewSim then return Data.SimRealm() end
-  return Data.RealRealm()
-end
-
-function Data.ClearSim()
-  FriendsAndFoesDB.sim = nil
-  ns.viewSim = false
-end
+-- (one store: what's written is what the window shows)
+Data.Realm = Data.RealRealm
+Data.ViewRealm = Data.RealRealm
 
 ---------------------------------------------------------------------------
 -- name resolution (WoW Forever: "First Last" is the identity, first names are shared)
@@ -274,7 +254,6 @@ function Data.FoldFirstNames(db)
     moved = moved + foldFirstNames(r.players) + foldFirstNames(r.hitlist)
   end
   for _, r in pairs(db.realms or {}) do realm(r) end
-  if db.sim then realm(db.sim) end
   return moved
 end
 
@@ -322,7 +301,6 @@ function Data.DropAttackOnly(db)
     dropped = dropped + #drop
   end
   for _, r in pairs(db.realms or {}) do store(r) end
-  if db.sim then store(db.sim) end
   db.hitlistKillsOnly = true
   return dropped
 end
@@ -336,11 +314,52 @@ end)
 ---------------------------------------------------------------------------
 -- old data
 ---------------------------------------------------------------------------
-Data.STALE_DAYS = 90        -- hitlist entries fade (grey, listed last) after this long unseen
+Data.STALE_DAYS = 30        -- hitlist entries fade (grey, listed last) after this long unseen
 Data.OLD_LEVEL_DAYS = 30    -- a level seen longer ago than this is shown as "24+"
 Data.FRIEND_HIDE_DAYS = 180 -- offline friends not heard from this long leave the Friends list
+-- how long a hitlist entry stays without anybody seeing it: three options (days, 0 = forever),
+-- one per kind of player; the defaults are set in Core.lua (they fill DEFAULTS)
+Data.DEFAULT_FORGET_ATTACKERS = ns.DEFAULT_FORGET_ATTACKERS
+Data.DEFAULT_FORGET_KILLED_ONCE = ns.DEFAULT_FORGET_KILLED_ONCE
+Data.DEFAULT_FORGET_KILLED_MORE = ns.DEFAULT_FORGET_KILLED_MORE
 
 local function daysSince(t) return t and (time() - t) / 86400 or math.huge end
+
+-- which setting rules an entry (or { kills =, attacks = })
+function Data.ForgetKey(rec)
+  local kills = tonumber(rec and rec.kills) or 0
+  return kills >= 2 and "forgetKilledMore" or kills == 1 and "forgetKilledOnce" or "forgetAttackers"
+end
+
+local FORGET_DEFAULT = {
+  forgetAttackers = Data.DEFAULT_FORGET_ATTACKERS,
+  forgetKilledOnce = Data.DEFAULT_FORGET_KILLED_ONCE,
+  forgetKilledMore = Data.DEFAULT_FORGET_KILLED_MORE,
+}
+
+-- days an entry stays unseen before it is forgotten; nil = never. `pending` ({ key, days }) tries
+-- another value for one setting (the Options confirmation counts with it).
+function Data.ForgetDays(rec, pending)
+  local key = Data.ForgetKey(rec)
+  local days
+  if pending and pending[1] == key then
+    days = tonumber(pending[2])
+  else
+    local s = FriendsAndFoesDB and FriendsAndFoesDB.settings
+    days = tonumber(s and s[key])
+    if days == nil then days = FORGET_DEFAULT[key] end
+  end
+  if not days or days <= 0 then return nil end
+  return days
+end
+
+local function shouldForget(name, h, pending)
+  local days = Data.ForgetDays(h, pending)
+  if not days or daysSince(h.lastSeen or h.firstSeen) <= days then return false end
+  -- an open Bounty board contract keeps an enemy (checked last: only for entries already past due)
+  local open = ns.Contracts and ns.Contracts.On and ns.Contracts.On(name)
+  return not (open and #open > 0)
+end
 
 function Data.IsStale(rec)
   return rec ~= nil and daysSince(rec.lastSeen or rec.firstSeen) > Data.STALE_DAYS
@@ -354,37 +373,48 @@ function Data.FriendIsGone(rec)
   return rec ~= nil and daysSince(rec.lastSeen) > Data.FRIEND_HIDE_DAYS
 end
 
--- Options: forget hitlist players not seen for N days. Entries with a note are always kept.
--- how many entries ForgetOld would remove for this many days (for the confirmation)
-function Data.CountForget(db, days)
+-- how many entries ForgetOld would remove if setting `key` were `days` (for the confirmation)
+function Data.CountForget(db, key, days)
   local n = 0
-  if not days or days <= 0 then return 0 end
+  local pending = key and { key, days } or nil
   for _, r in pairs(db.realms or {}) do
-    for _, h in pairs(r.hitlist or {}) do
-      if not h.note and daysSince(h.lastSeen or h.firstSeen) > days then n = n + 1 end
+    for name, h in pairs(r.hitlist or {}) do
+      if shouldForget(name, h, pending) then n = n + 1 end
     end
   end
   return n
 end
 
 function Data.ForgetOld(db)
-  local days = tonumber(db.settings and db.settings.forgetAfter) or 0
-  if days <= 0 then return 0 end
-  local removed = 0
+  local removed, byKind = 0, {}
   for _, r in pairs(db.realms or {}) do
     ensure(r)
     local drop = {}
     for name, h in pairs(r.hitlist) do
-      if not h.note and daysSince(h.lastSeen or h.firstSeen) > days then drop[#drop + 1] = name end
+      if shouldForget(name, h) then drop[#drop + 1] = name end
     end
-    for _, name in ipairs(drop) do r.hitlist[name] = nil end
+    for _, name in ipairs(drop) do
+      local key = Data.ForgetKey(r.hitlist[name])
+      byKind[key] = (byKind[key] or 0) + 1
+      r.hitlist[name] = nil
+    end
     removed = removed + #drop
   end
-  ns.Debug("FORGET-OLD", days, removed)
+  local parts = {}
+  for key, n in pairs(byKind) do parts[#parts + 1] = key .. "=" .. n end
+  table.sort(parts)
+  ns.Debug("FORGET-OLD", removed, #parts > 0 and table.concat(parts, ", ") or "none")
   return removed
 end
 
-ns.OnReady(function() ns.Try("forget-old", Data.ForgetOld, FriendsAndFoesDB) end)
+-- the login run: say so once if it removed anyone (the Options path asks first instead)
+function Data.ForgetAtLogin()
+  local n = Data.ForgetOld(FriendsAndFoesDB)
+  if n > 0 and ns.Toast and ns.Toast.Chat then ns.Toast.Chat(ns.L.FORGOT_LINE:format(n)) end
+  return n
+end
+
+ns.OnReady(function() ns.Try("forget-old", Data.ForgetAtLogin) end)
 
 -- Drop enemies not seen for 90 days who never hurt us and aren't on the hitlist.
 function Data.Prune()

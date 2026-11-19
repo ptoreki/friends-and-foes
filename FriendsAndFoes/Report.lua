@@ -55,7 +55,7 @@ function Report.Text()
   for k, v in pairs(s.share or {}) do share[#share + 1] = k .. "=" .. onOff(v) end
   table.sort(share)
   add("sharing: " .. table.concat(share, ", "))
-  add("sounds: " .. onOff(s.sound and s.sound.enabled) .. ", window sounds: " .. onOff(s.sound and s.sound.ui ~= false))
+  add("alert sounds: " .. onOff(s.sound and s.sound.enabled))
 
   add("")
   add("== errors (newest last) ==")
@@ -94,6 +94,7 @@ local function build()
       tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 },
     })
   end
+  if ns.UI and ns.UI.SolidBackground then ns.UI.SolidBackground(f) end
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOP", 0, -18)
   title:SetText(L.REPORT_TITLE)

@@ -5,24 +5,28 @@ local _, ns = ...
 -- FriendsAndFoesDB (account-wide: every character on the account shares it)
 --   settings      your options (Core.lua DEFAULTS fills in anything missing)
 --   realms        the data: realms.Forever = { players, hitlist, feed } (Data.lua). Forever has
---                 no realms, so there's one store; `sim` is a separate scratch one for /fnf sim
---   profile       your own profile: most wanted, stats time, bounties collected (Profile, Bounty)
+--                 no realms, so there is one store (an old `sim` store from before 0.9.4 is removed)
+--   profile       your own profile: stats time, notoriety claimed (Profile, Bounty)
 --   friendTags    friends' character names -> BattleTag, for picks (never sent anywhere)
 --   group         your alert list (picked friends, by BattleTag)
 --   groups, relay shared groups and members' relayed cards (Groups.lua); groupStat: your card
 --   got, heard    catch-up: events already received / heard, for passing on (Comm.lua)
+--   outbox        your recent events, all your characters (catch-up; each says which character)
+--   digestAt      when each friend last got your hitlist digest (by BattleTag)
 --   lastOnline    when you were last online (for catch-up)
 --   weekly        this week's summary
+--   repeats       enemy name -> recent claim times (last few, pruned after 30 min; Bounty.lua)
 --   welcomed      the first-run tour was shown
 --   caps          what works on this client (shown in Options and the debug report)
 --   debugLog, errorLog   logs (capped)
 --   dataVersion   which upgrade steps below have run
 -- FriendsAndFoesCharDB (per character)
 --   equipped, seeded     gear you had on, so only newly equipped gear is announced
+--   outboxMoved          this character's old catch-up list was merged into the account one
 --
--- Everything that grows has a limit: feed 500 events, catch-up 24 hours / 300 events, debug
+-- Everything that grows has a limit: feed 500 events, catch-up a week / 250 events, debug
 -- log, error log 50, kill lists (KILL_LIST_MAX victims each), enemy records (PLAYERS_MAX, and
--- harmless ones unseen for 90 days are dropped), hitlist ("Forget after" option).
+-- harmless ones unseen for 90 days are dropped), hitlist (the "Forget ... after" options).
 local Saved = {}
 ns.Saved = Saved
 
@@ -47,7 +51,11 @@ local STEPS = {
     local s = db.settings
     if s.dnd.instance ~= nil then
       if s.dnd.instance == false then
-        for k in pairs(s.where) do s.where[k] = "show" end
+        if type(s.where) == "table" then
+          for k in pairs(s.where) do s.where[k] = "show" end -- (step 10 turns these into one setting)
+        else
+          s.instances = "show"
+        end
       end
       s.dnd.instance = nil
     end
@@ -97,6 +105,89 @@ local STEPS = {
       mm.hide = false
       mm.compartmentDefaulted = nil
     end
+  end,
+  -- 9 (0.9.4): most wanted and hitlist notes are gone (the Bounty board does that job now):
+  -- their saved values are cleared
+  function(db)
+    if db.profile then db.profile.wanted = nil end
+    for _, store in pairs(db.realms or {}) do
+      for _, p in pairs(store.players or {}) do p.wanted, p.bwPaid = nil, nil end
+      for _, h in pairs(store.hitlist or {}) do h.note = nil end
+    end
+  end,
+  -- 10 (0.9.4): "Where it works" is one setting for dungeons, raids and battlegrounds (was one
+  -- each, with a "chat line only" choice): the dungeon choice is kept ("chat line only" becomes
+  -- "wait until I'm out"); the simulation and its separate store are gone
+  function(db)
+    local s = db.settings
+    if type(s.where) == "table" then
+      local v = s.where.party
+      if v == "chat" then v = "hold" end
+      if v == "show" or v == "hold" or v == "off" then s.instances = v end
+      s.where = nil
+    end
+    db.sim = nil
+  end,
+  -- 11 (0.9.4): one sound per kind of alert (was one per alert): the old pick of the alert that
+  -- stands for each kind is kept; "milestones always pop up" and the gear quality are fixed now
+  function(db)
+    local s = db.settings
+    local old = type(s.soundPick) == "table" and s.soundPick or {}
+    -- (a pick that was just the old default for that alert isn't a choice: it isn't carried over)
+    local OLD_DEFAULT = { attacked = "alarm", died = "raidwarning", kill = "levelup", sighting = "mapping" }
+    local function pick(k)
+      local v = old[k]
+      return (type(v) == "string" and v ~= "default" and v ~= OLD_DEFAULT[k]) and v or nil
+    end
+    s.soundPick = {
+      trouble = pick("attacked") or pick("died") or "default",
+      victory = pick("kill") or "default",
+      sighting = old.sighting or "mapping",
+      progress = old.progress or pick("loot") or pick("level") or "default",
+      bounty = old.bounty or pick("contract") or "default",
+    }
+    s.milestones, s.gearMin = nil, nil
+  end,
+  -- 12 (0.9.4): alerts are set in four groups; each group takes its lead alert's setting (a
+  -- friend attacked; epic loot) - except that attacking someone and plain level-ups stay quiet
+  function(db)
+    local s = db.settings
+    if type(s.show) ~= "table" or type(s.sound) ~= "table" then return end
+    local groups = { { "attacked", "engage", "died", "kill" }, { "loot", "gear", "level" } }
+    local quiet = { engage = true, level = true }
+    for _, g in ipairs(groups) do
+      local show, sound = s.show[g[1]], s.sound[g[1]]
+      for _, kind in ipairs(g) do
+        s.show[kind] = show
+        if not quiet[kind] then s.sound[kind] = sound end
+      end
+      s.sound.engage, s.sound.level = false, false
+    end
+  end,
+  -- 13: "Forget hitlist players" is now normal / double / never (the time depends on what the
+  -- player did). The old "never" (forgetAfter 0) was the default, so it can't be told apart from
+  -- a choice: it becomes the new default, "normal", like 90/180/365 days do.
+  function(db)
+    local s = db.settings
+    if s.forgetAfter ~= nil then
+      s.forget = "normal"
+      s.forgetAfter = nil
+    end
+  end,
+  -- 14: the forget mode became three settings (days, 0 = forever): attackers / killed once / killed more
+  function(db)
+    local s = db.settings
+    if s.forget == nil then return end
+    if s.forget == "never" then
+      s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = 0, 0, 0
+    elseif s.forget == "double" then
+      s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = 28, 0, 0
+    else
+      s.forgetAttackers = ns.DEFAULT_FORGET_ATTACKERS
+      s.forgetKilledOnce = ns.DEFAULT_FORGET_KILLED_ONCE
+      s.forgetKilledMore = ns.DEFAULT_FORGET_KILLED_MORE
+    end
+    s.forget = nil
   end,
 }
 Saved.STEPS = STEPS

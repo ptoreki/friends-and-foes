@@ -3,8 +3,8 @@ local issecret = ns.issecret
 
 -- World PvP without the combat log:
 --  * attackers  = opposite-faction players (target/focus/mouseover/nameplates) targeting you when you get hit
---  * killer     = death recap source if readable, else most recent attacker (suspected)
---  * kills      = honorable-kill system messages (counted as takedowns)
+--  * killer     = death recap source if readable, else the encounter's last attacker (suspected)
+--  * kills      = the honor award (its message names no one) plus the victim worked out from the screen; your own killing blow (PARTY_KILL, pets too) names them exactly
 
 local PvP = {}
 ns.PvP = PvP
@@ -33,6 +33,13 @@ local ENGAGE_COOLDOWN = 120
 -- in the last ALIVE_WINDOW seconds: an old corpse you target or ride past isn't your kill.
 local lastAlive = {}
 local ALIVE_WINDOW = 60
+-- enemy name -> GetTime() of your (or your pet's) latest attack on them. With no killing blow
+-- reported, the kill credit goes to whoever attacked the victim last.
+local lastAttack = {}
+-- friend name -> GetTime() of your latest spell cast at them (a heal or buff while they fight). A
+-- friend's kill you helped with, outside their party, gets you no honor of your own (Events.lua, AST).
+local lastSupport = {}
+local SUPPORT_WINDOW = 30
 
 -- true = dead, false = alive, nil = can't tell
 local function isDead(unit)
@@ -130,6 +137,11 @@ local function readEnemy(unit)
     local guild = GetGuildInfo(unit)
     if guild and not issecret(guild) and guild ~= "" then info.guild = guild end
   end
+  -- their GUID: a killing blow (PARTY_KILL) names its victim by it
+  if UnitGUID then
+    local guid = UnitGUID(unit)
+    if type(guid) == "string" and not issecret(guid) then info.guid = guid end
+  end
   local targetsMe = UnitIsUnit(unit .. "target", "player")
   if issecret(targetsMe) then
     ns.SetCap("targeting", "secret")
@@ -141,10 +153,16 @@ local function readEnemy(unit)
   return info
 end
 
+local byGuid, byGuidCount = {}, 0 -- GUID -> enemy info, for killing blows (not saved)
 function PvP.ReadEnemy(unit)
   local ok, info = pcall(readEnemy, unit)
   if ok then
     if info and info.name and isDead(unit) == false then lastAlive[info.name] = GetTime() end
+    if info and info.name and info.guid then
+      if not byGuid[info.guid] then byGuidCount = byGuidCount + 1 end
+      byGuid[info.guid] = info
+      if byGuidCount > 500 then wipe(byGuid); byGuidCount = 0 end
+    end
     return info
   end
   ns.Debug("ERR:readEnemy", unit, info)
@@ -186,6 +204,12 @@ local function remember(info)
     end
     for name, t in pairs(lastAlive) do
       if now - t > 600 then lastAlive[name] = nil end
+    end
+    for name, t in pairs(lastAttack) do
+      if now - t > 600 then lastAttack[name] = nil end
+    end
+    for name, t in pairs(lastSupport) do
+      if now - t > 600 then lastSupport[name] = nil end
     end
   end
 end
@@ -523,12 +547,108 @@ ns.On("NAME_PLATE_UNIT_REMOVED", function(unit)
   end
 end)
 
+-- an enemy you're fighting stays "seen alive" while their health changes: target, focus or a
+-- nameplate (otherwise only targeting, hovering, a new nameplate or a hit on you would note it,
+-- and a fight over a minute long where they never hit you would end in a kill without a name).
+-- At most once a second per unit; health itself is never read, only whether they're alive.
+local healthSeen = {}
+
+-- auto-attack / auto-shot / wand state, tracked from the game's events (the spell-state calls
+-- moved under C_Spell on the modern client, so they aren't relied on)
+local autoAttacking, autoRepeating = false, false
+ns.On("PLAYER_ENTER_COMBAT", function() autoAttacking = true end)
+ns.On("PLAYER_LEAVE_COMBAT", function() autoAttacking = false end)
+ns.On("START_AUTOREPEAT_SPELL", function() autoRepeating = true end)
+ns.On("STOP_AUTOREPEAT_SPELL", function() autoRepeating = false end)
+local function resetAuto() autoAttacking, autoRepeating = false, false end
+ns.On("PLAYER_DEAD", resetAuto)
+ns.On("PLAYER_REGEN_ENABLED", resetAuto)
+function PvP.AutoFlags() return autoAttacking, autoRepeating end
+
+-- true when a game call says yes (and the answer isn't secret); false when it says no or isn't there
+local function flagTrue(fn, ...)
+  if not fn then return false end
+  local ok, v = pcall(fn, ...)
+  return ok and not issecret(v) and v and true or false
+end
+
+-- is `unit` (an enemy player) being hit by you or your pet right now? You auto-attack or
+-- auto-shoot your target, or your pet is on it. Quietly false where the game won't say.
+function PvP.AttackingNow(unit)
+  if unit == "target" or flagTrue(UnitIsUnit, unit, "target") then
+    if autoAttacking or autoRepeating then return true end
+  end
+  if flagTrue(UnitExists, "pettarget") and flagTrue(UnitIsUnit, "pettarget", unit) then return true end
+  return false
+end
+
+local function aliveCheck(unit)
+  if issecret(unit) or type(unit) ~= "string" then return end
+  if unit ~= "target" and unit ~= "focus" and not unit:find("^nameplate%d+$") then return end
+  local now = GetTime()
+  if healthSeen[unit] and now - healthSeen[unit] < 1 then return end
+  healthSeen[unit] = now
+  local info = PvP.ReadEnemy(unit) -- (notes them alive, see PvP.ReadEnemy)
+  if info and info.name and PvP.AttackingNow(unit) then lastAttack[info.name] = now end
+end
+PvP.AliveCheck = aliveCheck -- (for tests)
+ns.On("UNIT_HEALTH", aliveCheck)
+
+-- a spell you just cast at someone: the target comes as a name ("First", or "First Last")
+ns.On("UNIT_SPELLCAST_SENT", function(unit, target)
+  if issecret(unit) or unit ~= "player" then return end
+  if issecret(target) or type(target) ~= "string" or target == "" then return end
+  local info = findByName(seen, target)
+  if info and info.name then lastAttack[info.name] = GetTime() end
+  -- a friend (a bare first name counts when exactly one friend has it): heals and buffs
+  local friend = nil
+  if not target:find(" ", 1, true) then
+    local n = 0
+    for name in pairs(ns.Data.Realm().players) do
+      if name ~= ns.me and name:find(" ", 1, true) and ns.FirstName(name) == target and ns.Data.OnOurSideName(name) then
+        friend, n = name, n + 1
+      end
+    end
+    if n ~= 1 then friend = nil end
+  end
+  if not friend and ns.Data.OnOurSideName(target) then friend = target end
+  if friend and friend ~= ns.me and not (info and info.name) then lastSupport[friend] = GetTime() end
+end)
+
+PvP.SUPPORT_WINDOW = SUPPORT_WINDOW
+-- did you cast something at this friend in the last `seconds` (default SUPPORT_WINDOW)?
+function PvP.SupportedRecently(friend, seconds)
+  local t = friend and lastSupport[friend]
+  if not t then return false end
+  return GetTime() - t <= (seconds or SUPPORT_WINDOW)
+end
+
+-- seconds since your last attack on this enemy, or nil
+function PvP.LastAttack(name)
+  local t = name and lastAttack[name]
+  if not t then return nil end
+  return math.max(0, GetTime() - t)
+end
+
+-- the "last" field of a KILL message: whole seconds 0-120, "" when unknown or older
+local function lastField(name)
+  local s = PvP.LastAttack(name)
+  if not s or s > 120 then return "" end
+  return tostring(math.floor(s))
+end
+
 -- a victim we can credit: seen alive a moment ago, and not credited for another kill just now
 local function fresh(info, now)
   if not (info and info.name) then return false end
   if usedVictim[info.name] and now - usedVictim[info.name] < REUSE_AFTER then return false end
   local alive = lastAlive[info.name]
   return alive ~= nil and now - alive <= ALIVE_WINDOW
+end
+
+-- was this enemy seen alive after the GetTime() value t? (then another kill of them is a new death)
+function PvP.SeenAliveSince(name, t)
+  local alive = lastAlive[name]
+  return alive ~= nil and alive > t
 end
 
 function PvP.FindDeadEnemy()
@@ -544,6 +664,98 @@ function PvP.FindDeadEnemy()
     local d = recentDead[i]
     if now - d.t <= DEAD_WINDOW and fresh(d.info, now) then return d.info end
   end
+end
+
+---------------------------------------------------------------------------
+-- killing blows (1.0, being tried out): the game's PARTY_KILL event says when you (or someone in
+-- your party) landed a killing blow, and on whom (their GUID). If it works in world PvP, it names
+-- your victim exactly - a DoT, out of range, no target - and the kill is shown as your killing
+-- blow. If it doesn't fire, or its values are secret, the screen-based guess above is used as
+-- before. Everything it does is in the debug log ([PARTY-KILL], [KB-STAT]) to find out.
+---------------------------------------------------------------------------
+local lastBlow      -- { info, t, pet }: your latest killing blow on a player, until the honor for it
+local lastHonorAt = 0
+local loggedCreature = false
+local BLOW_WINDOW = 3 -- seconds between the killing blow and the honor message
+
+local function guidName(guid)
+  local known = byGuid[guid]
+  if known then return known end
+  if not GetPlayerInfoByGUID then return nil end
+  -- (localizedClass, class, localizedRace, race, sex, name, realm: the realm is ignored)
+  local ok, _, class, _, _, _, name = pcall(GetPlayerInfoByGUID, guid)
+  if not ok or issecret(name) or type(name) ~= "string" or name == "" then return nil end
+  if issecret(class) then class = nil end
+  local clean = ns.CleanName(name)
+  return clean and { name = clean, class = class, guid = guid } or nil
+end
+
+ns.On("PARTY_KILL", function(attacker, target)
+  if issecret(attacker) or issecret(target) then
+    ns.SetCap("partyKill", "secret")
+    ns.Debug("PARTY-KILL", "values are secret")
+    return
+  end
+  if type(attacker) ~= "string" or type(target) ~= "string" then return end
+  ns.SetCap("partyKill", "ok")
+  local me = UnitGUID and UnitGUID("player")
+  if issecret(me) then me = nil end
+  local mine = me ~= nil and attacker == me
+  local pet = false
+  if not mine and UnitGUID then
+    -- your pet's blow (hunter pet, warlock demon...) is yours too: the owner gets the credit
+    local ok, pg = pcall(UnitGUID, "pet")
+    if ok and not issecret(pg) and type(pg) == "string" and pg == attacker then mine, pet = true, true end
+  end
+  local isPlayer = target:find("^Player%-") ~= nil
+  local after = GetTime() - lastHonorAt <= BLOW_WINDOW
+  if not (mine and isPlayer) then
+    if isPlayer then
+      ns.Debug("PARTY-KILL", mine and "you" or "a party member", isPlayer and "a player" or "not a player")
+    elseif not loggedCreature then
+      loggedCreature = true -- (they flood the log: once a session)
+      ns.Debug("PARTY-KILL", mine and (pet and "your pet" or "you") or "a party member", "not a player (logged once)")
+    end
+    return
+  end
+  local info = guidName(target)
+  ns.Debug("PARTY-KILL", pet and "your pet's killing blow" or "your killing blow", info and info.name or "name unknown", after and "(after the honor)" or "")
+  if after then return end -- (the kill already went out; only logged, to learn the order)
+  lastBlow = { info = info, t = GetTime(), pet = pet }
+end)
+
+-- your killing blow on this kill, if PARTY_KILL just said so (used once)
+local function takeBlow()
+  local b = lastBlow
+  lastBlow = nil
+  if b and GetTime() - b.t <= BLOW_WINDOW then return b end
+end
+PvP.TakeBlow = takeBlow
+
+-- the achievement statistic "killing blows", if this client has one (logged with each kill, to
+-- see whether it counts world PvP blows)
+local kbStat
+local function findKillingBlowStat()
+  if not (GetStatisticsCategoryList and GetCategoryNumAchievements and GetAchievementInfo and GetStatistic) then
+    ns.SetCap("kbStat", "missing")
+    return
+  end
+  for _, cat in ipairs(GetStatisticsCategoryList() or {}) do
+    for i = 1, (GetCategoryNumAchievements(cat) or 0) do
+      local id, name = GetAchievementInfo(cat, i)
+      if type(name) == "string" and not issecret(name) and name:lower():find("killing blow", 1, true) then
+        kbStat = kbStat or id
+        ns.Debug("KB-STAT", id, name, tostring(GetStatistic(id)))
+      end
+    end
+  end
+  ns.SetCap("kbStat", kbStat and "ok" or "missing")
+end
+ns.OnReady(function() ns.Try("kb-stat", findKillingBlowStat) end)
+local function kbStatNow()
+  if not kbStat then return "" end
+  local ok, v = pcall(GetStatistic, kbStat)
+  return ok and not issecret(v) and tostring(v) or "?"
 end
 
 -- an honor award without a name in it ("You have been awarded 7 Honor.")
@@ -570,8 +782,13 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
       return
     end
     ns.SetCap("honor", "ok")
-    local dead = PvP.FindDeadEnemy()
-    ns.Debug("HONOR-NAMELESS", msg, dead and dead.name or "victim unknown")
+    lastHonorAt = GetTime()
+    -- your killing blow names them exactly; otherwise the guess from the screen
+    local blow = takeBlow()
+    local dead = blow and blow.info and blow.info.name and blow.info or PvP.FindDeadEnemy()
+    ns.Debug("HONOR-NAMELESS", msg, dead and dead.name or "victim unknown", blow and "killing blow" or "no killing blow seen",
+      kbStat and ("kb-stat " .. kbStatNow()) or "")
+    ns.Debug("KILL-DETECT", "nameless honor", "victim from " .. (blow and blow.info and blow.info.name and (blow.pet and "pet blow" or "killing blow") or dead and "the screen" or "nothing (unknown)"), "last " .. tostring(dead and lastField(dead.name) or ""))
     if dead then usedVictim[dead.name] = GetTime() end
     ns.Events.Emit("KILL", {
       victim = dead and dead.name or "",
@@ -579,17 +796,24 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
       vlevel = dead and dead.level or "",
       vguild = dead and dead.guild or "",
       zone = PvP.ZoneText(),
+      blow = blow and (blow.pet and "pet" or "1") or "",
+      last = dead and lastField(dead.name) or "",
     })
     return
   end
   ns.SetCap("honor", "ok")
+  lastHonorAt = GetTime()
+  local blow = takeBlow()
   local info = findByName(seen, victim)
+  ns.Debug("KILL-DETECT", "honor message names " .. victim, blow and (blow.pet and "pet blow" or "your killing blow") or "no killing blow seen", "last " .. tostring(lastField((info and info.name) or victim)))
   ns.Events.Emit("KILL", {
     victim = (info and info.name) or victim,
     vclass = info and info.class or "",
     vlevel = info and info.level or "",
     vguild = info and info.guild or "",
     zone = PvP.ZoneText(),
+    blow = blow and (blow.pet and "pet" or "1") or "",
+    last = lastField((info and info.name) or victim),
   })
 end)
 

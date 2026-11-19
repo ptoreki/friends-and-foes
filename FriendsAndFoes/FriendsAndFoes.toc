@@ -2,7 +2,7 @@
 ## Title: Friends & Foes
 ## Notes: Friend progress, world PvP alerts, hitlist and K/D/A tracking.
 ## Author: Friends & Foes
-## Version: 0.9.3
+## Version: 1.0.0
 ## SavedVariables: FriendsAndFoesDB
 ## SavedVariablesPerCharacter: FriendsAndFoesCharDB
 ## OptionalDeps: ProfanityLib, ProfanityLibData
@@ -33,12 +33,13 @@ Toast.lua
 Progress.lua
 PvP.lua
 Marks.lua
-Sim.lua
 Art.lua
 UIWidgets.lua
 UI.lua
 UIProfile.lua
 UIGroup.lua
+UIAlerts.lua
+WhatsNew.lua
 UISlash.lua
 Tour.lua
 Report.lua

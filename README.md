@@ -3,53 +3,70 @@
 A WoW Forever addon that keeps your friend group connected: see your Battle.net friends' level-ups,
 epic loot and world PvP fights, and put a bounty on everyone who ganks your group.
 
-> **Beta.** Being tested with real players. Report anything odd (see *Reporting a bug*).
-
 ## What it does
-- **Friends' progress:** level-ups, epic loot and new gear. Big moments (level 60, epic BoE,
+- **Friends' progress:** level-ups, epic loot and new epic gear. Big moments (level 60, epic BoE,
   revenge, kill streaks) always pop up.
 - **World PvP alerts:** a friend is attacked, attacks someone, is killed, or gets a kill, with who
-  and where.
+  and where. When several of you kill the same enemy, there is one toast and one Feed line
+  naming everyone ("Rogz Fang and Buddy Pal killed Bob Gank"); a second one only for a new death
+  (they got back up and died again).
 - **Hitlist:** anyone who kills you or a friend, or attacks one of you first.
   - Hover them to see who of your friends they killed and how often.
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
-  - Entries fade after 90 days unseen.
+  - Entries grey out after 30 days unseen. Three options (attackers, one-time killers, repeat
+    killers) set how long each kind stays: 1 week to 1 year, or forever. By default attackers
+    are forgotten after 2 weeks and killers are kept forever; an open bounty keeps anyone.
 - **Wanted posters & notoriety:** an enemy's profile is a Wanted poster: their face (once you've
   seen them), what they've done to your group, and their notoriety (points, just for fun). It
-  grows with every murder and attack; whoever kills them claims it, shared equally with the
-  friends who get the kill too.
+  grows with every murder and attack (and cools when they go quiet); whoever kills them claims
+  it, shared equally with the friends who get the kill too (a friend who just heals or buffs you
+  during the fight counts, without getting a kill). Killing the same player again within 30
+  minutes is worth less each time, so camping doesn't pay. Level counts: grey players give nothing,
+  higher-level players give more. Enemies get ranks (Nuisance to Public
+  Enemy), you earn titles (Tracker to Legend), and your own notoriety fades 10% for each idle week.
 - **Bounty board:** put a bounty on an enemy player yourself, in gold, silver and copper, open
   for as many days as you pick (1-30). It goes on your hitlist and your friends' Bounty board,
   with a toast. It's a promise between friends: when one of you kills them, everyone gets a
-  toast, you pay whoever did it by trade in the game, then mark it paid. Finished bounties stay
-  on the board with who closed them. The add-on never moves gold, and it's only ever in-game
-  gold. Up to 5 open at a time.
-- **Leaderboard:** world PvP kills, deaths, K/D and notoriety claimed for you and your friends,
-  all-time. Each player reports their own numbers.
-- **Shared groups:** named groups whose stats you follow together, with group totals. Members
+  toast, you pay whoever did it by trade in the game, then mark it paid. If several of you got
+  the kill (within a minute), the gold is split equally. Whoever landed the killing blow gets the
+  credit when the game says who it was. Finished bounties stay on the board with who closed
+  them. The add-on never moves gold, and it's only ever in-game gold. Up to 5 open at a time.
+- **Friends:** you and your friends who run the add-on, ranked by world PvP kills, with deaths,
+  K/D and notoriety, all-time, Bounty board gold collected, and where they are now. Each player
+  reports their own numbers. Friends' characters below level 15 (bank alts) are hidden by
+  default (an option).
+- **Shared groups:** named groups whose stats you follow together on the Friends tab, with group totals. Members
   pass each other's numbers along, so not everyone needs to be friends with everyone.
-- **Kill lists:** who you and each friend have killed, and how often (sortable); for an enemy,
-  which of your friends they killed. A friend's own list is fetched from them.
-- **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, most wanted,
-  where a friend is right now, who an enemy has killed, and recent PvP. Set a most wanted enemy
-  for your friends to see.
+- **Victims:** who you and each friend have killed, and how often (sortable); for an enemy,
+  which of your friends they killed. Opens from a profile. A friend's own list is fetched from
+  them.
+- **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, where a
+  friend is right now, who an enemy has killed, the bounties on them, and recent PvP.
 - **Tracking:** kills and deaths per player, and a weekly summary with your nemesis.
 - **Messages:** with flavor (*"Rogz killed Bob again (3rd) · Tarren Mill"*) or short
   (*"Bob killed by Rogz · Duskwood"*).
 - **Toasts** in four styles: Modern, Classic, Alliance and Horde. You can set their size, duration,
   position and stacking.
 
-Everything is set up in **Options → AddOns → Friends & Foes**:
-- each event: toast, chat line or off, with or without sound, and which sound
-- how often level-ups show, and which gear quality counts
-- what happens in dungeons, raids and battlegrounds
-- what you share, and with which friends
+Everything is set up in **Options → AddOns → Friends & Foes** (start with **Test alerts** to see them):
+Four pages:
+- **Alerts:** Test alerts; four groups of alerts (friends' fights, hitlist sightings, friends'
+  progress, the Bounty board), each a toast, chat line or off, with or without sound; five
+  sounds to pick (a friend in trouble, a friend's kill, sightings, progress, bounties); how often
+  level-ups show; what happens in dungeons, raids and battlegrounds (one setting for all three);
+  and combat.
+- **Appearance:** toast style, size, duration, position and stacking; message style; chat tab;
+  weekly summary; the minimap button.
+- **Friends & sharing:** what you share, where your own PvP is tracked, your alert list (which
+  friends you exchange alerts with), hiding low-level characters on the Friends tab, the
+  hitlist skull and tooltip, and how long attackers, one-time killers and repeat killers stay
+  on your hitlist.
+- **Advanced:** debug logging and the debug report.
 
 ## Install
 - **CurseForge app** or **WowUp** (via Wago): search for *Friends & Foes*. Set the game to
-  **WoW Forever**, and set the addon's release channel to **Beta** while it's in beta. Updates then
-  install automatically.
+  **WoW Forever**. Updates then install automatically.
 - **WowUp from GitHub:** *Install from URL* → `https://github.com/ptoreki/friends-and-foes`.
 - **By hand:** download the zip from [Releases](https://github.com/ptoreki/friends-and-foes/releases)
   and extract it into `World of Warcraft\_forever_\Interface\AddOns\`.
@@ -63,23 +80,24 @@ on your faction. You don't need to group, share a server, or be in the same zone
 ## Commands
 | Command | What it does |
 |---|---|
-| `/fnf` | Open or close the window (Hitlist, Bounty board, Leaderboard, Friends, Feed, Profile) |
+| `/fnf` | Open or close the window (Hitlist, Bounty board, Friends, Feed, Profile) |
 | `/fnf bounty <amount> [days]` | Put a bounty on your target, like `/fnf bounty 10g 50s 3d` (7 days if you leave it out) |
+| `/fnf minimap` | Show or hide the minimap button |
 | `/fnf minimap reset` | Put the minimap button back on the minimap |
-| `/fnf board` | Open the Leaderboard |
+| `/fnf board` | Open the Friends tab (the ranking) |
 | `/fnf groups [new\|invite\|join\|decline\|leave\|remove ...]` | List your shared groups, or manage one (see `/fnf groups`) |
 | `/fnf profile [name]` | Open a profile (yours if no name) |
 | `/fnf options` | Open the options |
-| `/fnf alerts [name\|all]` | Your alert list: show it, add or remove a friend, or go back to everyone (`/fnf group` works too) |
+| `/fnf alerts [name\|all]` | Your alert list (also in Options): open it, add or remove a friend, or go back to everyone (`/fnf group` works too) |
 | `/fnf unlock` / `/fnf lock` | Move the toasts |
 | `/fnf size <70-150>` / `/fnf duration <2-10>` | Toast size and how long toasts stay |
 | `/fnf chat <tab>` | Which chat tab gets the chat lines |
 | `/fnf status` | Which friends were found and what works on your client |
-| `/fnf share` | Send your hitlist to your friends |
-| `/fnf sim all [self]` / `/fnf sim stop` / `/fnf sim clear` | Simulate every alert with fake data (`self` also sends it to friends) |
+| `/fnf test` (or `/fnf sim`) | Show one sample of each alert and a chat line. Nothing is recorded or sent |
 | `/fnf debug` / `/fnf debug clear` | Debug logging on/off, or clear the log |
 | `/fnf report` | A debug report to copy and paste into a bug report |
 | `/fnf tour` | The short tour from the first time you opened the window |
+| `/fnf new` (or `whatsnew`, `changes`) | The patch notes for this version (also shown once after an update) |
 
 ## Reporting a bug
 1. Turn on **Debug logging** (Options → Advanced, or `/fnf debug`).
@@ -92,13 +110,18 @@ Debug logging turns itself off after 7 days.
 ## Good to know
 - Everything runs inside the game, using the game's own addon messages. There are no accounts,
   websites or outside programs.
-- Addons can't see who landed the killing blow in WoW Forever, so a *kill* means any honorable
-  kill you got honor for.
+- WoW Forever doesn't say who died when you get honor, so a *kill* means any honorable kill
+  you got honor for, and the victim is worked out from what's on your screen (it can end up
+  unnamed). When the game reports your own killing blow (or your pet's), the victim is named
+  exactly and the kill is marked "(killing blow)".
 - Alerts are live only, but you don't miss what friends did while you were offline: when you log
-  in, and when a friend comes online later, they send what happened to them in the last 24 hours
-  (up to 100 events). It goes into your Feed, hitlist and kill lists quietly, with one chat line,
-  no toasts. Friends you're never online with still reach you: other friends pass their events
-  on, if they allow it ("Friends may pass on my events" in the options).
+  in, and when a friend comes online later, they send what happened to them in the last week
+  (their latest 250 events, including what their other characters did). It goes into your Feed,
+  hitlist and victims lists quietly, with one chat line, no toasts. If a friend drops off and
+  comes back, or goes quiet for an hour, you ask them for what you missed. Friends you're never
+  online with still reach you: other friends pass their events and numbers on, if they allow it
+  ("Friends may pass on my events" in the options). When you meet a friend you also swap a
+  short hitlist hello (at most once a week), added quietly.
 - Options can't be opened during combat. That's a game rule.
 
 ## Development
@@ -107,12 +130,12 @@ Debug logging turns itself off after 7 days.
   (`tests/mock.lua`) and runs the tests (`tests/test.lua`).
 - Where things are: messages and their versions in `Comm.lua` (`Comm.SCHEMA`, `Comm.KINDS`),
   saved data and its upgrade steps in `Saved.lua`, the window in `UI.lua` (lists, tabs),
-  `UIProfile.lua` (profiles, Wanted posters), `UIWidgets.lua` (buttons, layout) and `UISlash.lua`
-  (commands). Translating: see the top of `Locale.lua`.
+  `UIProfile.lua` (profiles, Wanted posters), `UIAlerts.lua` (the alert list window),
+  `UIWidgets.lua` (buttons, layout) and `UISlash.lua` (commands). Translating: see the top of `Locale.lua`.
 - `npm run package` builds a local zip in `dist/`.
 - Releases are automatic: push a `vX.Y.Z` or `vX.Y.Z-beta` tag. A GitHub Action then runs the tests
   and uploads the zip to CurseForge, Wago and GitHub Releases. See [PUBLISHING.md](PUBLISHING.md).
-- Design notes are in [SPEC.md](SPEC.md), and version history is in [CHANGELOG.md](CHANGELOG.md).
+- Design notes are in [SPEC.md](SPEC.md), and version history is in [CHANGELOG.md](CHANGELOG.md). Where to look up the add-on API (and what WoW Forever restricts) is in [API-SOURCES.md](API-SOURCES.md).
 
 ## License
 Copyright (C) 2026 ptoreki.
