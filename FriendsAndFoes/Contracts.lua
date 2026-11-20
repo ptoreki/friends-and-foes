@@ -118,6 +118,54 @@ function Contracts.MoneyText(copper)
   return table.concat(parts, " ")
 end
 
+-- copper -> "12g 50s" in plain text (the centre-screen message has no room for coin icons)
+function Contracts.MoneyPlain(copper)
+  copper = ns.Count(copper)
+  local parts = {}
+  for _, c in ipairs({ { 10000, "g" }, { 100, "s" }, { 1, "c" } }) do
+    local n = math.floor(copper / c[1])
+    copper = copper - n * c[1]
+    if n > 0 then parts[#parts + 1] = n .. c[2] end
+  end
+  return #parts > 0 and table.concat(parts, " ") or "0c"
+end
+
+-- What you type after /fnf bounty: "<name> <offer> [message]" for a name (any player, no target
+-- needed) or "<offer> [message]" for your target. The name is the words before the first one
+-- that starts with a digit; the offer is the amount and days ("10g 50s 3d", "10g for 3 days");
+-- the rest is the message. Returns { name =, offer =, note = } (name nil: use the target).
+local UNIT_WORDS = { g = true, s = true, c = true, d = true, day = true, days = true }
+function Contracts.ParseCommand(text)
+  text = tostring(text or ""):match("^%s*(.-)%s*$")
+  local tokens = {}
+  for pos, word in text:gmatch("()(%S+)") do tokens[#tokens + 1] = { pos = pos, word = word } end
+  local i, nameWords = 1, {}
+  while tokens[i] and not tokens[i].word:find("^%d") do
+    nameWords[#nameWords + 1] = tokens[i].word
+    i = i + 1
+  end
+  local out = { name = #nameWords > 0 and table.concat(nameWords, " ") or nil }
+  local offer, last = {}, nil
+  while tokens[i] do
+    local w = tokens[i].word:lower()
+    local nextW = tokens[i + 1] and tokens[i + 1].word
+    local digit = w:find("^%d") ~= nil
+    if digit or (UNIT_WORDS[w] and last == "digit") or (w == "for" and nextW and nextW:find("^%d")) then
+      offer[#offer + 1] = tokens[i].word
+      last = digit and "digit" or "word"
+      i = i + 1
+    else
+      break
+    end
+  end
+  out.offer = table.concat(offer, " ")
+  if tokens[i] then
+    local note = text:sub(tokens[i].pos)
+    out.note = note:gsub('^"(.*)"$', "%1")
+  end
+  return out
+end
+
 ---------------------------------------------------------------------------
 -- the board
 ---------------------------------------------------------------------------
@@ -268,6 +316,7 @@ local function message(c, asPoster)
     blow = c.blow or "",
     last = c.last and tostring(math.floor(c.last)) or "",
     killers = table.concat(names, ","),
+    note = c.note or "",
   } }
 end
 
@@ -329,7 +378,8 @@ end
 ---------------------------------------------------------------------------
 -- the target on your hitlist (yours, or a friend's contract that reached you)
 ---------------------------------------------------------------------------
-local function onHitlist(c)
+-- manual: a bounty you posted on a name you typed: the entry is yours (never forgotten by itself)
+local function onHitlist(c, manual)
   if ns.PvP.IsFriendly(c.target) then return end
   local realm = ns.Data.RealRealm()
   local e = realm.players[c.target]
@@ -346,6 +396,7 @@ local function onHitlist(c)
     h = { name = c.target, attacks = 0, kills = 0, suspect = 0, revenge = 0, victims = {}, firstSeen = time() }
     realm.hitlist[c.target] = h
     if c.by ~= ns.me then h.sharedBy = c.by end
+    if manual then h.manual = true end
   end
   h.class = h.class or c.class
   h.level = h.level or c.level
@@ -361,12 +412,24 @@ local function changed() if ns.UI and ns.UI.OnDataChanged then ns.UI.OnDataChang
 ---------------------------------------------------------------------------
 -- u: { name, class, level, guild } of an enemy player; amount in copper; days it stays open
 -- (1-30, default 7). Posting again on the same enemy changes your open contract.
--- Returns the contract, or nil and why ("CONTRACT_...").
-function Contracts.Post(u, amount, days)
+-- note: a message of up to 60 characters (filtered here; nil if empty). u.manual: the name was
+-- typed (not read from a target or a profile): it's checked like Hitlist -> Add, and goes on your
+-- hitlist as a manual entry if it wasn't there.
+-- Returns the contract, or nil and why ("CONTRACT_...", "NAME_...", "TEXT_OFFENSIVE").
+function Contracts.Post(u, amount, days, note)
   if not ns.me then return nil, "CONTRACT_NOT_READY" end
-  local name = u and ns.CleanName(u.name)
-  if not name then return nil, "CONTRACT_NEED_TARGET" end
-  if name == ns.me or ns.PvP.IsFriendly(name) then return nil, "CONTRACT_NOT_ENEMY" end
+  local name
+  if u and u.manual then
+    local why
+    name, why = ns.Data.ManualTarget(u.name)
+    if not name then return nil, why end
+  else
+    name = u and ns.CleanName(u.name)
+    if not name then return nil, "CONTRACT_NEED_TARGET" end
+    if name == ns.me or ns.PvP.IsFriendly(name) then return nil, "CONTRACT_NOT_ENEMY" end
+  end
+  local cleanNote, noteWhy = ns.Profile.CheckNote(note)
+  if noteWhy then return nil, noteWhy end
   amount = tonumber(amount)
   if not (finite(amount) and amount >= 1 and amount <= AMOUNT_MAX) then return nil, "CONTRACT_BAD_AMOUNT" end
   amount = math.floor(amount)
@@ -378,6 +441,7 @@ function Contracts.Post(u, amount, days)
     if c.by == ns.me and c.target == name and c.state == "open" then
       -- posting again: the new amount, open for the new number of days from now
       c.amount, c.days, c.t, c.upd = amount, days, now, now
+      c.note = cleanNote
       send(c)
       changed()
       return c
@@ -385,10 +449,10 @@ function Contracts.Post(u, amount, days)
   end
   if Contracts.MineOpen() >= OPEN_MAX then return nil, "CONTRACT_TOO_MANY" end
   local c = { id = ns.NewId(), by = ns.me, target = name, class = u.class, level = ns.Count(u.level) > 0 and ns.Count(u.level) or nil,
-    guild = u.guild, amount = amount, days = days, state = "open", t = now, upd = now }
+    guild = u.guild, amount = amount, days = days, state = "open", t = now, upd = now, note = cleanNote }
   list[key(c.by, c.id)] = c
-  ns.Debug("CONTRACT-POST", c.id, name, amount .. " copper", days .. " days")
-  onHitlist(c)
+  ns.Debug("CONTRACT-POST", c.id, name, amount .. " copper", days .. " days", cleanNote and "with a note" or "")
+  onHitlist(c, u.manual)
   ns.Data.Feed("contract", L.CONTRACT_FEED_POSTED:format(ns.ClassColored(ns.me), Contracts.MoneyText(amount),
     ns.ClassColored(name, c.class)), ns.me, { name })
   send(c)
@@ -552,6 +616,10 @@ function Contracts.OnMessage(from, f)
     c.amount, c.t = amount, t -- (posting again starts it again)
     if days then c.days = math.floor(days) end
     c.class, c.level, c.guild = u.class or c.class, (u.level and u.level > 0) and u.level or c.level, u.guild or c.guild
+    -- the poster's note, filtered again here (a friend's add-on may be modified); a copy passed on
+    -- by an older add-on has none, and doesn't wipe the one you have
+    local note = ns.Profile.ShownNote(f.note)
+    if note or not relayed then c.note = note end
   end
   if not before then
     c.state = state
@@ -626,9 +694,15 @@ end
 local ICON_POSTED = "Interface\\Icons\\INV_Scroll_03"
 local ICON_DONE = "Interface\\Icons\\INV_Misc_Coin_01"
 
+-- " "message"" for after the amount (nothing without a note)
+local function quoted(c)
+  return c.note and (" " .. L.CONTRACT_QUOTE:format(c.note)) or ""
+end
+Contracts.Quoted = quoted
+
 function Contracts.ToastPosted(c)
   local poster, target = ns.ClassColored(c.by), ns.ClassColored(c.target, c.class)
-  local title = L.CONTRACT_POSTED:format(poster, Contracts.MoneyText(c.amount), target)
+  local title = L.CONTRACT_POSTED:format(poster, Contracts.MoneyText(c.amount), target) .. quoted(c)
   local text = L.CONTRACT_TOAST_DAYS:format(daysOf(c))
   ns.Toast.Push({ kind = "contract", category = "bounty", icon = ICON_POSTED, header = L.HEADER_CONTRACT_POSTED,
     title = title, text = text, chat = title .. ns.Flavor.SEP .. text, player = c.target })
@@ -671,4 +745,46 @@ function Contracts.ToastDone(c)
   end
   ns.Toast.Push({ kind = "contract", category = "bounty", icon = ICON_DONE, header = L.HEADER_CONTRACT_DONE,
     title = title, text = text, chat = title .. ns.Flavor.SEP .. text, player = c.target })
+end
+
+---------------------------------------------------------------------------
+-- a bounty target spotted (1.0.1)
+---------------------------------------------------------------------------
+-- Open bounties on this player right now: anyone's, not run out, not done.
+function Contracts.OpenOn(name)
+  local out, now = {}, time()
+  for _, c in ipairs(Contracts.On(name)) do
+    if now - (c.t or 0) <= daysOf(c) * DAY then out[#out + 1] = c end
+  end
+  return out
+end
+
+-- Someone with an open bounty on them is near: you saw them (by = nil) or a friend did (by =
+-- their coloured name). Much louder than a normal sighting: a bounty toast that stays twice as
+-- long with the raid-warning sound and a red edge, and, for your own sighting only, a message in
+-- the middle of the screen. It follows the bounty alert setting (off: nothing; chat: one chat
+-- line; toast: all of it) and Where it works. The caller keeps the once-per-5-minutes limit
+-- (PvP.SightingDue). Returns the line for the Feed, or nil when there's no open bounty on them.
+function Contracts.Spotted(name, class, zone, by)
+  local open = name and Contracts.OpenOn(name) or {}
+  if #open == 0 then return nil end
+  local best = open[1] -- (the biggest)
+  local who = ns.ClassColored(name, class)
+  local money = Contracts.MoneyText(best.amount)
+  local title = by and L.BOUNTY_SPOTTED_BY:format(who, by, money) or L.BOUNTY_SPOTTED:format(who, money)
+  local text = ns.Flavor.Place(zone)
+  if best.note then text = text .. ns.Flavor.SEP .. L.CONTRACT_QUOTE:format(best.note) end
+  local line = title .. ns.Flavor.SEP .. text
+  local spec = { kind = "contract", category = "bounty", icon = "Interface\\Icons\\Ability_Hunter_SniperShot",
+    header = L.HEADER_BOUNTY_SPOTTED, title = title, text = text, chat = line, player = name,
+    alert = true, longer = true, alertSound = true }
+  local mode = ns.Toast.Mode(spec)
+  ns.Debug("BOUNTY-SPOTTED", name, best.amount .. " copper", zone or "?", by and "friend" or "you", "alert: " .. mode)
+  if mode == "off" then return line end
+  if mode == "toast" and not by and not ns.past
+    and not (ns.InInstance() and ns.S().instances == "hold") then
+    ns.Toast.Centre(L.BOUNTY_SPOTTED_CENTRE:format(name, Contracts.MoneyPlain(best.amount), zone or "?"))
+  end
+  ns.Toast.Push(spec)
+  return line
 end

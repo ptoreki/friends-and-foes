@@ -83,6 +83,26 @@ function Profile.Shown(text)
   return nil, verdict
 end
 
+-- A note a player puts on a bounty: plain text, at most NOTE_MAX characters, no "|" (no colour
+-- codes or links), no control characters. Typed (CheckNote): text, or nil and "TEXT_OFFENSIVE";
+-- an empty note is nil. Received (ShownNote): nil unless the language filter says it's fine.
+Profile.NOTE_MAX = 60
+function Profile.CleanNote(s)
+  return Profile.CleanText(s, Profile.NOTE_MAX)
+end
+
+function Profile.CheckNote(s)
+  local t = Profile.CleanNote(s)
+  if not t then return nil end
+  if Profile.Check(t) == "offensive" then return nil, "TEXT_OFFENSIVE" end
+  return t
+end
+
+function Profile.ShownNote(s)
+  local t = Profile.CleanNote(s)
+  if not t then return nil end
+  return (Profile.Shown(t))
+end
 
 
 -- name = nil clears it
@@ -444,12 +464,26 @@ end
 ---------------------------------------------------------------------------
 -- profile page data
 ---------------------------------------------------------------------------
--- the enemy who killed this friend most (from the hitlist's per-friend counts)
+-- The nemesis rule, used everywhere (a friend's profile, your weekly summary): the enemy who
+-- killed you (or them) most; on a tie, the one who did it most recently; still tied (or no times
+-- known: older data), the name that comes first. n/t/name: the candidate's kills, time of the
+-- last one, name; best*: the current best (nil n = none yet). True if the candidate wins.
+function Profile.NemesisBeats(n, t, name, bestN, bestT, bestName)
+  if not bestN then return true end
+  if n ~= bestN then return n > bestN end
+  t, bestT = tonumber(t) or 0, tonumber(bestT) or 0
+  if t ~= bestT then return t > bestT end
+  return tostring(name) < tostring(bestName)
+end
+
+-- the enemy who killed this friend most (from the hitlist's per-friend counts; h.kt = when each
+-- friend was last killed by them)
 function Profile.Nemesis(name)
-  local best, most
+  local best, most, bestT
   for _, h in pairs(ns.Data.ViewRealm().hitlist) do
     local n = ns.Count(h.kv and h.kv[name])
-    if n > 0 and (not most or n > most or (n == most and h.name < best.name)) then best, most = h, n end
+    local t = type(h.kt) == "table" and h.kt[name] or nil
+    if n > 0 and Profile.NemesisBeats(n, t, h.name, most, bestT, best and best.name) then best, most, bestT = h, n, t end
   end
   return best, most
 end

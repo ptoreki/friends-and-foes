@@ -22,18 +22,21 @@ Friends & Foes connects you and your Battle.net friends in WoW Forever, even whe
 - A **skull** on their nameplate, their record in the tooltip, and an alert when you or a friend spots them.
 - Friends' hitlists help fill yours, but only with enemies who hurt you, them or a friend you have in common.
 - You choose how long they're remembered: by default attackers for 2 weeks, killers forever.
+- **Add anyone by name** with the **Add...** button or `/fnf hitlist add <name>`, no target needed. Names you add yourself are never forgotten until you remove them.
 
 ### Wanted posters & notoriety
 - Every enemy who hurts your group has a **Wanted poster**: their face (once you've seen them), what they've done, and a rank from *Nuisance* to *Public Enemy*.
 - Killing them earns you **notoriety** (points, just for fun): far more for a ganker on your hitlist than for a random, more while they're **on a rampage**.
 - Killing the same player again within 30 minutes is worth less each time (half, a quarter, then nothing), so camping doesn't pay. Fighting back makes them worth full value again.
-- **Level counts:** grey players give nothing and lower levels give less, while players above your level give up to half again as much.
+- **Level counts:** grey players give nothing and lower levels give less, while players above your level give up to half again as much. Ganking someone with **Resurrection Sickness** gives nothing, unless they're far above your level.
 - Shared equally with everyone who got the kill, including a friend who **healed** you through the fight.
 - Climb from *Tracker* to *Legend*. Big takedowns get a toast for the whole group. Your notoriety fades if you stop hunting.
 
 ### Bounty board
 - Put your own bounty on an enemy player, in **gold, silver and copper**, for **1 to 30 days**. Your friends see it and get a toast.
 - Whoever kills them completes it; several of you share it equally. You pay them by **trade in the game**, then mark it paid.
+- **No target needed:** type a player's name (or use `/fnf bounty Ru Mia 10g 3d`), and add a short **message** (up to 60 characters, language-filtered) that shows on the board and in the toast.
+- **Bounty target spotted:** see someone with an open bounty on them and you get a big raid-warning message with the reward and the zone, and a louder, longer toast.
 - Finished bounties stay on the board with who closed them.
 - A promise between friends: the add-on never moves gold, and it's in-game gold only.
 
@@ -41,6 +44,7 @@ Friends & Foes connects you and your Battle.net friends in WoW Forever, even whe
 - The **Friends** tab ranks you and your friends who run the add-on: kills, deaths, K/D, notoriety, bounty gold collected, and where everyone is right now. Low-level bank alts are hidden.
 - **Shared groups:** follow a group's stats together, even with friends of friends.
 - **Profiles:** click any name for their record, nemesis, victims, recent fights and the bounties on them.
+- **Your stats:** when and where you hunt, the levels of your victims, and your best kill streak.
 - **Friends' progress:** level-ups, epic loot and new epic gear.
 
 ### Missed something?

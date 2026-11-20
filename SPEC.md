@@ -69,10 +69,17 @@ WoW Forever add-on (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`
 | GRP / GST | shared groups: membership / relayed stats | gid, name, owner, base, members / stats (see Shared groups) |
 | KLQ / KLA | kill list request / answer | who / who, total, list |
 | RLQ / RLY | relayed catch-up request / one relayed event | window, names / origin, oclass, olevel, okind, oid, ago, data, alt ("1" = origin is the sender's own other character) |
-| BTY | one of your bounty board contracts (posted, changed, done; and to each friend who comes online) | cid, target, amount (copper), state, killer, age, updage, days, blow ("1" or "pet"), last (seconds since the killer's last attack on the target), poster (empty = the sender posted it; else the sender passes on that friend's contract), killers (everyone who got the kill, comma-separated, at most 5, the lead = `killer` first; older clients read only `killer`) |
+| BTY | one of your bounty board contracts (posted, changed, done; and to each friend who comes online) | cid, target, amount (copper), state, killer, age, updage, days, blow ("1" or "pet"), last (seconds since the killer's last attack on the target), poster (empty = the sender posted it; else the sender passes on that friend's contract), killers (everyone who got the kill, comma-separated, at most 5, the lead = `killer` first; older clients read only `killer`), note (1.0.1: the poster's message, up to 60 characters, filtered; older clients ignore it) |
 
 LVL, LOOT, GEAR, ATK, ENG, DIE and KILL also end with `ago` (seconds since it happened, when
 replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:guild`.
+No new message fields for the Feed levels (1.0.1): the friend's own level is the header `level` (your
+level when it happened, also for replayed events: the outbox keeps it as `l`), the enemy's level is
+the unit's / `vlevel` / SIGHT `level`. A skull-level enemy (game level -1) travels as level `0`
+(older clients ignore a 0); the Feed shows it as "(Skull)" (`L.LEVEL_SKULL`). The Feed text of
+PvP events (ATK, ENG, DIE, KILL incl. merged killers, AST, SIGHT) is built with " (35)" in grey
+after each name (`ns.LevelTag`); toasts and chat stay without levels; older entries and unknown
+levels show nothing.
 
 ## Catch-up (alerts are live only)
 - Your account keeps its events from the last **week**: at most **250 in all** (not per
@@ -165,6 +172,19 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
   toast; not shown), who they killed (`kv`),
   last seen and zone, and who shared it.
   - Assists and enemies you attacked first are recorded on their player record only.
+  - **Manual entries (1.0.1):** `Data.AddManual` (the Hitlist's Add... button, `/fnf hitlist add`,
+    and a bounty on a typed name) makes an entry with `manual = true`: no class, level or guild
+    until `PvP.checkSighting` sees them (it `Touch`es the entry). `Data.ParseName`: letters (any
+    non-ASCII byte counts), apostrophes, one space or hyphen, at most two words, 2-24 characters,
+    trimmed, each word capitalised (ASCII words get the rest lower-cased); anything else is
+    `NAME_BAD`; you and anyone on your side are `NAME_FRIEND` (`Data.ManualTarget`). A manual
+    entry is never forgotten (`shouldForget`), and, having no kills or attacks, isn't in the
+    digest (`Comm.DigestList` needs a deed and someone they hurt). It's a hitlist record only
+    (no `players` record), so the entry in the window and the profile read from it.
+  - `kt[friend]` = when they last killed that friend (set in `Flavor.Died`; merged as the later
+    time). **Nemesis rule** (`Profile.NemesisBeats`, used by `Profile.Nemesis` and the weekly
+    summary, which keeps `weekly.killedAt`): most kills; on a tie the most recent killer; with no
+    times known, the name that sorts first.
   - Entries are greyed out after 30 days unseen. Unseen entries are forgotten per kind of player
     (days, 0 = forever): `settings.forgetAttackers` (attacked one of you, no kills; default 14),
     `forgetKilledOnce` (default 0) and `forgetKilledMore` (2 or more kills; default 0); choices are
@@ -174,6 +194,7 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
     targets, so there's no manual sharing any more. A share from a friend on an older version
     still merges in (the higher of each counter; new entries need a kill or an attack).
 - **Feed:** the last 500 events, in the order they happened.
+- **Kill log** (`FriendsAndFoesDB.killLog`, `Stats.lua`; 1.0.1): your own live kills only, oldest first, newest 1000 kept: `{ t, c, n, vl, ml, z }` = time, character (`ns.me`; entries without one are ignored and the page counts only the current character's), victim name (nil when unreadable), victim level at the time (nil unknown, -1 skull), your level then, zone. Caught-up and friends' kills are never logged; it is never sent. `FriendsAndFoesCharDB.bestStreak` (per character, next to `streak`) is the longest run of kills without dying. The Stats page (own profile, Stats button; lines the profile already has are not repeated) is computed from these: level-gap tiers reuse `Bounty.GreyLevel` and `Bounty.LEVEL_TIERS`; average level/gap need 5 kills with a known non-skull level and busiest weekday/hour 20 logged kills (`Stats.MIN_LEVELS`, `Stats.MIN_BUSY`); today = since local midnight, "Last 7 days" and "Last 30 days" are rolling windows.
 - **Limits** (`Saved.lua`): players 3,000 (harmless enemies unseen for 90 days are dropped), kill
   lists 250 victims each, debug log 2,000 lines (it switches off after 7 days), error log 50.
 - **Upgrades:** `Saved.STEPS` run once each, in order (`dataVersion`).
@@ -226,7 +247,12 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
   from victim level - your level at the kill (`Bounty.LEVEL_TIERS`, `Bounty.GreyLevel` = the Classic
   grey rule): grey x0 (pays and says nothing); diff <= -6 x0.25; -5..-3 x0.5; -2..+2 x1; +3..+5
   x1.25; >= +6 or "??" (-1) x1.5; unknown victim or killer level x1; floored. Posters, profiles and
-  takedown toasts show the base value. Each client counts on its own, so the split is best-effort.
+  takedown toasts show the base value. Resurrection Sickness (spell 15007, read in `PvP.lua` from
+  the victim's auras wherever an enemy is read; in memory only, `PvP.IsSick`; secret or missing aura
+  data = not sick): a victim who was sick when you got the kill is worth x0 to you (quiet), unless a
+  skull to you (seen at level -1, or >= your level + 10), who keep the normal level factor (a skull
+  seen with no known level counts as -1 = x1.5). Sightings: "N kills on us", else "attacked us N
+  times", else just the place. Each client counts on its own, so the split is best-effort.
   Totals are account-wide and self-reported, like K/D. Your own notoriety fades: it loses 10% for
   each full week since your last claim (applied lazily, `b.clock` = last claim or last fade, so a
   week is never taken twice); `b.allTime` keeps everything ever claimed. Your title (Tracker,
@@ -264,6 +290,26 @@ replayed) and `rl` ("1" = may be passed on). Units travel as `name:CLASS:level:g
   killers owes themselves nothing (alone: closed, state paid). `EarnedBy` counts each killer's
   share of paid contracts (not the poster's own); contracts without `killers` count `killer` with
   the full amount. A late killer: the poster gets a chat line, the killer a toast.
+- **By name and a note (1.0.1):** `Contracts.Post(u, amount, days, note)`; `u.manual` means the
+  name was typed (checked with `Data.ManualTarget`; the target goes on your hitlist as manual) and
+  the BTY `target` then has an empty class and level (`Name:::`). `note` (BTY `note`, the last
+  field): at most 60 characters (`Profile.NOTE_MAX`), no `|` or control characters, through
+  `Profile.Check` (ProfanityLib, the group-name filter) before sending (`TEXT_OFFENSIVE`) and again
+  on receipt (`Profile.ShownNote`: dropped unless the filter says ok; a copy passed on by an older
+  add-on doesn't wipe a note you have). `Comm.Fit` trims the note first (a character at a time),
+  then guild names, then helper lists. Shown in the row's tooltip, the profile bounty line's
+  tooltip, and the "bounty posted" toast and chat line (quoted after the amount).
+  `/fnf bounty [name] <amount> [days] [message]` is split by `Contracts.ParseCommand` (the name is
+  the words before the first one that starts with a digit).
+- **Bounty target spotted (1.0.1):** `PvP.checkSighting` (target, focus... mouseover, nameplates) also
+  fires for someone with an open bounty (`Contracts.OpenOn`: open, not past its days) who isn't on
+  your hitlist; the normal once-per-5-minutes limit (`PvP.SightingDue`) applies. `Toast.Sighting`
+  hands those to `Contracts.Spotted`: a "contract"/bounty toast with `alert` (red 7px edge),
+  `longer` (twice the duration) and `alertSound` (the raid-warning sound unless a bounty sound is
+  picked), and, for your own sighting in "toast" mode only, `Toast.Centre` (RaidNotice_AddMessage
+  on RaidWarningFrame, else UIErrorsFrame). Alert setting off: nothing; chat: the chat line only;
+  Where it works: off: nothing, hold: no centre message and the toast waits. A friend's SIGHT of
+  a bounty target gets the same toast (no centre message). Debug log: `BOUNTY-SPOTTED`.
 - **Passed on (0.9.4):** BTY has `poster`: empty when the sender posted it, otherwise the sender
   passes on that friend's contract. A friend who comes online (and has `contractRelay`) also
   gets up to 10 contracts you received **directly** from their posters (`c.direct`), open or done

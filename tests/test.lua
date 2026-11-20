@@ -419,14 +419,15 @@ ADVANCE(20)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Vic Tim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fk10"), "WHISPER", 77)
 check(lastFeed():find("killed", 1, true) and not lastFeed():find("owns", 1, true), "flavor off: plain wording: " .. lastFeed())
 local function plain(s) return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) end
-check(plain(lastFeed()) == "Buddy Pal killed Vic Tim · Duskwood", "compact kill: " .. plain(lastFeed()))
+local function nolv(s) return (ns.Plain(s):gsub(" %(%d+%)", "")) end -- (Feed lines carry levels: tested separately)
+check(nolv(lastFeed()) == "Buddy Pal killed Vic Tim · Duskwood", "compact kill: " .. plain(lastFeed()))
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Nem Esis:ROGUE:60:", conf = "c", assists = "" }, "fc1"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal killed by Nem Esis · Duskwood", "compact death: " .. plain(lastFeed()))
+check(nolv(lastFeed()) == "Buddy Pal killed by Nem Esis · Duskwood", "compact death: " .. plain(lastFeed()))
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("ATK", { enc = "fc2", zone = "Duskwood", attackers = "Nem Esis:ROGUE:60:" }, "fc2"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal attacked by Nem Esis · Duskwood", "compact attack: " .. plain(lastFeed()))
+check(nolv(lastFeed()) == "Buddy Pal attacked by Nem Esis · Duskwood", "compact attack: " .. plain(lastFeed()))
 ADVANCE(20)
 FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Nem Esis", vclass = "ROGUE", vlevel = "60", vguild = "", zone = "Duskwood" }, "fc3"), "WHISPER", 77)
-check(plain(lastFeed()) == "Buddy Pal killed Nem Esis (revenge) · Duskwood", "compact revenge: " .. plain(lastFeed()))
+check(nolv(lastFeed()) == "Buddy Pal killed Nem Esis (revenge) · Duskwood", "compact revenge: " .. plain(lastFeed()))
 -- the toast is the same single line
 drainToasts()
 local shownToast
@@ -594,7 +595,7 @@ do
     FIRE("PARTY_KILL", "Player-1-00000001", "Player-1-Latey")
     FIRE("CHAT_MSG_COMBAT_HONOR_GAIN", HONOR)
     local n1, line = kills()
-    check(n1 == n0 and ns.Plain(line):find("You and Buddy Pal killed Latey Comer", 1, true) ~= nil,
+    check(n1 == n0 and nolv(line):find("You and Buddy Pal killed Latey Comer", 1, true) ~= nil,
       "a friend's kill, then your own blow for the same death: one merged line (" .. n0 .. " -> " .. n1 .. "): " .. ns.Plain(line))
   end
   -- a friend's kill marked as their killing blow
@@ -995,14 +996,14 @@ do
   real.hitlist["Seen Guy"] = { name = "Seen Guy", attacks = 2, kills = 1, victims = {} }
   drainToasts()
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale (Astranaar)" }, "sg1"), "WHISPER", 77)
-  local sightLine = ns.Plain(lastFeed())
-  check(sightLine:find("Seen Guy spotted by Buddy Pal", 1, true) and sightLine:find("1 kills on us", 1, true) and not sightLine:find("attacks", 1, true)
+  local sightLine = nolv(lastFeed())
+  check(sightLine:find("Seen Guy spotted by Buddy Pal", 1, true) and sightLine:find("1 kill on us", 1, true) and not sightLine:find("attacks", 1, true)
     and sightLine:find("Astranaar", 1, true), "friend's sighting: who, by whom, record, where: " .. sightLine)
   local feedN = #real.feed
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Seen Guy", class = "ROGUE", level = "30", guild = "", zone = "Ashenvale" }, "sg2"), "WHISPER", 77)
   check(#real.feed == feedN, "same player again within 5 min: no second alert")
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Not Mine", class = "MAGE", level = "30", guild = "", zone = "Duskwood" }, "sg3"), "WHISPER", 77)
-  check(ns.Plain(lastFeed()):find("Not Mine spotted by", 1, true) and not lastFeed():find("kills", 1, true), "someone not on your hitlist: shown without a record")
+  check(nolv(lastFeed()):find("Not Mine spotted by", 1, true) and not lastFeed():find("kills", 1, true), "someone not on your hitlist: shown without a record")
   SENT = {}
   ns.Events.Emit("SIGHT", { name = "Seen Guy", class = "ROGUE", level = 30, guild = "", zone = "Ashenvale" })
   RUN_TICKERS(3)
@@ -1172,10 +1173,10 @@ do
   check((ns.Toast.shown or 0) == before + 2, "two kills close together: two toasts, stacked")
   drainToasts()
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Main Killer:ROGUE:60:", conf = "c", assists = "Side Kick:MAGE:60:" }, "wd1"), "WHISPER", 77)
-  check(ns.Plain(lastFeed()):find("(with Side Kick)", 1, true) ~= nil, "death names enemy helpers: " .. ns.Plain(lastFeed()))
+  check(nolv(lastFeed()):find("(with Side Kick)", 1, true) ~= nil, "death names enemy helpers: " .. ns.Plain(lastFeed()))
   ns.S().flavor = false
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Main Killer:ROGUE:60:", conf = "c", assists = "Side Kick:MAGE:60:" }, "wd2"), "WHISPER", 77)
-  check(ns.Plain(lastFeed()) == "Buddy Pal killed by Main Killer (with Side Kick)" .. ns.Flavor.SEP .. "Duskwood", "short style too: " .. ns.Plain(lastFeed()))
+  check(nolv(lastFeed()) == "Buddy Pal killed by Main Killer (with Side Kick)" .. ns.Flavor.SEP .. "Duskwood", "short style too: " .. ns.Plain(lastFeed()))
   ns.S().flavor = true
   drainToasts()
   check(ns.errors == 0, "no errors in kill merging (" .. tostring(ns.lastError) .. ")")
@@ -3081,6 +3082,70 @@ do
   end
 end
 
+-- Resurrection Sickness: no notoriety, unless the victim is a skull to you
+do
+  local errs = ns.errors
+  local B = ns.Bounty
+  local rr = ns.Data.RealRealm()
+  local savedBounty = FriendsAndFoesDB.profile.bounty
+  local saved = { UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitIsUnit, C_UnitAuras, ns.Toast.Chat }
+  local chats = {}
+  ns.Toast.Chat = function(line) chats[#chats + 1] = line end
+  local targetLevel, auras
+  UnitExists = function(u) return u == "target" end
+  UnitIsPlayer = function(u) return u == "target" end
+  UnitFactionGroup = function(u) if u == "player" then return MY_FACTION end return "Alliance" end
+  UnitClass = function(u) if u == "player" then return "Warrior", "WARRIOR" end return "Rogue", "ROGUE" end
+  UnitIsUnit = function() return false end
+  UnitLevel = function(u) if u == "player" then return 35 end return targetLevel end
+  C_UnitAuras = { GetAuraDataByIndex = function(unit, i) return auras and auras[i] end }
+  -- sees the victim (with the given auras), then kills them alone; returns what you got
+  local function sickKill(name, level, list)
+    UnitName = function(u) if u == "player" then return ME, MY_SURNAME end if u == "target" then return name:match("^(%S+)"), name:match("^%S+ (.+)$") end end
+    rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = level > 0 and level or nil, lastSeen = time() }
+    FriendsAndFoesDB.profile.bounty = nil
+    if list == "sick" then list = { { spellId = 15007, expirationTime = GetTime() + 300 } } end
+    targetLevel, auras = level, list
+    ns.PvP.ReadEnemy("target")
+    chats = {}
+    ADVANCE(120)
+    B.OnKill(ns.me, name)
+    B.SettleAll()
+    return (B.Mine())
+  end
+  local sick = "sick" -- (a fresh sickness aura, 300 s left, each time)
+  check(sickKill("Sick Same", 35, sick) == 0 and #chats == 0, "a sick victim at your level: nothing, and no chat line")
+  check(sickKill("Sick Skull", -1, sick) == 750, "a sick skull victim: normal, x1.5")
+  check(sickKill("Sick Plus", 45, sick) == 750, "a sick victim 10 levels above you: normal, x1.5")
+  local over = sickKill("Sick Over", 40, sick)
+  check(over == 0, "a sick victim 5 levels above you: nothing, got " .. over .. " " .. tostring(ns.PvP.IsSick("Sick Over")))
+  check(sickKill("Well Same", 35, {}) == 500, "not sick: normal")
+  check(sickKill("Other Aura", 35, { { spellId = 12345, expirationTime = GetTime() + 300 } }) == 500, "another debuff isn't sickness")
+  -- expired: the remembered sickness ends
+  sickKill("Sick Gone", 35, sick)
+  ADVANCE(2000)
+  check(not ns.PvP.IsSick("Sick Gone"), "sickness expires")
+  FriendsAndFoesDB.profile.bounty = nil
+  B.OnKill(ns.me, "Sick Gone")
+  B.SettleAll()
+  check(B.Mine() > 0, "sickness over: normal notoriety (a repeat kill, so less than 500: " .. B.Mine() .. ")")
+  -- no expiration given: assumed ten minutes
+  sickKill("Sick NoExp", 35, { { spellId = 15007 } })
+  check(ns.PvP.IsSick("Sick NoExp"), "sickness without an expiration is still known")
+  -- secret or unavailable aura data: not known sick
+  C_UnitAuras = { GetAuraDataByIndex = function() return { spellId = "secret", expirationTime = "secret" } end }
+  check(pcall(ns.PvP.ReadEnemy, "target") and not ns.PvP.IsSick("Sick NoExp2"), "unreadable aura data: no error")
+  C_UnitAuras = nil
+  UnitAura = nil
+  check(sickKill("Unavail", 35, nil) == 500, "no aura API: normal notoriety")
+  C_UnitAuras = { GetAuraDataByIndex = function() error("boom") end }
+  check(sickKill("Boom", 35, nil) == 500, "an aura read that errors: normal notoriety")
+  UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitIsUnit, C_UnitAuras, ns.Toast.Chat = (unpack or table.unpack)(saved, 1, 9)
+  FriendsAndFoesDB.profile.bounty = savedBounty
+  for _, n in ipairs({ "Sick Same", "Sick Skull", "Sick Plus", "Sick Over", "Well Same", "Other Aura", "Sick Gone", "Sick NoExp", "Unavail", "Boom" }) do rr.players[n] = nil end
+  check(ns.errors == errs, "no errors in resurrection sickness (" .. tostring(ns.lastError) .. ")")
+end
+
 -- 0.9: bounties - an enemy's open bounty, collected (and shared) by whoever kills them
 do
   local errs = ns.errors
@@ -3182,7 +3247,8 @@ do
       data = table.concat({ NAME, "WARRIOR", "60", GUILD, ZONE, "99", "86400", "1", "1", "120" }, "^") },
     KLQ = { who = NAME },
     BTY = { cid = "ffffffffff", target = UNIT, amount = "999999999", state = "done", killer = NAME, age = "5184000", updage = "5184000", days = "30", blow = "pet", last = "120", poster = NAME,
-      killers = table.concat({ NAME, "Bbbbbbbbbbbb Nnnnnnnnnnnn", "Cccccccccccc Oooooooooooo", "Dddddddddddd Pppppppppppp", "Eeeeeeeeeeee Qqqqqqqqqqqq" }, ",") },
+      killers = table.concat({ NAME, "Bbbbbbbbbbbb Nnnnnnnnnnnn", "Cccccccccccc Oooooooooooo", "Dddddddddddd Pppppppppppp", "Eeeeeeeeeeee Qqqqqqqqqqqq" }, ","),
+      note = string.rep("n", 60) }, -- (the note is trimmed first when it doesn't fit)
   }
   local tooLong, broken = {}, {}
   for kind, schema in pairs(C.SCHEMA) do
@@ -3202,7 +3268,7 @@ do
         if not back or back.kind ~= kind or back.name ~= NAME then broken[#broken + 1] = kind end
         -- every field survives (guild names may be dropped from unit lists to make it fit)
         for _, f in ipairs(schema) do
-          if back and back.f[f] ~= tostring(fields[f]) and not (f == "attackers" or f == "killer" or f == "assists" or f == "target" or f == "killers") then
+          if back and back.f[f] ~= tostring(fields[f]) and not (f == "attackers" or f == "killer" or f == "assists" or f == "target" or f == "killers" or f == "note") then
             broken[#broken + 1] = kind .. "." .. f
           end
         end
@@ -3328,7 +3394,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_100_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_101_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -5713,11 +5779,11 @@ do
   kill("Alice Wonder", "Dup One")
   local t1, f1 = count()
   check(t1 == t0 + 1 and f1 == f0 + 1, "two friends, one death: one toast, one Feed line (" .. (t1 - t0) .. ", " .. (f1 - f0) .. ")")
-  local line = ns.Plain(select(2, kills()))
+  local line = nolv(select(2, kills()))
   check(line:find("Buddy Pal and Alice Wonder killed Dup One", 1, true) ~= nil, "the line names both: " .. line)
   check(ns.Data.Player("Alice Wonder").k == aliceK + 1, "each killer still gets their own count")
   kill("Carol Third", "Dup One")
-  line = ns.Plain(select(2, kills()))
+  line = nolv(select(2, kills()))
   check((kills()) == f1 and line:find("Buddy Pal, Alice Wonder and Carol Third killed", 1, true) ~= nil, "a third killer joins the same line: " .. line)
 
   kill("Buddy Pal", "Dup One") -- the same friend again: a new death
@@ -5746,7 +5812,7 @@ do
   kill("Alice Wonder", "Dup Four")
   local t5, f5 = count()
   check(f5 == f4 + 1 and t5 == t4, "your own kill and a friend's: one line, no toast of yours")
-  line = ns.Plain(select(2, kills()))
+  line = nolv(select(2, kills()))
   check(line:find("You and Alice Wonder killed Dup Four", 1, true) ~= nil, "'You and ...': " .. line)
 
   drainToasts()
@@ -5888,6 +5954,572 @@ do
   while #feed > base do table.remove(feed) end
   ns.UI.ShowProfile(ns.me)
   check(ns.errors == errs, "no errors in the name links (" .. tostring(ns.lastError) .. ")")
+end
+
+-- levels at the time in the Feed
+do
+  local errs = ns.errors
+  local S = SYNC
+  local rr = ns.Data.RealRealm()
+  local restore = S.friends({ { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" } })
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local GREY = "|cff9d9d9d"
+  local function last() return rr.feed[#rr.feed].text end
+  local function recv(level, kind, fields, id)
+    local p = ns.Comm.Encode({ kind = kind, id = "lv" .. id, name = "Buddy Pal", class = "PRIEST", level = level, f = fields })
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", p, "WHISPER", 77)
+  end
+  recv(35, "KILL", { victim = "Bob Gank", vclass = "ROGUE", vlevel = "38", zone = "Duskwood", streak = "1" }, "k1")
+  local t = last()
+  local pal, bob = t:find("Buddy Pal", 1, true), t:find("Bob Gank", 1, true)
+  check(t:find("Buddy Pal|r " .. GREY .. "(35)|r", 1, true) or t:find("Buddy Pal " .. GREY .. "(35)|r", 1, true), "feed: friend's level after their name: " .. t)
+  check(t:find("Bob Gank|r " .. GREY .. "(38)|r", 1, true) or t:find("Bob Gank " .. GREY .. "(38)|r", 1, true), "feed: victim's level after their name")
+  check(ns.UI.Linkify(t, rr.feed[#rr.feed]):find("|Hfnfplayer:Bob Gank|h", 1, true), "feed: the names stay links with levels in the text")
+  check(ns.Plain(t):find("Buddy Pal (35)", 1, true) and ns.Plain(t):find("Bob Gank (38)", 1, true), "feed: plain text reads well (and is searchable)")
+  -- an old-format message: no sender level
+  recv(nil, "KILL", { victim = "Old Victim", vclass = "ROGUE", vlevel = "20", zone = "Duskwood", streak = "1" }, "k2")
+  t = last()
+  check(not t:find("Buddy Pal|r " .. GREY, 1, true) and t:find("(20)", 1, true), "no sender level: none for the friend, the victim's still shown")
+  -- skull
+  recv(35, "KILL", { victim = "Skull Guy", vclass = "ROGUE", vlevel = "0", zone = "Duskwood", streak = "1" }, "k3")
+  check(last():find("(" .. ns.L.LEVEL_SKULL .. ")", 1, true) and ns.L.LEVEL_SKULL == "Skull", "a skull-level victim shows (Skull)")
+  check(ns.LevelTag(0) == "" and ns.LevelTag("") == "" and ns.LevelTag(nil, true) == "", "no level / a friend's 0: nothing")
+  -- attacked, with the attacker's level
+  recv(34, "ATK", { enc = "e-lv", zone = "Duskwood", attackers = "Gank Two:ROGUE:38:" }, "a1")
+  t = last()
+  check(ns.Plain(t):find("Buddy Pal (34)", 1, true) and ns.Plain(t):find("Gank Two (38)", 1, true), "attacked: both levels")
+  -- a second killer of the same death: levels kept in the merged line
+  recv(35, "KILL", { victim = "Merge Man", vclass = "ROGUE", vlevel = "36", zone = "Duskwood", streak = "1" }, "m1")
+  ns.Events.Emit("KILL", { victim = "Merge Man", vclass = "ROGUE", vlevel = "36", zone = "Duskwood" })
+  t = ns.Plain(last())
+  check(t:find("(35)", 1, true) and t:find("You (" .. UnitLevel("player") .. ")", 1, true) and t:find("Merge Man (36)", 1, true), "merged kill keeps each level: " .. t)
+  -- your own death: your level
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = "Lv Killer:ROGUE:" .. (UnitLevel("player") + 3) .. ":", conf = "c", assists = "" })
+  t = ns.Plain(last())
+  check(t:find(ns.me .. " (" .. UnitLevel("player") .. ")", 1, true) and t:find("Lv Killer (" .. (UnitLevel("player") + 3) .. ")", 1, true), "your own death: your level and the killer's: " .. t)
+  -- the outbox replays the level from when it happened
+  local savedBox = FriendsAndFoesDB.outbox
+  FriendsAndFoesDB.outbox = {}
+  ns.Comm.Remember("KILL", "obx1", { victim = "Old Foe", vclass = "MAGE", vlevel = "9", zone = "Duskwood", streak = "1" })
+  ns.Comm.Outbox()[1].l = 22 -- (you were 22 then)
+  S.drain() -- (live messages still queued from above go out first)
+  ADVANCE(100)
+  SENT = {}
+  S.from("Buddy Pal", 77, "REQ", { window = 3600 }, "lvq1")
+  S.drain()
+  local kills = S.sent(77, "KILL")
+  check(#kills == 1 and kills[1].level == 22, "catch-up replay keeps the level from when it happened")
+  FriendsAndFoesDB.outbox = savedBox
+  -- size: long names with the levels
+  local NAME = "Abcdefghijkl Mnopqrstuvwx"
+  for _, m in ipairs({
+    { kind = "KILL", f = { victim = NAME, vclass = "WARRIOR", vlevel = "60", vguild = string.rep("G", 24), zone = string.rep("Z", 48), streak = "12", rl = "1", blow = "pet", last = "120" } },
+    { kind = "DIE", f = { zone = string.rep("Z", 48), killer = NAME .. ":WARRIOR:60:" .. string.rep("G", 24), conf = "c", assists = NAME .. ":MAGE:60:;" .. NAME .. ":MAGE:60:", ended = "12", rl = "1" } },
+  }) do
+    m.id, m.name, m.class, m.level = "ffffffffff", NAME, "WARRIOR", 60
+    local wire = ns.Comm.Fit(m)
+    check(wire and #wire <= 255, m.kind .. " with long names and levels fits: " .. tostring(wire and #wire))
+  end
+  restore()
+  check(ns.errors == errs, "no errors in feed levels (" .. tostring(ns.lastError) .. ")")
+end
+
+-- sighting text: kills, else attacks, else nothing
+do
+  local flavorWas = ns.S().flavor
+  ns.S().flavor = true
+  local function line(hit) return ns.Plain(ns.Toast.Sighting("Sight Seer", "ROGUE", "Duskwood", hit, nil)) end
+  local t = line({ kills = 3, attacks = 5 })
+  check(t:find("3 kills on us", 1, true) and not t:find("attacked", 1, true), "sighting: kills first: " .. t)
+  check(line({ kills = 1, attacks = 0 }):find("1 kill on us", 1, true) and not line({ kills = 1 }):find("1 kills", 1, true), "sighting: one kill, singular")
+  t = line({ kills = 0, attacks = 4 })
+  check(t:find("attacked us 4 times", 1, true) and not t:find("kills", 1, true), "sighting: only attacks: " .. t)
+  check(line({ kills = 0, attacks = 1 }):find("attacked us once", 1, true), "sighting: one attack")
+  t = line({ kills = 0, attacks = 0 })
+  check(not t:find("kill", 1, true) and not t:find("attacked", 1, true) and t:find("Duskwood", 1, true) and not t:find("\194\183 \194\183", 1, true), "sighting: nothing known, no empty part: " .. t)
+  check(line(nil):find("Duskwood", 1, true) ~= nil, "sighting: not on your hitlist: just the place")
+  ns.S().flavor = false
+  t = line({ kills = 0, attacks = 4 })
+  check(not t:find("kill", 1, true) and not t:find("attacked us", 1, true), "sighting, short wording: who and where only")
+  ns.S().flavor = flavorWas
+  drainToasts()
+end
+
+-- 1.0.1: add by name, bounty notes, bounty target spotted, nemesis ties
+do
+  local errs = ns.errors
+  local L, D, C, P = ns.L, ns.Data, ns.Contracts, ns.Profile
+  local rr = D.RealRealm()
+  local debugWas = ns.S().debug
+  ns.S().debug = true
+  local savedContracts = FriendsAndFoesDB.contracts
+  FriendsAndFoesDB.contracts = {}
+  local slash = SlashCmdList.FRIENDSANDFOES
+  local function printed(text)
+    for _, l in ipairs(PRINTED) do if l:find(text, 1, true) then return true end end
+    return false
+  end
+  local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
+
+  -- name rules
+  check(D.ParseName("Ru Mia") == "Ru Mia" and D.ParseName("Père Sévérance") == "Père Sévérance", "names: a space and accents are fine")
+  check(D.ParseName("  ru   mia ") == "Ru Mia" and D.ParseName("zed") == "Zed" and D.ParseName("d'arcy") == "D'arcy", "names: trimmed, a capital for each word")
+  check(D.ParseName("Ru-Mia") == "Ru Mia", "names: a hyphen is the space (First-Last)")
+  local bad = { "x", "", "   ", "abc123", "Bob!", "a b c", string.rep("a", 25), "Bob|cffff0000", "'", "12" }
+  local allBad = true
+  for _, b in ipairs(bad) do
+    local n, why = D.ParseName(b)
+    if n or why ~= "NAME_BAD" then allBad = false; check(false, "names: '" .. b .. "' is refused") end
+  end
+  check(allBad, "names: too short or long, digits, symbols and more than two words are refused")
+  check(D.ParseName(string.rep("a", 24)) ~= nil and D.ParseName(string.rep("\195\169", 24)) ~= nil, "names: 24 characters (not bytes) is the limit")
+  check(select(2, D.ManualTarget(ns.me)) == "NAME_FRIEND" and select(2, D.ManualTarget("Buddy Pal")) == "NAME_FRIEND",
+    "names: you and your friends can't go on the hitlist")
+
+  -- /fnf hitlist add: a manual entry, not forgotten, not in the digest
+  PRINTED = {}
+  slash("hitlist add ru mia")
+  local h = rr.hitlist["Ru Mia"]
+  check(h and h.manual and (h.kills or 0) == 0, "hitlist add: a manual entry, named properly")
+  check(printed("Ru Mia") and printed("hitlist"), "hitlist add: says so in chat")
+  PRINTED = {}
+  slash("hitlist add Ru Mia")
+  check(printed(L.HIT_ALREADY:format("Ru Mia")), "hitlist add: already on the list")
+  PRINTED = {}
+  slash("hitlist add abc123")
+  slash("hitlist add " .. ns.me)
+  slash("hitlist add Buddy Pal")
+  check(printed(L.NAME_BAD) and printed(L.NAME_FRIEND) and rr.hitlist["Abc123"] == nil and rr.hitlist["Buddy Pal"] == nil,
+    "hitlist add: bad names, you and friends are refused with a message")
+  h.firstSeen, h.lastSeen = time() - 400 * 86400, nil
+  D.ForgetOld(FriendsAndFoesDB)
+  check(rr.hitlist["Ru Mia"] == h and D.CountForget(FriendsAndFoesDB) == 0, "a manual entry is never forgotten by itself")
+  local plain = D.Hit("Plain Attacker")
+  plain.attacks, plain.firstSeen = 2, time() - 400 * 86400
+  plain.victims["Buddy Pal"] = true
+  plain.hitWho = { ["Buddy Pal"] = time() }
+  local inDigest = {}
+  for _, e in ipairs(ns.Comm.DigestList(100)) do inDigest[e.name] = true end
+  check(not inDigest["Ru Mia"] and inDigest["Plain Attacker"], "a manual entry with no deeds isn't in the digest; an attacker is")
+  D.ForgetOld(FriendsAndFoesDB)
+  check(rr.hitlist["Plain Attacker"] == nil, "(an old attacker is forgotten)")
+  check(ns.UI.AddHit("Ui Added") and rr.hitlist["Ui Added"] and rr.hitlist["Ui Added"].manual, "the Add button's path adds one too")
+
+  -- seen: a manual entry learns class and level, and alerts like any hitlist entry
+  local enemyUnits = {}
+  local o = { UnitExists = UnitExists, UnitIsPlayer = UnitIsPlayer, UnitFactionGroup = UnitFactionGroup, UnitName = UnitName,
+    UnitClass = UnitClass, UnitLevel = UnitLevel, UnitIsUnit = UnitIsUnit }
+  UnitExists = function(u) return enemyUnits[u] ~= nil or o.UnitExists(u) end
+  UnitIsPlayer = function(u) if enemyUnits[u] then return true end return o.UnitIsPlayer and o.UnitIsPlayer(u) end
+  UnitFactionGroup = function(u) if enemyUnits[u] then return "Alliance" end return o.UnitFactionGroup(u) end
+  UnitName = function(u) local e = enemyUnits[u]; if e then return e[1], e[2] end return o.UnitName(u) end
+  UnitClass = function(u) if enemyUnits[u] then return "Rogue", "ROGUE" end return o.UnitClass(u) end
+  UnitLevel = function(u) if enemyUnits[u] then return 24 end return o.UnitLevel(u) end
+  UnitIsUnit = function() return false end
+  local pushed, centre = {}, {}
+  local realPush = ns.Toast.Push
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  local showWas, sightWas = ns.S().show.contract, ns.S().show.sighting
+  ns.S().show.sighting = "toast"
+  ns.S().show.contract = "toast"
+  enemyUnits.target = { "Ru", "Mia", false }
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(h.class == "ROGUE" and h.level == 24, "a manual entry gets their class and level when you see them")
+  check(pushed[1] and pushed[1].kind == "sighting", "...and the normal sighting alert")
+  enemyUnits.target = nil
+
+  -- a bounty by name, no target: the BTY carries the name only, with the note
+  PRINTED, SENT = {}, {}
+  slash("bounty Zork Quux 10g 3d Caught me AFK")
+  local zork
+  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Zork Quux" then zork = c end end
+  check(zork and zork.amount == 100000 and zork.days == 3 and zork.note == "Caught me AFK", "bounty by name: posted without a target, with days and a note")
+  check(rr.hitlist["Zork Quux"] and rr.hitlist["Zork Quux"].manual, "bounty by name: the target is on your hitlist as manual")
+  RUN_TICKERS(4)
+  local wire
+  for _, s in ipairs(SENT) do if s.payload:find("\tBTY\t", 1, true) and s.payload:find("Zork Quux", 1, true) then wire = ns.Comm.Decode(s.payload) end end
+  check(wire and wire.f.target == "Zork Quux:::" and wire.f.note == "Caught me AFK", "bounty by name: the message has the name, empty class and level, and the note")
+  check(printed("Caught me AFK"), "the chat line quotes the note")
+  local cmd = C.ParseCommand("Ru Mia 10g for 3 days revenge time")
+  check(cmd.name == "Ru Mia" and cmd.offer == "10g for 3 days" and cmd.note == "revenge time", "/fnf bounty: name, offer and message are told apart")
+  cmd = C.ParseCommand("10g 50s 3d")
+  check(cmd.name == nil and cmd.offer == "10g 50s 3d" and cmd.note == nil, "/fnf bounty: the old '<amount> [days]' still works")
+  cmd = C.ParseCommand("Père Sévérance 5g \"quoted words\"")
+  check(cmd.name == "Père Sévérance" and cmd.note == "quoted words", "/fnf bounty: accents and quotes")
+  PRINTED = {}
+  local before = 0
+  for _ in pairs(FriendsAndFoesDB.contracts) do before = before + 1 end
+  slash("bounty 10g")
+  local after = 0
+  for _ in pairs(FriendsAndFoesDB.contracts) do after = after + 1 end
+  check(printed(L.CONTRACT_NEED_TARGET) and after == before, "/fnf bounty with no name and no target: asks for one")
+  enemyUnits.target = { "Targ", "Et", false }
+  slash("bounty 7g 2d")
+  local targ
+  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Targ Et" then targ = c end end
+  check(targ and targ.amount == 70000 and targ.days == 2 and not (rr.hitlist["Targ Et"] or {}).manual, "/fnf bounty on your target as before (not manual)")
+  enemyUnits.target = nil
+  PRINTED = {}
+  slash("bounty Buddy Pal 10g")
+  slash("bounty bad1 10g")
+  check(printed(L.CONTRACT_NOT_ENEMY) and printed(L.NAME_BAD), "bounty by name: friends and bad names are refused")
+  PRINTED = {}
+  slash("bounty " .. ns.me .. " 10g")
+  check(printed(L.NAME_FRIEND) or printed(L.CONTRACT_NOT_ENEMY), "bounty by name: not on yourself")
+  -- the dialog (no target): name, amount, days and message
+  slash("bounty")
+  local win, fields = ns.UI.Frames_Bounty()
+  check(win and win:IsShown(), "Post bounty without a target opens the dialog")
+  fields.name:SetText("dlg foe"); fields.amount:SetText("5g"); fields.days:SetText("2"); fields.note:SetText("From the dialog")
+  fields.note._scripts.OnEnterPressed(fields.note)
+  local dlg
+  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Dlg Foe" then dlg = c end end
+  check(dlg and dlg.amount == 50000 and dlg.days == 2 and dlg.note == "From the dialog" and not win:IsShown(), "the dialog posts it and closes")
+  enemyUnits.target = { "Pre", "Filled", false }
+  ns.UI.PostBounty()
+  check(fields.name:GetText() == "Pre Filled", "with a target, the dialog fills in the name")
+  enemyUnits.target = nil
+  win:Hide()
+
+  -- the note: filtered, "|" stripped, 60 characters, and again when received
+  check(select(2, C.Post({ name = "Note Foe" }, 100, 3, "Hitler Fans")) == "TEXT_OFFENSIVE", "a note that fails the language filter isn't posted")
+  local piped = C.Post({ name = "Note Foe" }, 100, 3, "hi |cffff0000red|r\ttext")
+  check(piped and not piped.note:find("|", 1, true) and not piped.note:find("\t", 1, true), "a note has no '|' or control characters: " .. tostring(piped and piped.note))
+  local long = C.Post({ name = "Note Foe" }, 100, 3, string.rep("a", 100))
+  check(long and P.Length(long.note) == 60, "a note is cut at 60 characters")
+  local accent = C.Post({ name = "Note Foe" }, 100, 3, string.rep("\195\169", 70))
+  check(accent and P.Length(accent.note) == 60 and #accent.note == 120, "...counted in characters")
+  check(C.Post({ name = "Note Foe" }, 100, 3, "   ").note == nil, "an empty note is no note")
+  bty({ cid = "n1", target = "Rude Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4, note = "Hitler Fans" }, "n1")
+  local rude = FriendsAndFoesDB.contracts["Buddy Pal/n1"]
+  check(rude and rude.note == nil, "a friend's note that fails the filter is dropped when received (the bounty stays)")
+  bty({ cid = "n2", target = "Kind Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4, note = "Good |cffff0000luck|r" }, "n2")
+  local kind = FriendsAndFoesDB.contracts["Buddy Pal/n2"]
+  check(kind and kind.note and not kind.note:find("|", 1, true), "a received note has its '|' stripped: " .. tostring(kind and kind.note))
+  bty({ cid = "n3", target = "Old Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4 }, "n3")
+  check(FriendsAndFoesDB.contracts["Buddy Pal/n3"] and FriendsAndFoesDB.contracts["Buddy Pal/n3"].note == nil, "an older friend's bounty has no note: fine")
+  -- fits 255 bytes: a full note with a long name and no helper names is kept whole; with everything at its longest the note goes first
+  local NAME = "Abcdefghijkl Mnopqrstuvwx"
+  local msg = { kind = "BTY", id = "ffffffffff", name = NAME, class = "WARRIOR", level = 60, f = { cid = "ffffffffff",
+    target = NAME .. ":WARRIOR:60:" .. string.rep("G", 24), amount = "999999999", state = "open", killer = "", age = "5184000", updage = "5184000", days = "30",
+    blow = "", last = "", poster = "", killers = "", note = string.rep("n", 60) } }
+  local w = ns.Comm.Fit(msg)
+  check(w and #w <= 255 and ns.Comm.Decode(w).f.note == string.rep("n", 60), "BTY with a 60-character note and long names fits 255 bytes whole: " .. tostring(w and #w))
+  msg.f.state, msg.f.killer, msg.f.poster, msg.f.blow, msg.f.last = "done", NAME, NAME, "pet", "120"
+  msg.f.killer, msg.f.poster = "Ab Cd", ""
+  msg.f.killers = table.concat({ "Ab Cd", "Bbbbbbbbbbbb Nnnnnnnnnnnn", "Cccccccccccc Oooooooooooo" }, ",")
+  w = ns.Comm.Fit(msg)
+  local back = w and ns.Comm.Decode(w)
+  check(w and #w <= 255 and back.f.killers:find("Cccccccccccc", 1, true) and #back.f.note < 60,"when it's too long the note is trimmed before anyone's name: " .. tostring(w and #w) .. " killers=" .. tostring(back and back.f.killers) .. " note=" .. tostring(back and back.f.note))
+  -- the profile line's hover and the board row show the note (data only: the row is the contract)
+  check(C.List()[1] ~= nil and (function() for _, r in ipairs(C.List()) do if r.note == "Caught me AFK" then return true end end end)(), "the Bounty board rows carry the note")
+
+  -- a bounty target spotted
+  ns.Toast.Push = function(spec) pushed[#pushed + 1] = spec end
+  RaidWarningFrame = {}
+  RaidNotice_AddMessage = function(_, text) centre[#centre + 1] = text end
+  pushed = {}
+  bty({ cid = "sp1", target = "Hunted One:ROGUE:24:", amount = 250000, state = "open", killer = "", age = 1, updage = 1, days = 5, note = "Gank him" }, "sp1")
+  pushed = {}
+  ADVANCE(400)
+  enemyUnits.target = { "Hunted", "One", false }
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 1 and centre[1]:find("Hunted One", 1, true) and centre[1]:find("25g", 1, true) and centre[1]:find("Hillsbrad", 1, true),
+    "bounty target spotted: a centre-screen message with the name, amount and zone: " .. tostring(centre[1]))
+  local spot = pushed[#pushed]
+  check(spot and spot.kind == "contract" and spot.category == "bounty" and spot.alert and spot.longer and spot.alertSound
+    and spot.header == L.HEADER_BOUNTY_SPOTTED and spot.player == "Hunted One" and #pushed == 1 and ns.Plain(spot.text):find("Gank him", 1, true),
+    "...and one bounty toast (the longer, louder kind), not a normal sighting")
+  FIRE("PLAYER_TARGET_CHANGED")
+  FIRE("UPDATE_MOUSEOVER_UNIT")
+  check(#centre == 1 and #pushed == 1, "not again within 5 minutes")
+  local logged = false
+  for _, l in ipairs(FriendsAndFoesDB.debugLog or {}) do if l:find("BOUNTY-SPOTTED", 1, true) then logged = true end end
+  check(logged, "[BOUNTY-SPOTTED] is in the debug log")
+  ADVANCE(301)
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2 and #pushed == 2, "after 5 minutes: again")
+  -- a friend sees them: the bounty toast style, no centre-screen message
+  ADVANCE(301)
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Hunted One", class = "ROGUE", level = "24", guild = "", zone = "Duskwood" }, "sp2"), "WHISPER", 77)
+  local fs = pushed[#pushed]
+  check(#centre == 2 and #pushed == 3 and fs.alert and fs.header == L.HEADER_BOUNTY_SPOTTED and ns.Plain(fs.title):find("spotted by", 1, true),
+    "a friend's sighting of a bounty target: the bounty toast, no centre message")
+  -- nobody with a bounty: a normal sighting
+  FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Plain Foe", class = "MAGE", level = "24", guild = "", zone = "Duskwood" }, "sp3"), "WHISPER", 77)
+  check(pushed[#pushed].kind == "sighting" and not pushed[#pushed].alert, "a sighting with no bounty is the normal toast")
+  -- done or run-out bounties don't count
+  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].state = "done"
+  ADVANCE(301)
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2, "a finished bounty: no alert")
+  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].state = "open"
+  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].t = time() - 6 * 86400
+  ADVANCE(301)
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2, "a bounty past its days: no alert")
+  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].t = time()
+  -- the bounty alert setting: chat = a chat line only; off = nothing
+  ns.S().show.contract = "chat"
+  ADVANCE(301)
+  CHAT = {}
+  local nBefore = #pushed
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2 and #pushed == nBefore + 1 and pushed[#pushed].alert, "alerts on 'chat': no centre message (the toast goes out as a chat line)")
+  ns.S().show.contract = "off"
+  ADVANCE(301)
+  local n = #pushed
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2 and #pushed == n, "alerts off: nothing at all")
+  ns.S().show.contract = "toast"
+  -- Where it works: in an instance set to 'off' nothing; 'hold' no centre message
+  IN_INSTANCE = true
+  ns.S().instances = "off"
+  ADVANCE(301)
+  FIRE("PLAYER_TARGET_CHANGED")
+  check(#centre == 2 and #pushed == n, "in an instance set to off: nothing")
+  IN_INSTANCE = nil
+  -- the real toast: twice as long, the raid-warning sound, a red edge (real Toast.Push)
+  ns.Toast.Push = realPush
+  drainToasts()
+  ns.S().sound.enabled, ns.S().sound.contract = true, true
+  local lastSound
+  local origPlay = PlaySound
+  PlaySound = function(id) lastSound = id end
+  local shown = ns.Toast.shown or 0
+  ADVANCE(301)
+  FIRE("PLAYER_TARGET_CHANGED")
+  check((ns.Toast.shown or 0) == shown + 1 and lastSound == 8959, "the real bounty toast shows with the raid-warning sound: " .. tostring(lastSound))
+  PlaySound = origPlay
+  drainToasts()
+  -- no RaidNotice: the error text frame is used instead, never an error
+  RaidNotice_AddMessage = nil
+  local errText
+  UIErrorsFrame = { AddMessage = function(_, text) errText = text end }
+  ns.Toast.Centre("hello")
+  check(errText == "hello", "without the raid-warning frame the centre message uses the error text")
+  UIErrorsFrame, RaidWarningFrame = nil, nil
+  ns.Toast.Centre("nowhere")
+  ns.S().instances, ns.S().show.contract, ns.S().show.sighting = ns.S().instances, showWas, sightWas
+
+  -- nemesis: most kills; a tie goes to the most recent killer; no times known = the old order
+  local a, b = D.Hit("Nem Alpha"), D.Hit("Nem Bravo")
+  a.kv, b.kv = { ["Tie Victim"] = 3 }, { ["Tie Victim"] = 3 }
+  check(P.Nemesis("Tie Victim").name == "Nem Alpha", "nemesis tie, no times known: the first by name (as before)")
+  a.kt, b.kt = { ["Tie Victim"] = 1000 }, { ["Tie Victim"] = 2000 }
+  local nem, times = P.Nemesis("Tie Victim")
+  check(nem.name == "Nem Bravo" and times == 3, "nemesis tie: the one who killed most recently")
+  a.kt["Tie Victim"] = 3000
+  check(P.Nemesis("Tie Victim").name == "Nem Alpha", "...whichever it is")
+  a.kv["Tie Victim"] = 2
+  check(P.Nemesis("Tie Victim").name == "Nem Bravo", "more kills still beat a more recent kill")
+  b.kv["Tie Victim"] = nil
+  check(P.Nemesis("Tie Victim").name == "Nem Alpha", "(and one kill count is enough)")
+  check(P.NemesisBeats(1, nil, "A", nil, nil, nil) and not P.NemesisBeats(1, nil, "B", 1, nil, "A") and P.NemesisBeats(1, 5, "B", 1, nil, "A"),
+    "the shared rule: nothing yet, then times, then names")
+  ns.eventTime = 5000
+  local killer = D.Hit("Nem Charlie")
+  ns.Flavor.Died({ name = "Tie Victim" }, "Tie Victim", "Nem Charlie", killer, "Duskwood")
+  ns.eventTime = nil
+  check(killer.kt and killer.kt["Tie Victim"] == 5000, "a death at their hands records when")
+  -- the weekly summary uses the same rule
+  local weeklyWas = FriendsAndFoesDB.weekly
+  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 100, Bbb = 200 }, bt = 0 }
+  local said = {}
+  local chatWas = ns.Toast.Chat
+  ns.Toast.Chat = function(text) said[#said + 1] = ns.Plain(text) end
+  ns.Events.WeeklyRoll()
+  RUN_TIMERS()
+  check(said[1] and said[1]:find("Nemesis: Bbb", 1, true), "weekly summary: a tie goes to the most recent killer: " .. tostring(said[1]))
+  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 300, Bbb = 200 }, bt = 0 }
+  said = {}
+  ns.Events.WeeklyRoll()
+  RUN_TIMERS()
+  check(said[1] and said[1]:find("Nemesis: Aaa", 1, true), "...either way round")
+  ns.Toast.Chat = chatWas
+  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  ns.Events.WeeklyAdd("d", "Zed Zed")
+  check(FriendsAndFoesDB.weekly.killedAt and FriendsAndFoesDB.weekly.killedAt["Zed Zed"], "a death records when its killer got you")
+  FriendsAndFoesDB.weekly = weeklyWas
+
+  -- tidy up
+  for _, name in ipairs({ "Ru Mia", "Ui Added", "Zork Quux", "Targ Et", "Dlg Foe", "Note Foe", "Rude Foe", "Kind Foe", "Old Foe", "Hunted One",
+    "Nem Alpha", "Nem Bravo", "Nem Charlie", "Plain Foe" }) do
+    rr.hitlist[name], rr.players[name] = nil, nil
+  end
+  for k, v in pairs(o) do _G[k] = v end
+  FriendsAndFoesDB.contracts = savedContracts
+  ns.S().debug = debugWas
+  drainToasts()
+  check(ns.errors == errs, "no errors in 1.0.1 features (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0.1: the Stats page and your kill log
+do
+  local errs = ns.errors
+  local St = ns.Stats
+  local logWas, bestWas, streakWas = FriendsAndFoesDB.killLog, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak
+  FriendsAndFoesDB.killLog = nil
+  -- your own live kill is logged with both levels and the zone (you are level 30 in the mock)
+  ns.Events.Emit("KILL", { victim = "Log Bob", vclass = "MAGE", vlevel = "33", vguild = "", zone = "Duskwood" })
+  local e1 = FriendsAndFoesDB.killLog and FriendsAndFoesDB.killLog[1]
+  check(e1 and e1.n == "Log Bob" and e1.vl == 33 and e1.ml == 30 and e1.z == "Duskwood" and e1.t, "a live kill is logged: name, both levels, zone, time")
+  ns.Events.Emit("KILL", { victim = "Log Skull", vclass = "MAGE", vlevel = "0", vguild = "", zone = "Duskwood" })
+  ns.Events.Emit("KILL", { victim = "Log Unknown", vclass = "MAGE", vlevel = "", vguild = "", zone = "" })
+  local log = FriendsAndFoesDB.killLog
+  check(#log == 3 and log[2].vl == -1 and log[3].vl == nil and log[3].z == nil, "skull is stored as -1, unknown as nil")
+  -- caught-up kills are never logged
+  ns.past = true
+  ns.Events.Emit("KILL", { victim = "Log Old", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
+  ns.past = nil
+  check(#FriendsAndFoesDB.killLog == 3, "a caught-up kill is not logged")
+  -- the cap: 1000, oldest dropped
+  FriendsAndFoesDB.killLog = {}
+  for i = 1, St.LOG_MAX do FriendsAndFoesDB.killLog[i] = { t = i, n = "N" .. i, vl = 30, ml = 30 } end
+  St.Log("Newest One", "31", "Duskwood")
+  local capped = FriendsAndFoesDB.killLog
+  check(#capped == 1000 and capped[1].n == "N2" and capped[1000].n == "Newest One", "the log keeps the newest 1000")
+  -- the best streak is remembered (the current one is Events.lua's)
+  FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = 99, nil, 0
+  for i = 1, 3 do ns.Events.Emit("KILL", { victim = "Streak Log" .. i, vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" }) end
+  local cur, best = St.Streaks()
+  check(cur == 3 and best == 3 and FriendsAndFoesDB.bestStreak == 99, "streaks: current and best (per character; the old account value is ignored)")
+  FriendsAndFoesCharDB.streak = 0
+  cur, best = St.Streaks()
+  check(cur == 0 and best == 3, "a death ends the current streak, the best stays")
+
+  -- the numbers (a made-up log, noon on a Monday; you are 30)
+  local noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
+  local function k(ago, vl, ml, z) return { t = noon - ago, c = ns.me, n = "V", vl = vl, ml = ml, z = z } end
+  FriendsAndFoesDB.killLog = {
+    k(3600, 20, 30, "Duskwood"),     -- grey (22 or less), today, Monday 11:00
+    k(3700, 26, 30, "Duskwood"),     -- lower (4 below), today, Monday 10:58
+    k(3650, 28, 30, "Duskwood"),     -- even (2 below), today, Monday 10:59
+    k(2 * 86400, 30, 30, "Barrens"), -- even, this week
+    k(2 * 86400 + 60, 32, 30, "Barrens"), -- even (2 above)
+    k(3 * 86400, 33, 30, "Barrens"), -- higher (3 above)
+    k(20 * 86400, 40, 30, "Ashenvale"), -- higher, this month only
+    k(40 * 86400, -1, 30, "Ashenvale"), -- skull, older than a month
+    k(5 * 86400, nil, 30, nil),      -- unknown level: not in the bars or averages
+  }
+  local s = St.Compute(noon)
+  check(s.tiers.grey == 1 and s.tiers.lower == 1 and s.tiers.even == 3 and s.tiers.higher == 2 and s.tiers.skull == 1 and s.tiered == 8,
+    "gap tiers: grey / lower / even / higher / skull, unknown left out")
+  check(s.today == 3 and s.week == 7 and s.month == 8 and s.n == 9, "kills today / last 7 days / last 30 days: " .. s.today .. "/" .. s.week .. "/" .. s.month)
+  -- average level: 20 26 28 30 32 33 40 = 209 / 7 (skull and unknown excluded); gap = -10 -4 -2 0 2 3 10 = -1 / 7
+  check(math.abs(s.avgLevel - 209 / 7) < 1e-9 and math.abs(s.avgGap - (-1 / 7)) < 1e-9, "averages leave out skull and unknown levels")
+  check(St.GapText(s.avgGap) == "your level" and St.GapText(3.2) == "3 higher than you" and St.GapText(-1.6) == "2 lower than you" and St.GapText(nil) == nil, "the gap in words")
+  check(s.zones[1].name == "Barrens" and s.zones[1].n == 3 and s.zones[2].name == "Duskwood" and s.zones[2].n == 3 and s.zones[3].name == "Ashenvale" and #s.zones == 3,
+    "top zones: most first, ties by name")
+  local many = {}
+  for i = 1, 8 do many[#many + 1] = { t = noon, c = ns.me, vl = 30, ml = 30, z = "Zone" .. i } end
+  FriendsAndFoesDB.killLog = many
+  check(#St.Compute(noon).zones == 5, "at most 5 zones")
+  -- busiest weekday and hour: only from 20 logged kills (19 shows nothing)
+  local mon = time({ year = 2026, month = 6, day = 15, hour = 11, min = 30 })
+  local busy = {}
+  for i = 1, 19 do busy[i] = { t = mon - i, c = ns.me, vl = 30, ml = 30, z = "A" } end
+  FriendsAndFoesDB.killLog = busy
+  s = St.Compute(noon)
+  check(s.n == 19 and s.busyDay == nil and s.busyHour == nil, "19 kills: no busiest weekday or hour yet")
+  busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
+  s = St.Compute(noon)
+  check(s.n == 20 and s.busyDay == 2 and s.busyHour == 11, "20 kills: busiest weekday and hour (Monday, 11:00)")
+  -- average level and gap: only from 5 kills with a known, non-skull level (4 shows nothing)
+  local function lv(n) local l = {} for i = 1, n do l[i] = { t = noon - i, c = ns.me, vl = 30 + i, ml = 30 } end return l end
+  FriendsAndFoesDB.killLog = lv(4)
+  s = St.Compute(noon)
+  check(s.avgLevel == nil and s.avgGap == nil and s.levelN == 4, "4 known levels: no average level or gap yet")
+  local tiles4 = ns.UI.StatsView().tiles
+  check(tiles4[3][1] == "-" and tiles4[3][4] and tiles4[3][2] == "Average victim" and tiles4[3][6] == "4/5 kills" and tiles4[3][7] == "4/5 kills", "locked average shows its progress, visibly")
+  check(ns.UI.StatsView().hunt[4][2] == "4/20 kills" and ns.UI.StatsView().hunt[4][3] and ns.UI.StatsView().hunt[4][4] == "4/20 kills" and ns.UI.StatsView().hunt[4][5], "locked busiest day shows its progress and explains the unlock")
+  busy[20] = nil
+  FriendsAndFoesDB.killLog = busy -- (19 kills)
+  check(ns.UI.StatsView().hunt[5][4] == "19/20 kills", "19/20 kills: still locked")
+  busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
+  check(ns.UI.StatsView().hunt[5][4] == nil and ns.UI.StatsView().hunt[4][2] == "Monday", "20/20: the lock is gone and the value shows")
+  FriendsAndFoesDB.killLog = lv(5)
+  s = St.Compute(noon)
+  check(s.avgLevel == 33 and s.avgGap == 3, "5 known levels: the averages show")
+  -- per character: another character's entries and entries without one don't count
+  FriendsAndFoesDB.killLog = { { t = noon - 5, c = "Other Char", vl = 30, ml = 30, z = "Elsewhere" }, { t = noon - 6, vl = 30, ml = 30, z = "Elsewhere" },
+    { t = noon - 7, c = ns.me, vl = 30, ml = 30, z = "Here" } }
+  s = St.Compute(noon)
+  check(s.n == 1 and s.today == 1 and s.tiered == 1 and #s.zones == 1 and s.zones[1].name == "Here", "only this character's entries count")
+  St.Log("Mine Too", "30", "Here")
+  check(FriendsAndFoesDB.killLog[#FriendsAndFoesDB.killLog].c == ns.me, "a logged kill records its character")
+  -- the tiles: Kills logged first, and no overlap with the profile
+  local vw = ns.UI.StatsView()
+  check(#vw.tiles == 3 and vw.tiles[1][1] == "2" and vw.tiles[1][2] == "Kills logged", "Kills logged is the first tile and counts this character's log")
+  check(vw.tiles[2][2] == "Best streak" and vw.tiles[2][6]:find("now ", 1, true) and vw.tiles[1][6] == "", "the streak tile shows the best and, on its own line, the current run")
+  local blob = ""
+  for _, tl in ipairs(vw.tiles) do blob = blob .. tl[2] end
+  for _, h in ipairs(vw.hunt) do blob = blob .. h[1] end
+  check(not blob:find("Nemesis", 1, true) and not blob:find("Most killed", 1, true) and not blob:find("Players killed", 1, true), "the profile's lines are not repeated")
+  -- the tile for the average: level, and the gap folded into its caption
+  FriendsAndFoesDB.killLog = lv(5)
+  vw = ns.UI.StatsView()
+  check(vw.tiles[3][1] == "Level 33.0" and vw.tiles[3][2] == "Average victim" and vw.tiles[3][6] == "3 higher than you" and not vw.tiles[3][4], "average tile: level, with the gap in words on its own line")
+  -- the charts: Skull to Grey, counts with their share of Kills logged; a long zone name is kept whole
+  local longZone = "Hillsbrad Foothills (Tarren Mill and the Whole Old Hillsbrad Area)"
+  FriendsAndFoesDB.killLog = {
+    { t = noon - 1, c = ns.me, vl = -1, ml = 30, z = longZone },
+    { t = noon - 2, c = ns.me, vl = 30, ml = 30, z = longZone },
+    { t = noon - 3, c = ns.me, vl = 30, ml = 30, z = "Duskwood" },
+    { t = noon - 4, c = ns.me, vl = 10, ml = 30, z = "Duskwood" },
+  }
+  vw = ns.UI.StatsView()
+  local order = {}
+  for _, r in ipairs(vw.gap) do order[#order + 1] = r[1] end
+  check(table.concat(order, ",") == "Skull,Higher,Even,Lower,Grey", "level-gap rows run Skull to Grey")
+  check(vw.gap[1][4] == "1 (25%)" and vw.gap[3][4] == "2 (50%)" and vw.gap[2][4] == "0" and vw.gap[5][4] == "1 (25%)", "counts with their share of Kills logged; zero is just 0")
+  check(vw.gap[4][5] and vw.gap[4][5]:find("3 or more levels below you", 1, true), "a level-gap row explains its tier")
+  check(vw.zones[1][1] == "Duskwood" and vw.zones[2][1] == longZone and vw.zones[2][4] == "2 (50%)", "zone names are not cut in the view data")
+  FriendsAndFoesDB.killLog = {}
+  vw = ns.UI.StatsView()
+  check(vw.empty and vw.tiles[1][1] == "0" and vw.tiles[3][1] == "-" and vw.tiles[3][6] == "0/5 kills" and vw.hunt[1][2] == "0", "empty log: zeros, dashes and progress")
+
+  -- the page: a Stats button on your own profile only
+  ns.UI.ShowProfile(ns.me)
+  local ctl = ns.UI.Frames().profile.controls
+  check(ctl.stats:IsShown(), "your own profile has a Stats button")
+  ns.UI.ShowProfile("Buddy Pal")
+  check(not ctl.stats:IsShown(), "a friend's profile has none")
+  ns.UI.ShowProfile("Rogz Fang")
+  check(not ctl.stats:IsShown(), "an enemy's profile has none")
+  ns.UI.ShowProfile(ns.me)
+  for _, log2 in ipairs({ {}, { { t = noon - 100, c = ns.me, n = "Log Bob", vl = 33, ml = 30, z = "Duskwood" }, { t = noon - 5, c = ns.me, vl = -1, ml = 30 } } }) do
+    FriendsAndFoesDB.killLog = log2
+    ns.UI.ShowProfile(ns.me)
+    ns.UI.ShowStats()
+    local page = ns.UI.Frames().stats
+    check(ns.UI.CurrentTab() == "stats" and page:IsShown() and not ns.UI.Frames().profile:IsShown(), "Stats opens in the tab (" .. #log2 .. " kills)")
+    local v = ns.UI.StatsView()
+    check(v.empty == (#log2 == 0) and #v.tiles == 3 and #v.hunt == 5 and #v.gap == 5, "the page has its lines and five gap bars")
+    local frames = ns.UI.Frames().stats
+    if #log2 == 0 then
+      local allGap = true
+      for i, r in ipairs(frames.gap.rows) do allGap = allGap and r:IsShown() and r.count:GetText() == "0" and not r.fill:IsShown() end
+      local placeholders = true
+      for _, r in ipairs(frames.zones.rows) do placeholders = placeholders and r:IsShown() and r.label:GetText() == "" and r.count:GetText() == "" and not r.fill:IsShown() end
+      check(allGap and frames.gap.rows[1].label:GetText() == "Skull" and frames.gap.rows[5].label:GetText() == "Grey", "empty: the five level rows show with 0 and no fill")
+      check(placeholders and #frames.zones.rows == 5, "empty: five bare zone rows")
+      check(frames.gap.alpha == 0.4 and frames.zones.alpha == 0.4 and frames.empty:IsShown() and frames.empty:GetText() == "Your first kill fills these in.", "empty: charts faded, one message")
+      check(frames.tiles[3].lock:IsShown() and frames.hunt.rows[4].lock:IsShown() and frames.hunt.rows[4].value:GetText():find("0/20 kills", 1, true), "empty: locked stats show a padlock and progress")
+    else
+      check(frames.gap.alpha == 1 and frames.zones.alpha == 1 and not frames.empty:IsShown(), "with kills: charts at full strength, no message")
+      check(frames.zones.rows[1]:IsShown() and not frames.zones.rows[2]:IsShown() and not frames.zones.rows[5]:IsShown(), "fewer than 5 zones: the unused rows are hidden, not skeletons")
+      check(frames.tiles[3].lock:IsShown() and frames.tiles[3].extra:GetText() == "1/5 kills", "locked average tile: padlock, progress")
+    end
+    check(ns.UI.BackLabel() == ns.me, "Back goes to your profile")
+    ns.UI.Back()
+    check(ns.UI.CurrentTab() == "profile" and ns.UI.Frames().profile:IsShown() and not page:IsShown(), "Back returns to your profile")
+  end
+  FriendsAndFoesDB.killLog, FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = logWas, nil, bestWas, streakWas
+  drainToasts()
+  check(ns.errors == errs, "no errors in the Stats page (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

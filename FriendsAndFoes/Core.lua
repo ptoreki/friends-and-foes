@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "1.0.0"
+ns.VERSION = "1.0.1"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -410,9 +410,24 @@ local function field(v)
   return (tostring(v):gsub("[:;\t]", " "))
 end
 
+-- (a skull-level enemy, level -1 in the game, travels as level 0: older clients ignore a 0)
 function ns.EncodeUnit(u)
   if not u then return "" end
-  return field(u.name) .. ":" .. field(u.class) .. ":" .. field(u.level) .. ":" .. field(u.guild)
+  local level = u.level
+  if level == nil and u.skull then level = 0 end
+  return field(u.name) .. ":" .. field(u.class) .. ":" .. field(level) .. ":" .. field(u.guild)
+end
+
+-- " (35)" in small grey after a name, for the Feed. level: a number or a string; nil/"" = unknown
+-- (nothing shown). enemy: 0 means a skull-level enemy ("Skull"); for a friend 0 is just unknown.
+function ns.LevelTag(level, enemy)
+  local n = tonumber(level)
+  if not n or n < 0 then return "" end
+  if n == 0 then
+    if not enemy then return "" end
+    return " |cff9d9d9d(" .. ns.L.LEVEL_SKULL .. ")|r"
+  end
+  return " |cff9d9d9d(" .. math.floor(n) .. ")|r"
 end
 
 function ns.DecodeUnit(s)

@@ -123,7 +123,7 @@ local SCHEMA = {
   -- the bounty board (0.9.3, Contracts.lua): one of the sender's contracts. target is a unit,
   -- amount in copper, state open|done|paid|cancelled, killer who did it, age/updage: seconds
   -- since it was posted / last changed
-  BTY  = { "cid", "target", "amount", "state", "killer", "age", "updage", "days", "blow", "last", "poster", "killers" }, -- killers (1.0): everyone who got the kill, comma-separated, the lead (= killer) first; days: how long it's open; blow: "1" = the killer landed the killing blow, "pet" = their pet; last: seconds since the killer's last attack on the target; poster (0.9.4): empty = the sender posted it, else the sender passes on that friend's contract
+  BTY  = { "cid", "target", "amount", "state", "killer", "age", "updage", "days", "blow", "last", "poster", "killers", "note" }, -- note (1.0.1): the poster's message, up to 60 characters, language-filtered by the sender and again by the receiver; older clients ignore it. A target typed by name has no class or level in `target`. killers (1.0): everyone who got the kill, comma-separated, the lead (= killer) first; days: how long it's open; blow: "1" = the killer landed the killing blow, "pet" = their pet; last: seconds since the killer's last attack on the target; poster (0.9.4): empty = the sender posted it, else the sender passes on that friend's contract
 }
 Comm.SCHEMA = SCHEMA
 
@@ -212,6 +212,15 @@ function Comm.Fit(msg)
   if #payload > MAX_PAYLOAD then
     -- trim a copy: your own copy of the event keeps everyone
     local sent = setmetatable({ f = setmetatable({}, { __index = msg.f }) }, { __index = msg })
+    -- a bounty's note goes first, a character at a time (never half of one)
+    local note = msg.f.note
+    while #payload > MAX_PAYLOAD and type(note) == "string" and note ~= "" do
+      local i = #note
+      while i > 1 and note:byte(i) >= 128 and note:byte(i) < 192 do i = i - 1 end
+      note = note:sub(1, i - 1):gsub("%s+$", "")
+      sent.f.note = note
+      payload = Comm.Encode(sent, true)
+    end
     for _, field in ipairs(TRIM_LISTS) do
       local list = msg.f[field]
       while #payload > MAX_PAYLOAD and type(list) == "string" and list ~= "" do
@@ -885,7 +894,8 @@ function Comm.AnswerCatchUp(name, window, version)
         local f = {}
         for k, v in pairs(e.f) do f[k] = v end
         f.ago = math.max(1, ago)
-        payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = UnitLevel("player"), f = f })
+        -- (your level when it happened, kept with the event - the Feed shows it)
+        payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = e.l or UnitLevel("player"), f = f })
       elseif altsOk then
         -- another of your characters: passed on as theirs (only your own share settings apply)
         payload = relayPayload({ o = e.who, c = e.c, l = e.l, k = e.kind, id = e.id, f = e.f }, ago, false, true)

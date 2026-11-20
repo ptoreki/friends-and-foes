@@ -143,9 +143,22 @@ SlashCmdList.FRIENDSANDFOES = function(msg)
     if ns.Minimap then ns.Minimap.Place(); ns.Minimap.Update() end
     print(prefix .. L.MINIMAP_RESET)
   elseif msg == "bounty" or msg:find("^bounty ") then
-    local amount = strtrim(msg:sub(7))
-    if amount == "" then print(prefix .. L.BOUNTY_USAGE) end
-    if ns.PvP.ReadEnemy("target") then UI.PostBounty(nil, amount) elseif amount ~= "" then why("CONTRACT_NEED_TARGET") end
+    -- /fnf bounty [name] <amount> [days] [message]: a name needs no target
+    local cmd = ns.Contracts.ParseCommand(raw:sub(7))
+    if cmd.offer == "" then
+      print(prefix .. L.BOUNTY_USAGE)
+      UI.PostBounty(cmd.name) -- (the dialog: the name you gave, or your target)
+    else
+      UI.PostBountyNow(cmd.name, cmd.offer, cmd.note)
+    end
+  elseif msg == "hitlist" or msg:find("^hitlist ") then
+    local sub, rest = raw:sub(8):match("^%s*(%S*)%s*(.-)%s*$")
+    if sub and sub:lower() == "add" then
+      if rest == "" then print(prefix .. L.HITLIST_ADD_USAGE) else UI.AddHit(rest) end
+    else
+      UI.Show("hitlist")
+      if sub and sub ~= "" then print(prefix .. L.HITLIST_ADD_USAGE) end
+    end
   elseif msg == "minimap" then
     ns.S().minimap.hide = not ns.S().minimap.hide
     if ns.Minimap then ns.Minimap.Update() end

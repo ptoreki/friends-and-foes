@@ -101,6 +101,19 @@ local function atlasExists(name)
   return ok and info ~= nil
 end
 
+-- A small padlock for things that unlock later (the Stats page). One place for the choice: the
+-- game's lock atlas when this client has it (checked at runtime), else the LFG lock file
+-- (Interface\\LFGFrame\\UI-LFG-ICON-LOCK, in the classic client's files). Neither can be confirmed
+-- from here, so a failed load just returns false and the caller hides the icon.
+local LOCK_ATLAS, LOCK_FILE = "AdventureMapIcon-Lock", "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
+function Art.SetLockIcon(tex)
+  if atlasExists(LOCK_ATLAS) and tex.SetAtlas and pcall(tex.SetAtlas, tex, LOCK_ATLAS) then return true end
+  local ok, loaded = pcall(tex.SetTexture, tex, LOCK_FILE)
+  if not ok or loaded == false then return false end
+  tex:SetTexCoord(0, 1, 0, 1)
+  return true
+end
+
 local RACE_FILE = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Races"
 
 -- the game's painted face for a race and sex: the portraits unit frames show when a 3D face

@@ -243,6 +243,7 @@ end
 
 local boardView = "friends" -- Friends tab: "friends" or a shared group's id
 local killsOf -- Kill list view: whose kills it shows
+local statsPage -- the Stats page's frame (UIStats.lua)
 
 -- Kill list: who someone killed (an enemy: which of your friends), most first
 local KILL_COLS = {
@@ -346,6 +347,8 @@ local TABS = {
   -- reached from a profile's Kill list button (no tab of its own)
   { key = "kills", label = L.TAB_KILLS, hidden = true, columns = KILL_COLS, defaultSort = { col = 4, desc = true },
     fetch = function() return killsOf and ns.Kills.List(killsOf) or {} end },
+  -- reached from your own profile's Stats button (no tab of its own)
+  { key = "stats", label = L.TAB_STATS, hidden = true, columns = {}, fetch = function() return {} end },
 }
 
 local function tabDef(key)
@@ -680,21 +683,24 @@ function UI.Refresh()
   if not win or not win:IsShown() then return end
   local def = tabDef(currentTab)
   currentTab = def.key
-  if currentTab ~= "profile" and currentTab ~= "kills" then homeTab = currentTab end
+  if currentTab ~= "profile" and currentTab ~= "kills" and currentTab ~= "stats" then homeTab = currentTab end
   for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == homeTab) end
   refreshGroupBar()
 
   local isProfile = currentTab == "profile"
+  local isStats = currentTab == "stats"
+  local isPage = isProfile or isStats -- (pages inside the tab: no list)
   if not isProfile then UI.ResetProfileCount() end -- (back to a profile later: count up again)
-  rowsFrame:SetShown(not isProfile)
+  rowsFrame:SetShown(not isPage)
   profile:SetShown(isProfile)
+  if statsPage then statsPage:SetShown(isStats) end
   if currentTab == "friends" then UI.RefreshGroupWindow() else UI.HideGroupWindow() end
-  searchBox:SetShown(not isProfile)
-  -- Back: on the Profile page and the Kill list, if there's somewhere to go back to
-  local backTo = (isProfile or currentTab == "kills") and history[#history]
+  searchBox:SetShown(not isPage)
+  -- Back: on the Profile page, the Stats page and the Kill list, if there's somewhere to go back to
+  local backTo = (isPage or currentTab == "kills") and history[#history]
   backButton:SetShown(backTo and true or false)
   if backTo then UI.SetButtonText(backButton, L.BTN_BACK:format(placeLabel(backTo))) end
-  if isProfile then
+  if isPage then
     data = {}
     pageText:SetText("")
     prevPage:Hide()
@@ -702,7 +708,7 @@ function UI.Refresh()
     detail:Hide()
     contractBar:Hide() -- (the Bounty board's row belongs to that tab alone)
     friendsHint:Hide()
-    UI.RenderProfile()
+    if isStats then UI.RenderStats() else UI.RenderProfile() end
     return
   end
   friendsHint:Show()
@@ -780,7 +786,7 @@ end
 -- going to the Profile page or a Kill list: remember where you are, for Back
 local function rememberPlace(target, name)
   local same = currentTab == target
-    and ((target == "profile" and profileName == name) or (target == "kills" and killsOf == name))
+    and ((target == "profile" and profileName == name) or (target == "kills" and killsOf == name) or target == "stats")
   if same then return end
   history[#history + 1] = { tab = currentTab, offset = offset, boardView = boardView,
     profileName = profileName, killsOf = killsOf }
@@ -1021,6 +1027,14 @@ local function build()
         UI.HitTooltip(self, self.entry)
         return
       end
+      -- Bounty board: the poster's note (already through the language filter)
+      if currentTab == "contracts" and self.entry and self.entry.note then
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+        GameTooltip:AddLine(L.CONTRACT_NOTE_LABEL, 1, 0.82, 0)
+        GameTooltip:AddLine(L.CONTRACT_QUOTE:format(self.entry.note), 1, 1, 1, true)
+        GameTooltip:Show()
+        return
+      end
       local cut = {}
       for c, cell in ipairs(self.cells) do
         if cell:IsShown() and cell.IsTruncated and cell:IsTruncated() then
@@ -1104,10 +1118,11 @@ local function build()
   detail:SetHeight(46)
   local detailRow = UI.Row(detail, "BOTTOMRIGHT", 0, 0)
   detail.clear = detailRow:Add(button(detail, 100, L.BTN_CLEAR_HITLIST, function() UI.ClearHitlist() end))
+  detail.add = detailRow:Add(button(detail, 70, L.BTN_ADD_HIT, function() UI.Prompt(L.ADD_HIT_PROMPT, UI.AddHit) end), 8)
   -- the hint stops before the buttons; two lines at most
   detail.label = detail:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   detail.label:SetPoint("BOTTOMLEFT", 0, 4)
-  detail.label:SetPoint("RIGHT", detail.clear, "LEFT", -16, 0)
+  detail.label:SetPoint("RIGHT", detail.add, "LEFT", -16, 0)
   detail.label:SetJustifyH("LEFT")
   if detail.label.SetMaxLines then detail.label:SetMaxLines(2) end
 
@@ -1126,48 +1141,80 @@ local function build()
   contractBar:Hide()
 
   profile = UI.BuildProfile(win)
+  statsPage = UI.BuildStats(win)
 
 end
 
 ---------------------------------------------------------------------------
 -- the Bounty board: post a bounty, cancel yours, mark it paid
 ---------------------------------------------------------------------------
--- the enemy to put a bounty on: name (an enemy you know, e.g. from their profile), or your target
-local function bountyTarget(name)
-  if name then
-    local e = ns.Data.FindPlayer(name) or ns.Data.FindHit(name) or { name = name }
-    return { name = e.name, class = e.class, level = e.level, guild = e.guild }
-  end
+-- The enemy to put a bounty on, from what's typed: nothing = your target; a name = your target if
+-- it's them, a player you know (e.g. from their profile), or else a name you typed (manual: it
+-- goes on your hitlist as one). Returns the unit, or nil and why.
+local function bountyTarget(text)
+  text = text and strtrim(text) or ""
   local info = ns.PvP.ReadEnemy("target")
-  if info and info.name then return info end
+  if text == "" then
+    if info and info.name then return info end
+    return nil, "CONTRACT_NEED_TARGET"
+  end
+  local known = ns.Data.FindPlayer(text) or ns.Data.FindHit(text)
+  if known then return { name = known.name, class = known.class, level = known.level, guild = known.guild } end
+  local name, reason = ns.Data.ParseName(text)
+  if not name then return nil, reason end
+  if info and info.name == name then return info end
+  known = ns.Data.FindPlayer(name) or ns.Data.FindHit(name)
+  if known then return { name = known.name, class = known.class, level = known.level, guild = known.guild } end
+  return { name = name, manual = true }
 end
 
--- amountText: the amount already typed (/fnf bounty 10g); otherwise you're asked for it
-function UI.PostBounty(name, amountText)
-  local u = bountyTarget(name)
+-- Posts it: nameText (empty = your target), offer ("10g 50s 3d"), note (optional). Says what
+-- happened in chat; true if it's posted.
+function UI.PostBountyNow(nameText, offer, note)
+  local u, reason = bountyTarget(nameText)
   if not u then
-    why("CONTRACT_NEED_TARGET")
+    why(reason)
     return false
   end
-  local function post(text)
-    local amount, days = ns.Contracts.ParseOffer(text)
-    if not amount then
-      why(days)
-      return
-    end
-    local c, reason = ns.Contracts.Post(u, amount, days)
-    if not c then
-      say((L[reason] or tostring(reason)):format(ns.Contracts.OPEN_MAX))
-      return
-    end
-    say(L.CONTRACT_POSTED_YOU:format(ns.Contracts.MoneyText(c.amount), ns.ClassColored(c.target, c.class), ns.Contracts.DaysOf(c)))
-    UI.Refresh()
+  local amount, days = ns.Contracts.ParseOffer(offer)
+  if not amount then
+    why(days)
+    return false
   end
-  if amountText and amountText ~= "" then
-    post(amountText)
-  else
-    UI.Prompt(L.CONTRACT_PROMPT:format(ns.ClassColored(u.name, u.class)), post)
+  local c, postReason = ns.Contracts.Post(u, amount, days, note)
+  if not c then
+    say((L[postReason] or tostring(postReason)):format(ns.Contracts.OPEN_MAX))
+    return false
   end
+  say(L.CONTRACT_POSTED_YOU:format(ns.Contracts.MoneyText(c.amount), ns.ClassColored(c.target, c.class), ns.Contracts.DaysOf(c))
+    .. ns.Contracts.Quoted(c))
+  UI.Refresh()
+  return true
+end
+
+-- The Post bounty buttons and /fnf bounty with no amount: the dialog (player, amount, days,
+-- message), with the player filled in: the one given, else your target. With the amount already
+-- typed (/fnf bounty Ru Mia 10g 3d), it posts right away.
+function UI.PostBounty(name, amountText, note)
+  if amountText and amountText ~= "" then return UI.PostBountyNow(name, amountText, note) end
+  if not name or name == "" then
+    local info = ns.PvP.ReadEnemy("target")
+    name = info and info.name or nil
+  end
+  UI.BountyDialog(name)
+  return true
+end
+
+-- put a typed name on your hitlist (the Add button, /fnf hitlist add)
+function UI.AddHit(text)
+  local h, name, existed = ns.Data.AddManual(text)
+  if not h then
+    why(name)
+    return false
+  end
+  say((existed and L.HIT_ALREADY or L.HIT_ADDED):format(ns.ClassColored(h.name, h.class)))
+  if ns.Marks then ns.Marks.Refresh() end
+  UI.Refresh()
   return true
 end
 
@@ -1266,11 +1313,17 @@ function UI.ShowKills(name)
   openPage("kills")
 end
 
+-- your Stats page (opened from your own profile), inside the tab you're on, with Back
+function UI.ShowStats()
+  rememberPlace("stats")
+  openPage("stats")
+end
+
 -- the profile tab's player (for tests)
 function UI.ProfileName() return profileName end
 function UI.SetProfileName(name) profileName = name end
 function UI.ProfileModel() return profile and profile.model end -- (for tests)
-function UI.Frames() return { profile = profile, rows = rowsFrame, contractBar = contractBar } end -- (for tests)
+function UI.Frames() return { stats = statsPage, profile = profile, rows = rowsFrame, contractBar = contractBar } end -- (for tests)
 
 -- clicking a toast: that player's profile
 function UI.ShowPlayer(name)

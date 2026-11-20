@@ -315,7 +315,19 @@ local function settle(name, claim)
     return
   end
   -- your share: an equal part, times your own level factor (your level when you got the kill)
-  local factor, lvlText = Bounty.LevelFactor(claim.myLevel, claim.vlevel)
+  local vlevel = claim.vlevel
+  if (not vlevel or vlevel <= 0) and claim.mySkull then vlevel = -1 end -- (a skull to you)
+  local factor, lvlText = Bounty.LevelFactor(claim.myLevel, vlevel)
+  -- Resurrection Sickness (seen when you got the kill): worth nothing, unless they're a skull to you
+  if claim.mySick then
+    local myLevel = tonumber(claim.myLevel)
+    local skull = claim.mySkull or (vlevel and myLevel and vlevel >= myLevel + 10)
+    if skull then
+      lvlText = lvlText .. ", res sickness but skull (x" .. factor .. ")"
+    else
+      factor, lvlText = 0, lvlText .. ", res sickness (x0)"
+    end
+  end
   local share = math.floor(claim.amount / math.max(1, claim.n) * factor + 1e-6)
   ns.Debug("BOUNTY-SETTLE", name, claim.amount .. " points", "killers " .. claim.n, claim.killers[ns.me] and ("your share " .. share .. ", " .. lvlText) or "you were not one of them")
   if claim.killers[ns.me] then
@@ -385,7 +397,10 @@ function Bounty.OnKill(killer, victim, credit)
     return
   end
   claim.killers[killer] = true
-  if killer == ns.me then claim.myLevel = UnitLevel("player") end -- (at the kill, not when it settles)
+  if killer == ns.me then
+    claim.myLevel = UnitLevel("player") -- (at the kill, not when it settles)
+    claim.mySick, claim.mySkull = ns.PvP.IsSick(victim), ns.PvP.WasSkull(victim)
+  end
   claim.n = claim.n + 1
   if claim.n > 1 then ns.Debug("BOUNTY-JOIN", killer, victim, "killers now " .. claim.n) end
 end

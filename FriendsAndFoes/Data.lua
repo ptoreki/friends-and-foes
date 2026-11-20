@@ -57,6 +57,8 @@ local function mergeInto(dst, src)
       dst[k] = cur or v
     elseif type(v) == "boolean" then
       dst[k] = cur or v
+    elseif k == "kt" and type(v) == "table" and type(cur) == "table" then
+      for kk, vv in pairs(v) do cur[kk] = math.max(tonumber(cur[kk]) or 0, tonumber(vv) or 0) end -- last-kill times: the later one
     elseif k == "kv" and type(v) == "table" and type(cur) == "table" then
       for kk, vv in pairs(v) do cur[kk] = ns.Count(cur[kk]) + ns.Count(vv) end -- per-friend kills add up
     elseif (k == "slain" or k == "slainRep") and type(v) == "table" and type(cur) == "table" then
@@ -182,6 +184,56 @@ function Data.Hit(name)
   end)
 end
 
+-- Adding a player by name (the Hitlist's Add button, /fnf hitlist add, a bounty on a name).
+-- WoW Forever names are letters, an apostrophe at most, and up to two words ("Ru Mia"); accented
+-- letters are any non-ASCII byte. Typed names are trimmed, "ru mia" becomes "Ru Mia", 2 to 24
+-- characters. Returns the name, or nil and a Locale key (NAME_BAD).
+Data.NAME_MIN, Data.NAME_MAX = 2, 24
+function Data.ParseName(text)
+  if type(text) ~= "string" or ns.issecret(text) then return nil, "NAME_BAD" end
+  local s = text:gsub("%s+", " "):match("^%s*(.-)%s*$")
+  if s == "" or s:find("[^%a '%-\128-\255]") then return nil, "NAME_BAD" end
+  local words = {}
+  for w in s:gmatch("[^ %-]+") do words[#words + 1] = w end
+  if #words == 0 or #words > 2 then return nil, "NAME_BAD" end
+  for i, w in ipairs(words) do
+    if w:find("^'") or not w:find("%a") and not w:find("[\128-\255]") then return nil, "NAME_BAD" end
+    -- the first letter a capital; plain-ASCII words get the rest lower case, like in the game
+    local first, rest = w:sub(1, 1), w:sub(2)
+    if not w:find("[\128-\255]") then rest = rest:lower() end
+    words[i] = first:upper() .. rest
+  end
+  local name = table.concat(words, " ")
+  local len = #(name:gsub("[\128-\191]", "")) -- characters, not bytes
+  if len < Data.NAME_MIN or len > Data.NAME_MAX then return nil, "NAME_BAD" end
+  return name
+end
+
+-- a name you typed, as an enemy to add: the name, or nil and why (NAME_BAD, NAME_FRIEND: you or
+-- someone on your side)
+function Data.ManualTarget(text)
+  local name, why = Data.ParseName(text)
+  if not name then return nil, why end
+  if name == ns.me or ns.PvP.IsFriendly(name) then return nil, "NAME_FRIEND" end
+  return name
+end
+
+-- Puts a typed name on your hitlist, marked manual: an enemy you know nothing about until you see
+-- them (the normal sighting fills in class, level and guild). A manual entry is never forgotten
+-- by itself and isn't passed to friends until it has a record. Returns the entry, its name and
+-- whether it was there already; or nil and why.
+function Data.AddManual(text)
+  local name, why = Data.ManualTarget(text)
+  if not name then return nil, why end
+  local map = Data.Realm().hitlist
+  local key = resolve(map, name)
+  if map[key] then return map[key], key, true end
+  local h = Data.Hit(name)
+  h.manual = true
+  if ns.Marks then ns.Marks.Refresh() end
+  return h, h.name, false
+end
+
 -- Who a hitlist player has killed, and how often: { { name, count }, ... }, most kills first.
 -- count is nil for victims from before per-friend counting (0.5.1).
 function Data.KillsOn(h)
@@ -295,7 +347,7 @@ function Data.DropAttackOnly(db)
     ensure(r)
     local drop = {}
     for name, h in pairs(r.hitlist) do
-      if (tonumber(h.kills) or 0) == 0 and not h.note then drop[#drop + 1] = name end
+      if (tonumber(h.kills) or 0) == 0 and not h.note and not h.manual then drop[#drop + 1] = name end
     end
     for _, name in ipairs(drop) do r.hitlist[name] = nil end
     dropped = dropped + #drop
@@ -354,6 +406,7 @@ function Data.ForgetDays(rec, pending)
 end
 
 local function shouldForget(name, h, pending)
+  if h.manual then return false end -- (typed in by you: only you remove it)
   local days = Data.ForgetDays(h, pending)
   if not days or daysSince(h.lastSeen or h.firstSeen) <= days then return false end
   -- an open Bounty board contract keeps an enemy (checked last: only for entries already past due)

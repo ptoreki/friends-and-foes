@@ -27,6 +27,7 @@ local function trackStreak(kind, fields)
   local c = FriendsAndFoesCharDB
   if kind == "KILL" then
     c.streak = (c.streak or 0) + 1
+    ns.Stats.NoteStreak(c.streak)
     fields.streak = c.streak
   elseif kind == "DIE" then
     fields.ended = c.streak or 0
@@ -63,6 +64,20 @@ local function feed(p, kind, text, foes)
   local t = ns.Now()
   if p and (not p.lastTextAt or t >= p.lastTextAt) then p.lastText, p.lastTextAt = text, t end
   return ns.Data.Feed(kind, text, p and p.name, foes)
+end
+
+-- The Feed shows the level each player was at the time, small and grey after the name: tags =
+-- { { shownName, level, isEnemy }, ... } (the name as it stands in the line, class colour included;
+-- the level goes after its first appearance, outside any link). Toasts and chat keep the plain line.
+local function leveled(line, tags)
+  for _, t in ipairs(tags) do
+    local tag = ns.LevelTag(t[2], t[3])
+    if tag ~= "" and type(t[1]) == "string" and t[1] ~= "" then
+      local _, b = line:find(t[1], 1, true)
+      if b then line = line:sub(1, b) .. tag .. line:sub(b + 1) end
+    end
+  end
+  return line
 end
 
 -- names of decoded units, for feed()
@@ -387,7 +402,11 @@ H.ATK = function(msg, isSelf, p, f)
 
   local by = (#names > 0) and ns.JoinNames(names) or L.UNKNOWN_ENEMY
   local title, text, line = ns.Flavor.Attacked(p, who(p), by, attackers, f.zone)
-  feed(p, "attacked", line, namesOf(attackers))
+  local tags = { { who(p), msg.level } }
+  for _, u in ipairs(attackers) do
+    if u.name then tags[#tags + 1] = { ns.ClassColored(u.name, u.class), u.level, true } end
+  end
+  feed(p, "attacked", leveled(line, tags), namesOf(attackers))
   if isSelf then return end
   if suppressAttackToast(msg.from) then
     ns.Debug("TOAST", "attacked", msg.from, "skipped: they're in your group and you're in combat")
@@ -409,7 +428,7 @@ H.ENG = function(msg, isSelf, p, f)
   enemyTouch(u, f.zone)
   local h = hitUpdate(u, f.zone) -- doesn't add them to the hitlist
   local title, text, line = ns.Flavor.Engage(p, who(p), ns.ClassColored(u.name, u.class), h, f.zone)
-  feed(p, "engage", line, { u.name })
+  feed(p, "engage", leveled(line, { { who(p), msg.level }, { ns.ClassColored(u.name, u.class), u.level, true } }), { u.name })
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "engage", category = "pvp", icon = ICON.engage,
@@ -446,10 +465,13 @@ H.DIE = function(msg, isSelf, p, f)
     by = ns.ClassColored(killer.name, killer.class) .. (suspect and L.SUSPECT_TAG or "")
   end
   local helpers, foes = {}, { killer and killer.name }
+  local tags = { { who(p), msg.level } }
+  if killer and killer.name then tags[2] = { ns.ClassColored(killer.name, killer.class), killer.level, true } end
   for _, u in ipairs(ns.DecodeUnits(f.assists)) do
     if u.name and not onYourSide(u.name) then
       foes[#foes + 1] = u.name
       helpers[#helpers + 1] = ns.ClassColored(u.name, u.class)
+      tags[#tags + 1] = { helpers[#helpers], u.level, true }
       local e = enemyTouch(u, f.zone)
       e.a = e.a + 1
       hitUpdate(u, f.zone) -- assists don't add anyone; only the killer goes on the hitlist
@@ -457,7 +479,7 @@ H.DIE = function(msg, isSelf, p, f)
   end
 
   local title, text, line = ns.Flavor.Died(p, who(p), by, h, f.zone, tonumber(f.ended), helpers)
-  feed(p, "died", line, foes)
+  feed(p, "died", leveled(line, tags), foes)
   if isSelf then return end
   ns.Toast.Push({
     chat = line, kind = "died", category = "pvp", icon = ICON.died,
@@ -488,6 +510,8 @@ H.KILL = function(msg, isSelf, p, f)
   ns.Debug("KILL", isSelf and "you" or p.name, "victim " .. tostring(name or "(unnamed)"), "blow " .. tostring(f.blow ~= "" and f.blow or "-"), "last " .. tostring(f.last ~= "" and f.last or "?"), ns.past and "caught up" or "live")
   -- someone on your side is never a victim (it can only be a misread): a kill without a name
   if name and ns.PvP.IsFriendly(name) then name = nil end
+  -- your own live kill goes in your kill log (Stats.lua); a caught-up one never does
+  if isSelf and not ns.past then ns.Stats.Log(name, f.vlevel, f.zone) end
   p.k = p.k + 1
   local streak = tonumber(f.streak)
   if not name then
@@ -497,7 +521,7 @@ H.KILL = function(msg, isSelf, p, f)
     local title, text, line = ns.Flavor.Kill(p, who(p), nil, nil, nil, false, f.zone, streak)
     if f.blow == "1" then title, line = title .. L.KILLING_BLOW_TAG, line .. L.KILLING_BLOW_TAG end
     if f.blow == "pet" then title, line = title .. L.PET_BLOW_TAG, line .. L.PET_BLOW_TAG end
-    feed(p, "kill", line)
+    feed(p, "kill", leveled(line, { { who(p), msg.level } }))
     if isSelf then return end
     ns.Toast.Push({
       chat = line, milestone = ns.Flavor.StreakMilestone(streak), kind = "kill", category = "pvp", icon = ICON.kill,
@@ -568,13 +592,23 @@ H.KILL = function(msg, isSelf, p, f)
   if d then
     -- the same death, reported by another killer: one Feed line and one toast naming everyone
     d.killers[key] = true
-    if isSelf then table.insert(d.names, 1, L.KILL_YOU_NAME) else d.names[#d.names + 1] = who(p) end
+    local shown = isSelf and L.KILL_YOU_NAME or who(p)
+    local shownL = shown .. ns.LevelTag(msg.level)
+    if isSelf then
+      table.insert(d.names, 1, shown)
+      table.insert(d.namesL, 1, shownL)
+    else
+      d.names[#d.names + 1] = shown
+      d.namesL[#d.namesL + 1] = shownL
+    end
     local together = L.KILL_TOGETHER:format(ns.JoinNames(d.names), v)
     local place = ns.Flavor.Place(d.zone)
     local both = together .. ns.Flavor.SEP .. place
+    -- the Feed line keeps each killer's level (and the victim's)
+    local bothL = L.KILL_TOGETHER:format(ns.JoinNames(d.namesL), v .. ns.LevelTag(f.vlevel, true)) .. ns.Flavor.SEP .. place
     ns.Debug("KILL-MERGE", name, ns.Plain(ns.JoinNames(d.names)))
-    if d.entry then d.entry.text = both end
-    if not p.lastTextAt or ns.Now() >= p.lastTextAt then p.lastText, p.lastTextAt = both, ns.Now() end
+    if d.entry then d.entry.text = bothL end
+    if not p.lastTextAt or ns.Now() >= p.lastTextAt then p.lastText, p.lastTextAt = bothL, ns.Now() end
     if isSelf then return end
     if milestone then
       -- a streak or revenge is about this killer: it still gets its own toast (and no plain one)
@@ -592,10 +626,11 @@ H.KILL = function(msg, isSelf, p, f)
     end
     return
   end
-  local entry = feed(p, "kill", line, { name })
+  local entry = feed(p, "kill", leveled(line, { { who(p), msg.level }, { v, f.vlevel, true } }), { name })
   if not ns.past then
     for k, o in pairs(deaths) do if now - o.t > SAME_DEATH * 2 then deaths[k] = nil end end
-    deaths[name] = { t = now, killers = { [key] = true }, names = { isSelf and L.KILL_YOU_NAME or who(p) },
+    local first = isSelf and L.KILL_YOU_NAME or who(p)
+    deaths[name] = { t = now, killers = { [key] = true }, names = { first }, namesL = { first .. ns.LevelTag(msg.level) },
       entry = entry, zone = f.zone }
   end
   if isSelf then return end
@@ -626,7 +661,7 @@ H.AST = function(msg, isSelf, p, f)
   else
     line = L.FEED_ASSIST:format(who(p), helped and ns.ClassColored(helped) or "?", victim)
   end
-  feed(p, "kill", line, { name })
+  feed(p, "kill", leveled(line, { { who(p), msg.level }, { victim, f.vlevel, true } }), { name })
 end
 
 -- after a catch-up: one quiet chat line saying what came in, no toasts
@@ -666,7 +701,7 @@ H.SIGHT = function(msg, isSelf, p, f)
     return
   end
   local line = ns.Toast.Sighting(name, u.class, f.zone, h, who(p))
-  feed(p, "sighting", line, { name })
+  feed(p, "sighting", leveled(line, { { who(p), msg.level }, { ns.ClassColored(name, u.class), f.level, true } }), { name })
 end
 
 -- a friend's profile: their own all-time K/D, zone and status
@@ -724,9 +759,10 @@ function Events.WeeklyRoll()
   if ns.S().weekly == false or ((w.k or 0) + (w.d or 0) + ns.Count(w.bt)) == 0 then return end
   local line = L.WEEKLY:format(ns.Count(w.k), ns.Count(w.d))
   if ns.Count(w.bt) > 0 then line = line:gsub("%.$", "") .. L.WEEKLY_NOTORIETY:format(ns.Art.Points(ns.Count(w.bt))) end
-  local nemesis, most = nil, 0
+  local nemesis, most, bestT = nil, 0, nil
   for name, n in pairs(w.killers or {}) do
-    if n > most then nemesis, most = name, n end
+    local t = type(w.killedAt) == "table" and w.killedAt[name] or nil
+    if ns.Profile.NemesisBeats(n, t, name, nemesis and most or nil, bestT, nemesis) then nemesis, most, bestT = name, n, t end
   end
   if nemesis and most >= 2 then line = line .. " " .. L.WEEKLY_NEMESIS:format(nemesis, most) end
   C_Timer.After(8, function() ns.Toast.Chat(line) end)
@@ -749,6 +785,8 @@ function Events.WeeklyAdd(kind, killer)
     if killer then
       w.killers = w.killers or {}
       w.killers[killer] = (w.killers[killer] or 0) + 1
+      w.killedAt = type(w.killedAt) == "table" and w.killedAt or {}
+      w.killedAt[killer] = time() -- (the tie-break: the most recent killer is the nemesis)
     end
   end
 end

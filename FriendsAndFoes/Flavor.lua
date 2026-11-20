@@ -109,6 +109,9 @@ function Flavor.Died(p, who, by, h, zone, ended, helpers)
     h.kv = h.kv or {}
     h.kv[p.name] = (h.kv[p.name] or 0) + 1
     n = h.kv[p.name]
+    -- when they last killed this friend (the nemesis tie-break: Profile.NemesisBeats)
+    h.kt = type(h.kt) == "table" and h.kt or {}
+    h.kt[p.name] = math.max(tonumber(h.kt[p.name]) or 0, ns.Now())
   end
   -- enemies who helped: "(with Kragg Bear)"
   local with = (by and helpers and #helpers > 0) and (" " .. L.WITH_HELPERS:format(ns.JoinNames(helpers))) or ""

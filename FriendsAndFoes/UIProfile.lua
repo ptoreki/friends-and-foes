@@ -379,6 +379,7 @@ function UI.RenderProfile()
   -- Victims (n): who they killed, how many in all
   UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Total(ns.Kills.List(profileName))))
   c.kills:Show()
+  c.stats:SetShown(v.isMe == true)
   c.post:SetShown(v.kind == "enemy")
   -- a friend: add to or take off your alert list
   local action = c.action
@@ -573,6 +574,15 @@ function UI.BuildProfile(win)
       GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
       GameTooltip:AddLine(label:GetText(), 1, 0.82, 0)
       GameTooltip:AddLine(tip, 1, 1, 1, true)
+      -- the bounties on them: each one's note, if it has one
+      if label:GetText() == L.PROF_CONTRACTS then
+        for _, ct in ipairs(ns.Contracts.On(UI.ProfileName() or "")) do
+          if ct.note then
+            GameTooltip:AddLine(L.CONTRACT_BY:format(ns.Contracts.MoneyText(ct.amount), ct.by == ns.me and L.PROF_ME or ct.by)
+              .. ": " .. L.CONTRACT_QUOTE:format(ct.note), 0.9, 0.9, 0.9, true)
+          end
+        end
+      end
       GameTooltip:Show()
     end)
     hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -677,10 +687,12 @@ function UI.BuildProfile(win)
   c:SetPoint("BOTTOMLEFT", 0, 0)
   c:SetPoint("BOTTOMRIGHT", 0, 0)
   c:SetHeight(24)
-  -- right to left: [action (a friend: alert list)][Victims][Post bounty (an enemy)]
+  -- right to left: [action (a friend: alert list)][Victims][Stats (you)][Post bounty (an enemy)]
   c.row = UI.Row(c, "BOTTOMRIGHT", 0, 0)
   c.action = c.row:Add(button(c, 130, L.BTN_PICK_ON, function() UI.ProfileAction() end))
   c.kills = c.row:Add(button(c, 90, L.BTN_KILL_LIST, function() UI.ShowKills(UI.ProfileName()) end), 8)
+  -- your own profile: your stats (UIStats.lua)
+  c.stats = c.row:Add(button(c, 70, L.BTN_STATS, function() UI.ShowStats() end), 8)
   -- an enemy: put a bounty on them (the Bounty board)
   c.post = c.row:Add(button(c, 100, L.BTN_POST_BOUNTY, function() UI.PostBounty(UI.ProfileName()) end), 8)
   profile.controls = c

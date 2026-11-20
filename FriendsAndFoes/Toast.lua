@@ -20,6 +20,7 @@ local EDGE = {
   sighting = { 0.7, 0.3, 1.0 },   -- purple
   bounty = { 0.95, 0.6, 0.15 },   -- old gold: the Bounty board
 }
+local ALERT_EDGE = { 1, 0.12, 0.08 } -- a bounty target nearby: a thicker, red edge
 
 -- soft, familiar game sounds
 local SK = SOUNDKIT or {}
@@ -195,8 +196,9 @@ THEMES.minimal = {
     -- grow to fit wrapped text (up to MAX_LINES) instead of cutting it off
     local textH = tonumber(f.label:GetStringHeight()) or 0
     f:SetHeight(math.max(HEIGHT, math.ceil(textH) + 12))
-    local c = EDGE[spec.category] or EDGE.progress
+    local c = spec.alert and ALERT_EDGE or EDGE[spec.category] or EDGE.progress
     f.edge:SetColorTexture(c[1], c[2], c[3], 0.9)
+    f.edge:SetWidth(spec.alert and 7 or 3)
   end,
 }
 
@@ -339,8 +341,9 @@ local function factionTheme(style)
       f.header:SetText(Toast.HeaderFor(spec))
       f.title:SetText(spec.title or "")
       f.sub:SetText(spec.text or "")
-      local e = EDGE[spec.category] or EDGE.progress
+      local e = spec.alert and ALERT_EDGE or EDGE[spec.category] or EDGE.progress
       f.edge:SetColorTexture(e[1], e[2], e[3], 1)
+      f.edge:SetWidth(spec.alert and 7 or 3)
       -- grow if the title wraps to two lines
       local h = (tonumber(f.title:GetStringHeight()) or 0) + (tonumber(f.sub:GetStringHeight()) or 0) + 30
       f:SetHeight(math.max(FACTION_H, math.ceil(h)))
@@ -360,6 +363,7 @@ local function render(f)
   -- Options -> Appearance: how long toasts stay; PvP ones 2 seconds longer
   local d = math.max(2, math.min(10, tonumber(ns.S().toastDuration) or ns.DEFAULT_TOAST_DURATION))
   f.duration = f.spec.category == "pvp" and d + PVP_EXTRA or d
+  if f.spec.longer then f.duration = f.duration * 2 end -- (a bounty target nearby)
   f.remaining = f.duration
   f:SetAlpha(0)
 end
@@ -437,6 +441,11 @@ local function playSound(spec)
   local id
   if spec.kind and s[spec.kind] then
     id = Toast.SoundFor(spec.kind, spec.category)
+    -- a bounty target nearby: the raid-warning horn, unless you picked a sound for bounties
+    if spec.alertSound then
+      local pick = ns.S().soundPick and ns.S().soundPick.bounty
+      if not pick or pick == "default" then id = SK.RAID_WARNING or 8959 end
+    end
   elseif spec.milestone then
     -- a milestone chimes even when its alert is silent
     id = Toast.SoundFor(spec.kind, spec.category)
@@ -527,6 +536,19 @@ local function chatFrame()
   return _G["ChatFrame" .. n] or DEFAULT_CHAT_FRAME
 end
 
+-- A big message in the middle of the screen, the raid-warning one (the bounty-target alert).
+-- Where the game doesn't have it: the red error text above the action bars. Never errors.
+function Toast.Centre(text)
+  if type(text) ~= "string" then return end
+  local info = ChatTypeInfo and ChatTypeInfo.RAID_WARNING
+  if type(RaidNotice_AddMessage) == "function" and RaidWarningFrame then
+    if pcall(RaidNotice_AddMessage, RaidWarningFrame, text, info or { r = 1, g = 0.2, b = 0.1 }) then return end
+  end
+  if UIErrorsFrame and UIErrorsFrame.AddMessage then
+    pcall(UIErrorsFrame.AddMessage, UIErrorsFrame, text, 1, 0.2, 0.1)
+  end
+end
+
 -- one line in chat, in the colour of guild achievement announcements
 function Toast.Chat(text)
   local frame = chatFrame()
@@ -603,13 +625,23 @@ end
 -- by = the friend who spotted them (coloured), or nil if you did. hit may be nil when they're on
 -- your friend's hitlist but not yours. Returns the line (for the Feed).
 function Toast.Sighting(name, class, zone, hit, by)
+  -- someone with an open bounty on them: the louder bounty alert instead (Contracts.Spotted)
+  local spotted = ns.Contracts and ns.Contracts.Spotted(name, class, zone, by)
+  if spotted then return spotted end
   local who = ns.ClassColored(name, class)
   local title = by and L.SIGHTING_BY:format(who, by) or L.SIGHTING:format(who)
   local place = ns.Flavor.Place(zone)
   -- flavor off: who and where only; on: their record too
   local text = place
   if ns.S().flavor ~= false and hit then
-    text = L.SIGHTING_RECORD:format(ns.Count(hit.kills)) .. ns.Flavor.SEP .. place
+    local kills, attacks = ns.Count(hit.kills), ns.Count(hit.attacks)
+    local record
+    if kills > 0 then
+      record = kills == 1 and L.SIGHTING_RECORD_ONE or L.SIGHTING_RECORD:format(kills)
+    elseif attacks > 0 then
+      record = attacks == 1 and L.SIGHTING_ATTACKS_ONE or L.SIGHTING_ATTACKS:format(attacks)
+    end
+    if record then text = record .. ns.Flavor.SEP .. place end -- (nothing known: just the place)
   end
   local line = title .. ns.Flavor.SEP .. text
   Toast.Push({

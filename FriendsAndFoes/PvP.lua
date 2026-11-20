@@ -50,6 +50,70 @@ local function isDead(unit)
 end
 
 ---------------------------------------------------------------------------
+-- Resurrection Sickness: an enemy who just came back is worth no notoriety (unless a skull to you,
+-- Bounty.lua). Read from the aura wherever an enemy is read; aura data can be secret or missing,
+-- and then the enemy is simply "not known sick". Kept in memory only, per enemy name.
+---------------------------------------------------------------------------
+local RES_SICKNESS = 15007
+local SICK_UNKNOWN_FOR = 600 -- (no expiration known: assume ten minutes)
+local sickUntil = {}  -- enemy name -> GetTime() their sickness ends (this session only)
+local skullSeen = {}  -- enemy name -> true when you last saw them at a skull level (-1)
+
+-- one aura's spell ID and expiration, if readable: spellId, expirationTime, ok
+local function auraAt(unit, i)
+  if C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+    local a = C_UnitAuras.GetAuraDataByIndex(unit, i, "HARMFUL")
+    if not a then return nil, nil, true end
+    if issecret(a) or issecret(a.spellId) then return nil, nil, false end
+    local exp = a.expirationTime
+    if issecret(exp) or type(exp) ~= "number" then exp = nil end
+    return a.spellId, exp, true
+  elseif UnitAura then
+    local name, _, _, _, _, exp, _, _, _, spellId = UnitAura(unit, i, "HARMFUL")
+    if not name then return nil, nil, true end
+    if issecret(name) or issecret(spellId) then return nil, nil, false end
+    if issecret(exp) or type(exp) ~= "number" then exp = nil end
+    return spellId, exp, true
+  end
+  return nil, nil, false
+end
+
+-- true (wall-time end) = sick, false = readable and not sick, nil = can't tell
+local function readSickness(unit)
+  for i = 1, 40 do
+    local spellId, exp, ok = auraAt(unit, i)
+    if not ok then return nil end
+    if spellId == nil then return false end
+    if spellId == RES_SICKNESS then
+      if exp and exp > 0 then return exp end -- (GetTime() clock, like the aura's own)
+      return GetTime() + SICK_UNKNOWN_FOR
+    end
+  end
+  return false
+end
+
+local function noteSickness(info, unit)
+  if not (info and info.name) then return end
+  local ok, res = pcall(readSickness, unit)
+  if not ok then res = nil end
+  if res == false then
+    if isDead(unit) == false then sickUntil[info.name] = nil end -- (a corpse's auras are gone: keep what we knew)
+  elseif res then sickUntil[info.name] = res end
+  if info.skull then skullSeen[info.name] = true elseif info.level then skullSeen[info.name] = nil end
+end
+
+-- was this enemy known to have Resurrection Sickness right now?
+function PvP.IsSick(name)
+  local t = name and sickUntil[name]
+  if not t then return false end
+  if t <= GetTime() then sickUntil[name] = nil return false end
+  return true
+end
+
+-- were they last seen at a skull level (-1) to you?
+function PvP.WasSkull(name) return name ~= nil and skullSeen[name] == true end
+
+---------------------------------------------------------------------------
 -- context
 ---------------------------------------------------------------------------
 -- Is your own PvP tracked where you are? Open world (minus objective subzones) unless turned
@@ -121,7 +185,8 @@ local function readEnemy(unit)
   local _, class = UnitClass(unit)
   if not issecret(class) then info.class = class end
   local level = UnitLevel(unit)
-  if not issecret(level) and level and level > 0 then info.level = level end
+  if not issecret(level) and level and level > 0 then info.level = level
+  elseif not issecret(level) and level == -1 then info.skull = true end -- (skull: shown as "Skull" in friends' Feeds)
   -- race and sex: for the race symbol on their Wanted poster (only from your own sightings)
   if UnitRace then
     local raceName, raceFile = UnitRace(unit)
@@ -158,6 +223,7 @@ function PvP.ReadEnemy(unit)
   local ok, info = pcall(readEnemy, unit)
   if ok then
     if info and info.name and isDead(unit) == false then lastAlive[info.name] = GetTime() end
+    if info and info.name then noteSickness(info, unit) end
     if info and info.name and info.guid then
       if not byGuid[info.guid] then byGuidCount = byGuidCount + 1 end
       byGuid[info.guid] = info
@@ -793,7 +859,7 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
     ns.Events.Emit("KILL", {
       victim = dead and dead.name or "",
       vclass = dead and dead.class or "",
-      vlevel = dead and dead.level or "",
+      vlevel = dead and (dead.level or (dead.skull and 0)) or "",
       vguild = dead and dead.guild or "",
       zone = PvP.ZoneText(),
       blow = blow and (blow.pet and "pet" or "1") or "",
@@ -809,7 +875,7 @@ ns.On("CHAT_MSG_COMBAT_HONOR_GAIN", function(msg)
   ns.Events.Emit("KILL", {
     victim = (info and info.name) or victim,
     vclass = info and info.class or "",
-    vlevel = info and info.level or "",
+    vlevel = info and (info.level or (info.skull and 0)) or "",
     vguild = info and info.guild or "",
     zone = PvP.ZoneText(),
     blow = blow and (blow.pet and "pet" or "1") or "",
@@ -834,11 +900,14 @@ local function checkSighting(unit)
   if not info or not info.name then return end
   remember(info)
   local hit = ns.Data.FindHit(info.name)
-  if not hit then return end
+  -- someone with an open bounty on them is worth an alert even if you took them off your hitlist
+  local bounty = ns.Contracts and #ns.Contracts.OpenOn(info.name) > 0
+  if not hit and not bounty then return end
   local zone = PvP.ZoneText()
-  ns.Data.Touch(hit, { class = info.class, level = info.level, guild = info.guild, zone = zone })
+  -- (a manual hitlist entry learns their class, level and guild here)
+  if hit then ns.Data.Touch(hit, { class = info.class, level = info.level, guild = info.guild, zone = zone }) end
   if not PvP.SightingDue(info.name) then return end
-  ns.Toast.Sighting(info.name, info.class, zone, hit)
+  ns.Toast.Sighting(info.name, info.class, zone, hit) -- (a bounty target: Contracts.Spotted)
   -- tell friends too: they get "spotted by <you>"
   ns.Events.Emit("SIGHT", { name = info.name, class = info.class or "", level = info.level or "", guild = info.guild or "", zone = zone })
 end
