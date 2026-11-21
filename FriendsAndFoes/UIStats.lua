@@ -111,7 +111,7 @@ function UI.StatsView()
     v.hunt[3] = { L.STATS_MONTH, tostring(s.month) }
   else
     -- (the log's day counts aren't per bracket: time played and K/D instead)
-    v.hunt[1] = { L.STATS_PLAYED, ns.Stats.Duration(s.played) }
+    v.hunt[1] = { L.STATS_PLAYED, ns.Stats.Duration(s.played), nil, nil, L.STATS_PLAYED_TIP }
     v.hunt[2] = { L.STATS_KD, UI.Util.kdText(s.n, s.deaths, ns.Profile.KD(s.n, s.deaths)) }
   end
   v.hunt[#v.hunt + 1] = { L.STATS_BUSY_DAY, s.busyDay and L.STATS_DAYS[s.busyDay] or busyLock or DASH, s.busyDay == nil, busyLock, busyTip }

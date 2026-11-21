@@ -3394,7 +3394,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_102_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_103_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -6643,7 +6643,7 @@ do
   St.Bracket("50").played, St.Bracket("50").lives, St.Bracket("50").lifeSum, St.Bracket("50").lifeMax = 3600, 2, 3000, 2000
   ns.UI.SetStatsBracket("50")
   vw = ns.UI.StatsView()
-  check(ns.UI.StatsBracket() == "50" and vw.brackets[6][5] and vw.hunt[1][1] == "Time played" and vw.hunt[1][2] == "1h 0m" and vw.hunt[2][1] == "K/D" and vw.hunt[2][2] == "2.00"
+  check(ns.UI.StatsBracket() == "50" and vw.brackets[6][5] and vw.hunt[1][1] == "Time out in the world" and vw.hunt[1][5]:find("could be ganked", 1, true) and vw.hunt[1][2] == "1h 0m" and vw.hunt[2][1] == "K/D" and vw.hunt[2][2] == "2.00"
     and vw.hunt[3][1] == "Busiest day" and #vw.hunt == 5 and vw.tiles[1][1] == "4", "a bracket view: time played and K/D replace the day counts")
   ns.UI.SetStatsBracket(nil)
   vw = ns.UI.StatsView()
@@ -6695,6 +6695,61 @@ do
   check(vw.hunt[6][1] == "Kills per hour" and ns.UI.StatsView().hunt[6][4] ~= nil, "kills per hour is locked below an hour")
   b.played = 3600
   check(ns.UI.StatsView().hunt[6][2] == "3.0 per hour" and not ns.UI.StatsView().hunt[6][4], "60 minutes played: 3 kills with a stamp per hour")
+
+  -- 1.0.3: the counter pauses when you could not be ganked
+  do
+    local afk, rest, taxi = false, false, false
+    local wasAfk, wasRest, wasTaxi = UnitIsAFK, IsResting, UnitOnTaxi
+    UnitIsAFK = function() return afk end
+    IsResting = function() return rest end
+    UnitOnTaxi = function() return taxi end
+    fresh()
+    deadNow = false
+    St.Flush()
+    c.played = 0
+    local function counts(label, set, unset, event)
+      local before = St.Played()
+      set()
+      if event then FIRE(event) end
+      ADVANCE(40)
+      local paused = math.abs(St.Played() - before) < 1e-6
+      unset()
+      if event then FIRE(event) end
+      ADVANCE(25)
+      check(paused and math.abs(St.Played() - before - 25) < 1e-6, "paused while " .. label .. ", counting again after")
+    end
+    counts("AFK", function() afk = true end, function() afk = false end, "PLAYER_FLAGS_CHANGED")
+    counts("resting", function() rest = true end, function() rest = false end, "PLAYER_UPDATE_RESTING")
+    counts("on a flight", function() taxi = true end, function() taxi = false end, "PLAYER_CONTROL_LOST")
+    counts("in an instance", function() IN_INSTANCE = true end, function() IN_INSTANCE = false end, "PLAYER_ENTERING_WORLD")
+    counts("dead", function() deadNow = true end, function() deadNow = false end, "PLAYER_DEAD")
+    local before = St.Played()
+    ADVANCE(10)
+    check(math.abs(St.Played() - before - 10) < 1e-6, "out in the world: it counts")
+    -- a call that fails or isn't there pauses nothing
+    UnitOnTaxi = function() error("boom") end
+    IsResting = nil
+    FIRE("PLAYER_CONTROL_GAINED")
+    before = St.Played()
+    ADVANCE(5)
+    check(math.abs(St.Played() - before - 5) < 1e-6, "a check that can't be answered doesn't pause the counter")
+    UnitIsAFK, IsResting, UnitOnTaxi = wasAfk, wasRest, wasTaxi
+    -- Stats are open-world PvP only: an instance kill or death isn't logged and touches no bracket,
+    -- but the Feed still gets the kill
+    fresh()
+    c.streak, c.bestStreak = 0, 0
+    local feedBefore = #ns.Data.ViewRealm().feed
+    IN_INSTANCE = true
+    ns.Events.Emit("KILL", { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Warsong Gulch" })
+    ns.Events.Emit("DIE", { zone = "Warsong Gulch", killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 }), conf = "c", assists = "" })
+    IN_INSTANCE = false
+    check(#FriendsAndFoesDB.killLog == 0 and #FriendsAndFoesDB.deathLog == 0 and c.lifeStart == nil and (c.bestStreak or 0) == 0
+      and (not c.brackets["30"] or (c.brackets["30"].kills == 0 and c.brackets["30"].deaths == 0 and c.brackets["30"].bestStreak == 0)),
+      "an instance kill and death are not logged and touch no bracket or best streak")
+    check(#ns.Data.ViewRealm().feed > feedBefore, "...but the Feed still gets them")
+    ns.Events.Emit("KILL", { victim = "Open Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
+    check(#FriendsAndFoesDB.killLog == 1, "out in the world it is logged again")
+  end
 
   -- layout: six rows in "When you hunt" still end above the footnote; the selector is there
   ns.UI.ShowProfile(ns.me)

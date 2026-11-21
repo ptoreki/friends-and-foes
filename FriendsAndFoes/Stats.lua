@@ -145,6 +145,7 @@ end
 
 -- one of your own live kills (victim: name or nil; vlevel: as sent in KILL; zone: text or nil)
 function Stats.Log(victim, vlevel, zone)
+  if Stats.InInstance() then return end -- (Stats are open-world PvP only: no battleground kills)
   Stats.Seed() -- (before this kill goes in the log, so it isn't counted twice)
   local log = Stats.List()
   local e = { t = ns.Now(), c = ns.me, p = math.floor(Stats.Played()), vl = logLevel(vlevel), ml = myLevel() }
@@ -158,6 +159,7 @@ end
 
 -- the current run grew to n kills: remember the best one (overall, and in the bracket you're in)
 function Stats.NoteStreak(n)
+  if Stats.InInstance() then return end
   local c = FriendsAndFoesCharDB
   if n > ns.Count(c.bestStreak) then c.bestStreak = n end
   local key = Stats.BracketOf(myLevel())
@@ -174,7 +176,8 @@ end
 ---------------------------------------------------------------------------
 -- time played (per character) and lives
 ---------------------------------------------------------------------------
--- FriendsAndFoesCharDB.played = seconds this character has been logged in and alive, counted from
+-- FriendsAndFoesCharDB.played = seconds this character has been out in the world (logged in and alive,
+-- not AFK, resting, on a flight or in an instance: see aliveNow), counted from
 -- the first time 1.0.2 ran (never /played). Time is added from GetTime() deltas, on a 10 s ticker
 -- and whenever the state changes (dead, alive, unghost, logout), so a crash loses at most 10 s.
 -- Each delta also goes to the bracket of your level at that moment.
@@ -187,11 +190,26 @@ Stats.FLUSH_EVERY = 10
 
 local counting, lastTick = false, nil
 
+-- true only when the game plainly says yes; a missing call, an error or a secret value is "no"
+local function yes(fn, ...)
+  if not fn then return false end
+  local ok, r = pcall(fn, ...)
+  return ok and not ns.issecret(r) and r == true
+end
+
+-- in a dungeon, raid, battleground or arena: Stats only count the open world
+function Stats.InInstance()
+  if not IsInInstance then return false end
+  local ok, inside = pcall(IsInInstance)
+  return ok and not ns.issecret(inside) and inside == true
+end
+
+-- Time out in the world: only while you could be ganked. Not counted when dead or a ghost, AFK,
+-- resting (an inn or city), on a flight path, or in an instance. Each check is on its own: one that
+-- can't be answered doesn't pause anything.
 local function aliveNow()
-  if not UnitIsDeadOrGhost then return true end
-  local ok, dead = pcall(UnitIsDeadOrGhost, "player")
-  if not ok or ns.issecret(dead) then return true end
-  return dead ~= true
+  return not (yes(UnitIsDeadOrGhost, "player") or yes(UnitIsAFK, "player") or yes(IsResting)
+    or yes(UnitOnTaxi, "player") or Stats.InInstance())
 end
 
 -- add the time since the last look (if we were counting), then start/stop counting by state
@@ -227,7 +245,9 @@ ns.OnReady(function()
   flush()
   C_Timer.NewTicker(Stats.FLUSH_EVERY, function() ns.Try("played", flush) end)
 end)
-for _, ev in ipairs({ "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_LOGOUT" }) do
+-- (state changes: dead / alive, AFK, resting, entering an instance, a flight, logout)
+for _, ev in ipairs({ "PLAYER_DEAD", "PLAYER_ALIVE", "PLAYER_UNGHOST", "PLAYER_LOGOUT", "PLAYER_FLAGS_CHANGED",
+  "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD", "ZONE_CHANGED_NEW_AREA", "PLAYER_CONTROL_LOST", "PLAYER_CONTROL_GAINED" }) do
   ns.On(ev, function() ns.Try("played", flush) end)
 end
 
@@ -248,6 +268,7 @@ end
 -- one of your own live PvP deaths (killer: name or nil). The life that ends here goes into the
 -- bracket of your level now.
 function Stats.LogDeath(killer, zone)
+  if Stats.InInstance() then return end
   flush()
   local c = FriendsAndFoesCharDB
   local played = math.floor(Stats.Played())

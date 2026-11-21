@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.3
+
+- **Time out in the world (Stats):** the time counter (it behind Average life and Kills per hour, and the row now called "Time out in the world") only runs while you could be ganked: it pauses while you are dead or a ghost, AFK, resting in an inn or city, on a flight, or in a dungeon, raid, battleground or arena. A check the game can't answer (or hides) doesn't pause anything. The counter is saved when any of those change.
+- **Open-world PvP only (Stats):** kills and deaths inside a dungeon, raid, battleground or arena are no longer logged or counted in the Stats page (kill log, death log, brackets, best streak). The Feed, alerts, notoriety and streak toasts are unchanged.
+
 ## 1.0.2
 
 - **Time played and lives (Stats page):** each character now counts the time it is logged in and alive (not dead or a ghost; it never asks the game for /played), from this version on. Your own live PvP deaths go in a death log (time, character, time played, killer, zone; the newest 1000, never PvE deaths or caught-up ones), and each logged kill remembers the time played. The Stats page gets a fourth tile, **Average life** (the average time played between PvP deaths, from 3 PvP deaths; line 2 shows your current life and its kills, e.g. "now 38m \u00b7 3 kills"; the tooltip names your longest life), and a **Kills per hour** row in "When you hunt" (kills logged since this version per hour played, from 1 hour played). Locked stats show a padlock and progress like "1/3 deaths" and "23/60 min". Nothing new is sent to friends.
