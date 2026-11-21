@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- **Battlegrounds never count:** PvP in a battleground (or arena) no longer counts for anything: no kills, deaths or K/D, Friends tab, profiles, victims lists, hitlist, attackers, notoriety, bounty completion, streaks or milestones, nemesis, weekly summary or Stats. The only thing it can produce is a Feed line ("... killed ... (battleground)", small grey tag) for a kill or a death, plus an alert for a friend's, and only when **Dungeons, raids, battlegrounds** is not off (show or wait until you're out, as before); with it off a battleground shows nothing at all. Your own battleground fights are not sent to friends. A friend on an older version still sends theirs: they are recognised by the zone name (Warsong Gulch, Arathi Basin, Alterac Valley, Eye of the Storm) and handled the same way, and caught-up ones are dropped. The old **Battlegrounds** switch under Where your own PvP is tracked is removed (the saved value is deleted); battlegrounds are controlled only by Dungeons, raids, battlegrounds. Hitlist entries added by it earlier age out as usual.
+
 ## 1.0.3
 
 - **Time out in the world (Stats):** the time counter (it behind Average life and Kills per hour, and the row now called "Time out in the world") only runs while you could be ganked: it pauses while you are dead or a ghost, AFK, resting in an inn or city, on a flight, or in a dungeon, raid, battleground or arena. A check the game can't answer (or hides) doesn't pause anything. The counter is saved when any of those change.

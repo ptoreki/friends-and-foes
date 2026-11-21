@@ -125,8 +125,14 @@ levels show nothing.
   `hitlist[name].hitWho` (name -> time, last 10).
 
 ## PvP detection
-- **Where:** the open world (cities count; the EPL tower subzones don't). Battlegrounds only if
-  turned on. Never dungeons or raids. Duels are excluded because attackers must be the other
+- **Where:** the open world (cities count; the EPL tower subzones don't). Never dungeons or raids.
+  **Battlegrounds** (and arenas) are only watched, never counted (`PvP.InBattleground`, unless
+  `settings.instances` is off): `Events.Emit` marks such a PvP event `bg`, applies only
+  `Events.Battleground` (a Feed line for a KILL or DIE, tagged "(battleground)", on nobody's
+  profile; no streak, nothing sent or remembered for catch-up) and returns. A received event whose
+  zone text names a known battleground (`ns.IsBattlegroundZone`; older friends carry no flag) takes
+  the same path with the receiver's own `instances` setting: off = nothing, otherwise a Feed line
+  and an alert; caught-up ones are dropped. No wire change. (The old "Battlegrounds" tracking switch, `track.pvp`, is gone; upgrade step 15 deletes the saved value.) Duels are excluded because attackers must be the other
   faction.
 - **Attacked (ATK):** you take a hit while an enemy player (target, focus, mouseover or nameplate)
   targets you. The encounter ends after **30 s** without hits. Enemies you attacked first count

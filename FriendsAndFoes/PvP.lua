@@ -116,18 +116,22 @@ function PvP.WasSkull(name) return name ~= nil and skullSeen[name] == true end
 ---------------------------------------------------------------------------
 -- context
 ---------------------------------------------------------------------------
--- Is your own PvP tracked where you are? Open world (minus objective subzones) unless turned
--- off; battlegrounds only if turned on (Options -> Where it works).
-function PvP.InWorldPvPContext()
-  local where, track = ns.InstanceType(), ns.S().track
-  if where == "world" then
-    if not track.world then return false end
-    local sub = GetSubZoneText()
-    if sub and not issecret(sub) and OBJECTIVE_SUBZONES[sub] then return false end
-    return true
-  end
-  return (where == "pvp" and track.pvp) or false
+-- Is your own PvP tracked where you are? The open world (minus objective subzones) unless turned
+-- off. A battleground never counts for anything: it is only watched (unless "Dungeons, raids,
+-- battlegrounds" is off) so a kill or death can show up in the Feed (Events.lua, battleground).
+function PvP.InWorld()
+  local track = ns.S().track
+  if ns.InstanceType() ~= "world" or not track.world then return false end
+  local sub = GetSubZoneText()
+  if sub and not issecret(sub) and OBJECTIVE_SUBZONES[sub] then return false end
+  return true
 end
+
+function PvP.InBattleground()
+  return ns.InstanceType() == "pvp" and ns.S().instances ~= "off"
+end
+
+function PvP.InWorldPvPContext() return PvP.InWorld() or PvP.InBattleground() end
 
 function PvP.ZoneText()
   local zone, sub = GetRealZoneText(), GetSubZoneText()
@@ -371,7 +375,7 @@ function PvP.FightStarted()
 end
 
 function PvP.CheckEngage()
-  if not PvP.InWorldPvPContext() then return end
+  if not PvP.InWorld() then return end
   local info = PvP.ReadEnemy("target")
   if not (info and info.name) then return end
   if UnitCanAttack then
@@ -895,7 +899,7 @@ function PvP.SightingDue(name)
 end
 
 local function checkSighting(unit)
-  if not PvP.InWorldPvPContext() then return end
+  if not PvP.InWorld() then return end
   local info = PvP.ReadEnemy(unit)
   if not info or not info.name then return end
   remember(info)

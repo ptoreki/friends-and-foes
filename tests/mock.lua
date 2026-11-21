@@ -73,7 +73,7 @@ function UnitExists() return false end
 function UnitAffectingCombat() return IN_COMBAT or false end
 function UnitInParty() return false end
 function UnitInRaid() return nil end
-function IsInInstance() return IN_INSTANCE or false, IN_INSTANCE and "party" or "none" end
+function IsInInstance() return IN_INSTANCE or false, IN_INSTANCE and (IN_INSTANCE_KIND or "party") or "none" end
 function GetRealmName() return MY_REALM end
 function GetBuildInfo() return "1.60.1", "70338", "", 16001 end
 function GetRealZoneText() return "Hillsbrad Foothills" end

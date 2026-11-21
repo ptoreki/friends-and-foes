@@ -720,9 +720,7 @@ do
   settings.FNF_instances:SetValue("off")
   check(ns.S().instances == "off", "one instances dropdown for dungeons, raids and battlegrounds")
   settings.FNF_instances:SetValue("hold")
-  settings.FNF_track_pvp:SetValue(true)
-  check(ns.S().track.pvp == true, "track PvP in battlegrounds checkbox")
-  settings.FNF_track_pvp:SetValue(false)
+  check(settings.FNF_track_pvp == nil and settings.FNF_track_world ~= nil and ns.S().track.pvp == nil, "no Battlegrounds tracking checkbox any more")
   local played = SOUNDS_PLAYED or 0
   settings.FNF_soundPick_trouble:SetValue("raidwarning")
   check(ns.S().soundPick.trouble == "raidwarning" and (SOUNDS_PLAYED or 0) == played + 1, "picking a sound sets it and plays it")
@@ -892,12 +890,15 @@ do
   ns.S().instances = "hold"
   -- tracking your own PvP
   here = "pvp"
-  check(not ns.PvP.InWorldPvPContext(), "battlegrounds not tracked by default")
-  ns.S().track.pvp = true
-  check(ns.PvP.InWorldPvPContext(), "battlegrounds tracked when turned on")
-  ns.S().track.pvp = false
+  check(not ns.PvP.InWorld() and ns.PvP.InBattleground(), "a battleground is watched (for the Feed), never the world")
+  ns.S().track.pvp = true -- (a leftover from an old save: ignored)
+  check(not ns.PvP.InWorld(), "a leftover battleground tracking value makes no battleground count")
+  ns.S().track.pvp = nil
+  ns.S().instances = "off"
+  check(not ns.PvP.InWorldPvPContext(), "dungeons, raids, battlegrounds off: a battleground isn't even watched")
+  ns.S().instances = "hold"
   here = "arena"
-  check(ns.InstanceType() == "pvp" and not ns.PvP.InWorldPvPContext(), "an arena (if ever) counts as a battleground")
+  check(ns.InstanceType() == "pvp" and not ns.PvP.InWorld(), "an arena (if ever) counts as a battleground")
   here = "none"
   check(ns.PvP.InWorldPvPContext(), "open world tracked")
   ns.S().track.world = false
@@ -3394,7 +3395,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_103_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_104_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -3923,7 +3924,7 @@ do
   local sp = db.settings.soundPick
   check(sp.trouble == "whisper" and sp.victory == "default" and sp.pvp == nil and sp.sighting == "mapping" and sp.progress == "coin" and sp.bounty == "default" and sp.attacked == nil
     and db.settings.milestones == nil and db.settings.gearMin == nil, "upgrade: per-alert sounds become one per kind; fixed settings dropped")
-  check(#ns.Saved.STEPS == 14, "fourteen upgrade steps")
+  check(#ns.Saved.STEPS == 15, "fifteen upgrade steps")
   local g = { settings = { show = { attacked = "chat", engage = "toast", died = "off", kill = "toast", loot = "toast", gear = "chat", level = "chat" },
     sound = { attacked = true, engage = true, died = false, kill = false, loot = true, gear = false, level = true } } }
   ns.Saved.STEPS[12](g)
@@ -5133,7 +5134,7 @@ do
   -- upgrade step 14: the old mode becomes three numbers and goes away
   local function upgrade(mode)
     s.forget, s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = mode, 99, 99, 99
-    FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+    FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 2
     ns.Saved.Upgrade(FriendsAndFoesDB)
   end
   upgrade("never")
@@ -5144,9 +5145,14 @@ do
   check(s.forget == nil and s.forgetAttackers == 14 and s.forgetKilledOnce == 0 and s.forgetKilledMore == 0, "upgrade: normal -> the defaults")
   s.forget = nil
   s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = 7, 30, 90
-  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 2
   ns.Saved.Upgrade(FriendsAndFoesDB)
   check(s.forgetAttackers == 7 and s.forgetKilledOnce == 30 and s.forgetKilledMore == 90, "upgrade: new settings are left alone")
+  -- step 15: the old battleground tracking value is deleted
+  s.track.pvp = true
+  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+  ns.Saved.Upgrade(FriendsAndFoesDB)
+  check(s.track.pvp == nil and s.track.world == true and FriendsAndFoesDB.dataVersion == #ns.Saved.STEPS, "upgrade: the old battleground tracking switch is deleted")
   -- the login run says so once when it removed players; silent when nothing goes
   do
     local said, oldChat = {}, ns.Toast.Chat
@@ -6740,8 +6746,8 @@ do
     c.streak, c.bestStreak = 0, 0
     local feedBefore = #ns.Data.ViewRealm().feed
     IN_INSTANCE = true
-    ns.Events.Emit("KILL", { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Warsong Gulch" })
-    ns.Events.Emit("DIE", { zone = "Warsong Gulch", killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 }), conf = "c", assists = "" })
+    ns.Events.Emit("KILL", { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Deadmines" })
+    ns.Events.Emit("DIE", { zone = "Deadmines", killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 }), conf = "c", assists = "" })
     IN_INSTANCE = false
     check(#FriendsAndFoesDB.killLog == 0 and #FriendsAndFoesDB.deathLog == 0 and c.lifeStart == nil and (c.bestStreak or 0) == 0
       and (not c.brackets["30"] or (c.brackets["30"].kills == 0 and c.brackets["30"].deaths == 0 and c.brackets["30"].bestStreak == 0)),
@@ -6782,6 +6788,96 @@ do
   St.Flush()
   drainToasts()
   check(ns.errors == errs, "no errors in played time, lives and brackets (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0.4: battleground PvP never counts; at most a Feed line and an alert
+do
+  local errs = ns.errors
+  local St = ns.Stats
+  local c = FriendsAndFoesCharDB
+  local realm = ns.Data.ViewRealm()
+  local instWas = ns.S().instances
+  local saved = { kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog, streak = c.streak, best = c.bestStreak, brackets = c.brackets, seeded = c.bracketsSeeded }
+  c.brackets, c.bracketsSeeded, c.streak, c.bestStreak = {}, true, 0, 0
+  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = {}, {}
+  local me = ns.Data.Player(ns.me)
+  local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
+  local function snap()
+    return table.concat({ me.k, me.d, #FriendsAndFoesDB.killLog, #FriendsAndFoesDB.deathLog, count(realm.hitlist), c.streak or 0, c.bestStreak or 0,
+      (ns.Bounty.Mine()), count(ns.Data.Player("Buddy Pal").slain or {}), count(ns.Data.Player("Buddy Pal").slain or {}) }, ",")
+  end
+  local function feedCount() return #realm.feed end
+  local killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 })
+  local function ownKill() ns.Events.Emit("KILL", { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Warsong Gulch (Silverwing Hold)" }) end
+  local function ownDie() ns.Events.Emit("DIE", { zone = "Warsong Gulch (Silverwing Hold)", killer = killer, conf = "c", assists = "" }) end
+  local function ownAtk() ns.Events.Emit("ATK", { enc = "1", zone = "Warsong Gulch (Silverwing Hold)", attackers = ns.EncodeUnits({ { name = "Bob Gank", class = "ROGUE", level = 32 } }, 3) }) end
+  local function friendKill(extra) -- a friend's kill, as it arrives
+    local f = { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Arathi Basin (Farm)", streak = "3" }
+    for k, v in pairs(extra or {}) do f[k] = v end
+    ns.Events.Apply({ kind = "KILL", id = ns.NewId(), from = "Buddy Pal", class = "PRIEST", level = 40, f = f }, false)
+  end
+
+  -- own, in a battleground, setting off: nothing anywhere
+  IN_INSTANCE, IN_INSTANCE_KIND = true, "pvp"
+  ns.S().instances = "off"
+  local before, feed0 = snap(), feedCount()
+  local shown = toasted(function() ownKill(); ownDie(); ownAtk() end)
+  check(snap() == before and feedCount() == feed0 and not shown, "battleground, setting off: no counts and no Feed line or alert")
+  -- own, setting on (show / hold): a Feed line for a kill and a death, nothing else
+  for _, mode in ipairs({ "show", "hold" }) do
+    ns.S().instances = mode
+    before, feed0 = snap(), feedCount()
+    ownKill(); ownDie(); ownAtk()
+    check(snap() == before, "battleground, " .. mode .. ": no kill, death, hitlist, notoriety, streak or stats")
+    check(feedCount() == feed0 + 2 and realm.feed[#realm.feed].text:find("battleground", 1, true), "battleground, " .. mode .. ": a Feed line for the kill and the death (not the attack)")
+  end
+  check(realm.feed[#realm.feed].who == nil and realm.feed[#realm.feed - 1].who == nil, "the lines are on nobody's profile")
+
+  -- a friend's battleground kill (flagged by its zone name, as an older friend sends it): the receiver's setting
+  IN_INSTANCE, IN_INSTANCE_KIND = false, nil
+  ns.S().instances = "off"
+  before, feed0 = snap(), feedCount()
+  shown = toasted(friendKill)
+  check(snap() == before and feedCount() == feed0 and not shown, "a friend's battleground kill, setting off: nothing")
+  local buddy = ns.Data.Player("Buddy Pal")
+  local buddyK = buddy.k
+  ns.S().instances = "show"
+  before, feed0 = snap(), feedCount()
+  shown = toasted(friendKill)
+  check(snap() == before and buddy.k == buddyK and feedCount() == feed0 + 1 and shown, "a friend's battleground kill, setting on: a Feed line and an alert, no counts")
+  check(not (buddy.slain and buddy.slain["Bg Victim"]) and not realm.hitlist["Bg Victim"], "...and no kill list or hitlist entry")
+  -- the same kill in the world still counts
+  friendKill({ zone = "Duskwood" })
+  check(buddy.k == buddyK + 1, "a world kill from a friend still counts")
+  -- caught up
+  ns.S().instances = "show"
+  before, feed0 = snap(), feedCount()
+  ns.Events.Apply({ kind = "KILL", id = ns.NewId(), from = "Buddy Pal", class = "PRIEST", level = 40, ago = 300,
+    f = { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Warsong Gulch" } }, false)
+  check(snap() == before and feedCount() == feed0 and buddy.k == buddyK + 1, "a caught-up battleground kill is dropped")
+
+  -- a bounty target killed in a battleground doesn't complete the bounty
+  local posted = ns.Contracts.Post({ name = "Bg Target", class = "MAGE", level = 30 }, 50000, 3)
+  local open = #ns.Contracts.On("Bg Target")
+  IN_INSTANCE, IN_INSTANCE_KIND = true, "pvp"
+  ns.Events.Emit("KILL", { victim = "Bg Target", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Warsong Gulch" })
+  friendKill({ victim = "Bg Target" })
+  IN_INSTANCE, IN_INSTANCE_KIND = false, nil
+  check(open == 1 and #ns.Contracts.On("Bg Target") == 1, "a bounty target killed in a battleground: the bounty stays open (" .. tostring(posted) .. ")")
+
+  -- the world, unchanged: own kill counts, is logged and sent
+  before = snap()
+  ns.Events.Emit("KILL", { victim = "World Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
+  check(snap() ~= before and #FriendsAndFoesDB.killLog == 1 and (c.streak or 0) == 1, "a world kill of your own still counts, logs and streaks")
+  -- a zone that only sounds like one is the world
+  check(ns.IsBattlegroundZone("Alterac Valley (Dun Baldar)") and not ns.IsBattlegroundZone("Alterac Mountains") and not ns.IsBattlegroundZone("Arathi Highlands") and not ns.IsBattlegroundZone(nil),
+    "battleground zone names")
+
+  ns.S().instances = instWas
+  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  c.streak, c.bestStreak, c.brackets, c.bracketsSeeded = saved.streak, saved.best, saved.brackets, saved.seeded
+  drainToasts()
+  check(ns.errors == errs, "no errors in battleground handling (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

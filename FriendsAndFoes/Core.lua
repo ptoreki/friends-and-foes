@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "1.0.3"
+ns.VERSION = "1.0.4"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -47,8 +47,8 @@ local DEFAULTS = {
   dnd = { combat = false },
   -- (see instances below)
   instances = "hold", -- alerts in dungeons, raids and battlegrounds: "show" | "hold" (until you're out) | "off"
-  -- where your own PvP (attacks, deaths, kills, sightings) is tracked
-  track = { world = true, pvp = false },
+  -- where your own PvP (attacks, deaths, kills, sightings) is tracked (battlegrounds never count)
+  track = { world = true },
   minimap = { hide = false, angle = 210 }, -- shown; drag round the rim, Shift-drag anywhere
   anchor = { point = "TOP", x = 0, y = -140 },
   debug = false,
@@ -110,6 +110,17 @@ function ns.InstanceType()
   if kind == "scenario" or kind == nil or kind == "none" then return "party" end
   if kind == "arena" then return "pvp" end
   return kind
+end
+
+-- Battleground names, for an event from a friend on an older version (it carries no battleground
+-- flag, only its zone text, "Warsong Gulch (Silverwing Hold)"). Anything else counts as the world.
+local BG_ZONES = { "Warsong Gulch", "Arathi Basin", "Alterac Valley", "Eye of the Storm" }
+function ns.IsBattlegroundZone(zone)
+  if type(zone) ~= "string" or issecret(zone) then return false end
+  for _, name in ipairs(BG_ZONES) do
+    if zone:find(name, 1, true) then return true end
+  end
+  return false
 end
 
 -- in a dungeon, raid or battleground (where the "Where it works" setting applies)

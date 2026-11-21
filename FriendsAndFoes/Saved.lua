@@ -189,6 +189,10 @@ local STEPS = {
     end
     s.forget = nil
   end,
+  -- 15 (1.0.4): the "Battlegrounds" tracking switch is gone (battlegrounds never count)
+  function(db)
+    if type(db.settings.track) == "table" then db.settings.track.pvp = nil end
+  end,
 }
 Saved.STEPS = STEPS
 

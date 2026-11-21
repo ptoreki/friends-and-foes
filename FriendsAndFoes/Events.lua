@@ -35,7 +35,18 @@ local function trackStreak(kind, fields)
   end
 end
 
+-- The PvP kinds that carry a zone, and so can come from a battleground
+local BG_KINDS = { ATK = true, ENG = true, DIE = true, KILL = true, AST = true, SIGHT = true }
+
 function Events.Emit(kind, fields)
+  -- in a battleground: a Feed line for a kill or death at most (Events.Battleground), never counted
+  -- (no streak), never sent to friends
+  if BG_KINDS[kind] and ns.InstanceType() == "pvp" then
+    local _, class = UnitClass("player")
+    local msg = { kind = kind, id = ns.NewId(), class = class, level = UnitLevel("player"), f = fields, bg = true, from = ns.me }
+    ns.Try("battleground", Events.Battleground, msg, true)
+    return
+  end
   trackStreak(kind, fields)
   -- may friends pass this on to their other friends? (Options: "Friends may pass on my events")
   fields.rl = ns.Comm.RelayAllowed() and "1" or ""
@@ -270,12 +281,42 @@ function Events.Clean(msg)
   end
 end
 
+-- A kill or death in a battleground: never counted anywhere (no kills, deaths, K/D, kill list,
+-- hitlist, notoriety, bounty, streak, stats), never passed on. At most a Feed line and an alert,
+-- and only when "Dungeons, raids, battlegrounds" is not off. Your own show in the Feed only, like
+-- your other kills; a friend's also alert. Anything caught up from before is dropped.
+function Events.Battleground(msg, isSelf)
+  if ns.S().instances == "off" or msg.ago then return end
+  if msg.kind ~= "KILL" and msg.kind ~= "DIE" then return end
+  local f = msg.f or {}
+  local from = isSelf and ns.me or msg.from
+  local subject = ns.ClassColored(from, msg.class)
+  local line, kind
+  if msg.kind == "KILL" then
+    local victim = ns.CleanName(f.victim)
+    local class = type(f.vclass) == "string" and f.vclass:match("^%u+$") or nil
+    line, kind = L.BG_KILL:format(subject, victim and ns.ClassColored(victim, class) or L.BG_SOMEONE), "kill"
+  else
+    local killer = ns.DecodeUnit(f.killer)
+    line, kind = L.BG_DIE:format(subject, killer and killer.name and ns.ClassColored(killer.name, killer.class) or L.BG_SOMEONE), "died"
+  end
+  line = line .. " |cff888888(" .. L.BG_TAG .. ")|r"
+  ns.Data.Feed(kind, line) -- (no who / foes: it isn't on anyone's profile)
+  if isSelf then return end
+  ns.Toast.Push({ kind = kind, category = "pvp", icon = ICON[kind], chat = line, title = line })
+end
+
 function Events.Apply(msg, isSelf)
   local h = H[msg.kind]
   if not h then return end
   -- (ids starting with "S": a friend on 0.9.3 or older testing with /fnf sim - never real data)
   if msg.id:sub(1, 1) == "S" then return end
   if not isSelf then Events.Clean(msg) end
+  -- from a battleground (flagged, or by its zone name from an older friend): see Events.Battleground
+  if BG_KINDS[msg.kind] and (msg.bg or ns.IsBattlegroundZone(msg.f and msg.f.zone)) then
+    ns.Try("battleground", Events.Battleground, msg, isSelf)
+    return
+  end
   local ok, err = pcall(function()
     local p = ns.Data.Player(msg.from)
     p.friend = true

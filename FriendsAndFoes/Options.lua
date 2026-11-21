@@ -235,7 +235,6 @@ function Options.BuildNative()
   end
   header(friendsLayout, L.TRACK_HEADER, L.TIP_TRACK)
   checkbox(friends, "track_world", S().track, "world", L.TRACK_WORLD, D.track.world, L.TIP_TRACK_WORLD)
-  checkbox(friends, "track_pvp", S().track, "pvp", L.TRACK_PVP, D.track.pvp, L.TIP_TRACK_PVP)
   checkbox(friends, "hideLowAlts", S(), "hideLowAlts", L.OPT_HIDE_LOW_ALTS, D.hideLowAlts, L.TIP_HIDE_LOW_ALTS, function()
     if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
   end)
