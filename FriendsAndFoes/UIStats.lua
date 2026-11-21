@@ -18,9 +18,15 @@ local COL_W = math.floor((PAGE_W - 2 * COL_GAP) / 3)
 local COL_TOP = TILE_TOP - TILE_H - TILE_COLUMN_GAP -- the columns' gold headers
 local HEADER_GAP = 24 -- header top to the first row's top
 local ROW_H, ROWS = 24, 5 -- (the bars)
+local HUNT_ROWS = 6
 -- the rows are spread so the last one ends FOOT_GAP above the footnote
 local ROWS_TOP = COL_TOP - HEADER_GAP
-local ROW_STEP = math.floor((-(-PAGE_H + FOOT_H + FOOT_GAP) + ROWS_TOP - ROW_H) / (ROWS - 1))
+local function stepFor(n) return math.floor((-(-PAGE_H + FOOT_H + FOOT_GAP) + ROWS_TOP - ROW_H) / (n - 1)) end
+-- one pitch for all three columns, so row i of each is at the same height: the one that fits the
+-- tallest column (the six "When you hunt" rows) above the footnote; the charts leave space at the bottom
+local ROW_STEP = stepFor(HUNT_ROWS)
+local HUNT_STEP = ROW_STEP
+UI.StatsLayout = { colW = COL_W, colGap = COL_GAP, rowStep = ROW_STEP, rowH = ROW_H, rowsTop = ROWS_TOP, lockW = 18 }
 local DIM = "|cff888888"
 local DASH = "-"
 -- the level-gap ramp, mildest to most dangerous
@@ -40,38 +46,78 @@ local function percent(n, total) return total > 0 and math.floor(n * 100 / total
 
 -- What the page shows:
 --   sub     the character (class-coloured name, level)
---   tiles   { { big, label, tip, dim, tipTitle, extra, locked }, ... } three headline tiles (locked: the
+--   tiles   { { big, label, tip, dim, tipTitle, extra, locked }, ... } four headline tiles (locked: the
 --           progress text "4/5 kills" while it waits for enough kills; the extra line shows it)
 --   hunt    { { label, value, dim, locked, tip }, ... } "When you hunt" (locked as above)
 --   gap     { { label, n, color, countText, tip }, ... } Skull to Grey
 --   zones   { { name, n, color, countText }, ... } up to 5
 --   empty   nothing logged for this character yet (the charts show as faded skeletons)
+local selected -- the level bracket shown (nil: All); kept while the game runs, not saved
+function UI.StatsBracket() return selected end
+function UI.SetStatsBracket(key)
+  if key ~= nil and not ns.Stats.HasData(key) then return end
+  selected = key
+  UI.RenderStats()
+end
+
+-- the bracket buttons: All first. { key, label, tip, enabled, selected }
+local function bracketButtons()
+  local out = { { nil, L.STATS_BR_ALL, L.STATS_BR_ALL_TIP, true, selected == nil } }
+  for _, def in ipairs(ns.Stats.BRACKETS) do
+    local tip = def.hi >= 999 and L.STATS_BR_TIP_UP:format(def.lo) or L.STATS_BR_TIP:format(def.lo, def.hi)
+    out[#out + 1] = { def.key, L["STATS_BR_" .. def.key], tip, ns.Stats.HasData(def.key), selected == def.key }
+  end
+  return out
+end
+
 function UI.StatsView()
-  local s = ns.Stats.Compute()
-  local v = { empty = s.n == 0 }
+  local key = selected
+  local s = ns.Stats.Compute(key)
+  local v = { empty = s.n == 0, key = key }
   local _, class = UnitClass("player")
   v.sub = ns.ClassColored(ns.me, class) .. "  " .. DIM .. L.STATS_LEVEL_OF:format(UnitLevel("player") or 0) .. "|r"
+  v.brackets = bracketButtons()
 
-  local cur, best = ns.Stats.Streaks()
+  -- the "now" parts (current streak, current life) are about you as you are: on All and on the bracket you're in
+  local showNow = key == nil or key == ns.Stats.CurrentBracket()
+  local cur = ns.Stats.Streaks()
   local lvlLock = progress(s.levelN, ns.Stats.MIN_LEVELS)
   -- { big text, label (line 1), hover text, dim (not enough kills yet), hover title, extra (line 2) }
   v.tiles = {
     { tostring(s.n), L.STATS_KILLS, L.STATS_TIP_KILLS, false, L.STATS_KILLS, "" },
-    { tostring(best), L.STATS_BEST_STREAK, L.STATS_TIP_STREAK, false, L.STATS_BEST_STREAK, L.STATS_NOW:format(cur) },
+    { tostring(s.bestStreak), L.STATS_BEST_STREAK, L.STATS_TIP_STREAK, false, L.STATS_BEST_STREAK, showNow and L.STATS_NOW:format(cur) or "" },
     { s.avgLevel and L.STATS_LEVEL_FMT:format(s.avgLevel) or DASH,
       L.STATS_AVG_LEVEL, L.STATS_TIP_AVG .. (lvlLock and (" " .. L.STATS_LOCK_AVG:format(ns.Stats.MIN_LEVELS)) or ""),
       s.avgLevel == nil, L.STATS_AVG_LEVEL, s.avgLevel and ns.Stats.GapText(s.avgGap) or lvlLock or "", lvlLock },
   }
 
+  local life = ns.Stats.CurrentLife()
+  local lifeLock = s.deaths < ns.Stats.MIN_DEATHS and L.STATS_PROGRESS_DEATHS:format(s.deaths, ns.Stats.MIN_DEATHS) or nil
+  local killsText = life.kills == 1 and L.STATS_KILL_1 or L.STATS_KILLS_N:format(life.kills)
+  local nowLife = showNow and L.STATS_LIFE_NOW:format(ns.Stats.Duration(life.time), killsText) or ""
+  local lifeTip = L.STATS_TIP_LIFE
+  if s.longest then lifeTip = lifeTip .. " " .. L.STATS_LONGEST:format(ns.Stats.Duration(s.longest)) end
+  if showNow then lifeTip = lifeTip .. " " .. L.STATS_LIFE_CURRENT:format(ns.Stats.Duration(life.time), killsText) end
+  if lifeLock then lifeTip = lifeTip .. " " .. L.STATS_LOCK_LIFE:format(ns.Stats.MIN_DEATHS) end
+  v.tiles[4] = { s.avgLife and ns.Stats.Duration(s.avgLife) or DASH, L.STATS_LIFE, lifeTip, s.avgLife == nil, L.STATS_LIFE,
+    s.avgLife and nowLife or lifeLock or "", lifeLock }
+  local rateLock = s.perHour == nil and L.STATS_PROGRESS_MIN:format(math.floor(s.played / 60), ns.Stats.MIN_PLAYED / 60) or nil
   local busyLock = progress(s.n, ns.Stats.MIN_BUSY)
   local busyTip = busyLock and L.STATS_LOCK_BUSY:format(ns.Stats.MIN_BUSY) or nil
-  v.hunt = {
-    { L.STATS_TODAY, tostring(s.today) },
-    { L.STATS_WEEK, tostring(s.week) },
-    { L.STATS_MONTH, tostring(s.month) },
-    { L.STATS_BUSY_DAY, s.busyDay and L.STATS_DAYS[s.busyDay] or busyLock or DASH, s.busyDay == nil, busyLock, busyTip },
-    { L.STATS_BUSY_HOUR, s.busyHour and L.STATS_HOUR:format(s.busyHour, (s.busyHour + 1) % 24) or busyLock or DASH, s.busyHour == nil, busyLock, busyTip },
-  }
+  v.hunt = {}
+  if key == nil then
+    v.hunt[1] = { L.STATS_TODAY, tostring(s.today) }
+    v.hunt[2] = { L.STATS_WEEK, tostring(s.week) }
+    v.hunt[3] = { L.STATS_MONTH, tostring(s.month) }
+  else
+    -- (the log's day counts aren't per bracket: time played and K/D instead)
+    v.hunt[1] = { L.STATS_PLAYED, ns.Stats.Duration(s.played) }
+    v.hunt[2] = { L.STATS_KD, UI.Util.kdText(s.n, s.deaths, ns.Profile.KD(s.n, s.deaths)) }
+  end
+  v.hunt[#v.hunt + 1] = { L.STATS_BUSY_DAY, s.busyDay and L.STATS_DAYS[s.busyDay] or busyLock or DASH, s.busyDay == nil, busyLock, busyTip }
+  v.hunt[#v.hunt + 1] = { L.STATS_BUSY_HOUR, s.busyHour and L.STATS_HOUR:format(s.busyHour, (s.busyHour + 1) % 24) or busyLock or DASH, s.busyHour == nil, busyLock, busyTip }
+  v.hunt[#v.hunt + 1] = { L.STATS_RATE, s.perHour and L.STATS_PER_HOUR:format(s.perHour) or rateLock or DASH, s.perHour == nil, rateLock,
+    L.STATS_TIP_RATE .. (rateLock and (" " .. L.STATS_LOCK_RATE:format(ns.Stats.MIN_PLAYED / 60)) or "") }
 
   v.gap = {}
   for _, tier in ipairs(GAP_ORDER) do
@@ -113,18 +159,18 @@ end
 
 -- label left, value right (the "When you hunt" rows)
 local function addTextRows(col)
-  for i = 1, ROWS do
-    local y = ROWS_TOP - (i - 1) * ROW_STEP
+  for i = 1, HUNT_ROWS do
+    local y = ROWS_TOP - (i - 1) * HUNT_STEP
     local row = {}
     row.label = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     row.label:SetPoint("TOPLEFT", col.x, y)
     row.label:SetJustifyH("LEFT")
     row.value = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.value:SetPoint("TOPRIGHT", col.x + COL_W, y)
-    row.x, row.y = col.x, y
+    row.value:SetPoint("TOPRIGHT", page, "TOPLEFT", col.x + COL_W, y)
+    row.x, row.y, row.valueRight = col.x, y, col.x + COL_W
     row.lock = page:CreateTexture(nil, "OVERLAY")
     row.lock:SetSize(14, 14)
-    row.lock:SetPoint("TOPRIGHT", col.x + COL_W, y + 1)
+    row.lock:SetPoint("TOPRIGHT", page, "TOPLEFT", col.x + COL_W, y + 1)
     row.lock:Hide()
     row.hover = CreateFrame("Frame", nil, page)
     row.hover:SetPoint("TOPLEFT", col.x, y)
@@ -200,10 +246,30 @@ function UI.BuildStats(win)
   page.sub:SetJustifyH("LEFT")
   page.sub:SetPoint("TOPLEFT", page.title, "BOTTOMLEFT", 0, -4)
 
+  -- level bracket selector: All, <20, 20s ... 60 (added right to left)
+  page.brackets = {}
+  local selRow = UI.Row(page, "TOPRIGHT", 0, 0)
+  local labels = { L.STATS_BR_ALL }
+  for _, def in ipairs(ns.Stats.BRACKETS) do labels[#labels + 1] = L["STATS_BR_" .. def.key] end
+  for i = #labels, 1, -1 do
+    local btn = selRow:Add(UI.Button(page, i == 1 and 40 or 46, labels[i], function(self) UI.SetStatsBracket(self.key) end), 2)
+    btn:SetScript("OnEnter", function(self) tooltip(self, self.tipTitle, self.tip) end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- the selected one: a gold bar, 2px, the button's width, just under it
+    btn.mark = btn:CreateTexture(nil, "OVERLAY")
+    btn.mark:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -1)
+    btn.mark:SetPoint("TOPRIGHT", btn, "BOTTOMRIGHT", 0, -1)
+    btn.mark:SetHeight(2)
+    btn.mark:SetColorTexture(1, 0.82, 0, 1)
+    btn.mark:Hide()
+    page.brackets[i] = btn
+  end
+  selRow:Layout()
+
   -- headline tiles
-  local tileW = math.floor((PAGE_W - 2 * TILE_GAP) / 3)
+  local tileW = math.floor((PAGE_W - 3 * TILE_GAP) / 4)
   page.tiles = {}
-  for i = 1, 3 do
+  for i = 1, 4 do
     local tile = CreateFrame("Frame", nil, page)
     tile:SetPoint("TOPLEFT", (i - 1) * (tileW + TILE_GAP), TILE_TOP)
     tile:SetSize(tileW, TILE_H)
@@ -237,8 +303,8 @@ function UI.BuildStats(win)
   page.zones = newColumn(2 * (COL_W + COL_GAP))
   addBarRows(page.zones)
   page.empty = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  page.empty:SetPoint("TOPLEFT", COL_W + COL_GAP, ROWS_TOP - 2 * ROW_STEP)
-  page.empty:SetWidth(2 * COL_W + COL_GAP)
+  page.empty:SetPoint("TOPLEFT", 2 * (COL_W + COL_GAP), ROWS_TOP - 2 * ROW_STEP)
+  page.empty:SetWidth(COL_W)
   page.empty:SetJustifyH("CENTER")
   page.empty:SetWordWrap(true)
   page.empty:SetText(L.STATS_EMPTY)
@@ -256,6 +322,14 @@ function UI.RenderStats()
   if not page then return end
   local v = UI.StatsView()
   page.sub:SetText(v.sub)
+  for i, btn in ipairs(page.brackets) do
+    local d = v.brackets[i]
+    btn.key, btn.tip, btn.tipTitle = d[1], d[3], d[2]
+    btn.disabled, btn.selected = not d[4], d[5]
+    btn:SetEnabled(d[4])
+    btn.mark:SetShown(d[5]) -- (the gold bar under the selected one)
+    UI.SetButtonText(btn, d[5] and ("|cffffffff" .. d[2] .. "|r") or d[2])
+  end
   for i, tile in ipairs(page.tiles) do
     local t = v.tiles[i]
     tile.big:SetText((t[4] and DIM or "") .. t[1] .. (t[4] and "|r" or ""))
@@ -269,13 +343,19 @@ function UI.RenderStats()
   hunt.header:SetText(L.STATS_HUNT)
   for i, row in ipairs(hunt.rows) do
     local h = v.hunt[i]
+    row.label:SetShown(h ~= nil)
+    row.value:SetShown(h ~= nil)
+    row.hover:SetShown(h ~= nil)
+    if not h then row.lock:Hide() end
+    if not h then h = { "", "" } end
     row.label:SetText(h[1])
     row.value:SetText((h[3] and DIM or "") .. h[2] .. (h[3] and "|r" or ""))
     row.value:SetAlpha(h[4] and FADED or 1)
     local lock = h[4] ~= nil and ns.Art.SetLockIcon(row.lock)
     row.lock:SetShown(lock)
     row.value:ClearAllPoints()
-    row.value:SetPoint("TOPRIGHT", row.x + COL_W - (lock and 18 or 0), row.y)
+    row.valueRight = row.x + COL_W - (lock and UI.StatsLayout.lockW or 0)
+    row.value:SetPoint("TOPRIGHT", page, "TOPLEFT", row.valueRight, row.y)
     row.tipTitle, row.tip = h[1], h[5]
   end
   fillBars(page.gap, L.STATS_CHART_GAP, v.gap, function(it) return it[5] end)
@@ -298,5 +378,6 @@ function UI.RenderStats()
     col.alpha = alpha
     for _, row in ipairs(col.rows) do row:SetAlpha(alpha) end
   end
+  page.empty:SetAlpha(1) -- (the charts around it are faded; the message isn't)
   page.empty:SetShown(v.empty)
 end

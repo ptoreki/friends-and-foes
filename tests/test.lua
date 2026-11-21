@@ -3394,7 +3394,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_101_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_102_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -6360,6 +6360,9 @@ end
 do
   local errs = ns.errors
   local St = ns.Stats
+  local noon -- (set below)
+  local function comp(key) St.Seed(true); return St.Compute(key, noon) end -- (the totals come from the log entries)
+  local function sv() St.Seed(true); return ns.UI.StatsView() end
   local logWas, bestWas, streakWas = FriendsAndFoesDB.killLog, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak
   FriendsAndFoesDB.killLog = nil
   -- your own live kill is logged with both levels and the zone (you are level 30 in the mock)
@@ -6391,7 +6394,7 @@ do
   check(cur == 0 and best == 3, "a death ends the current streak, the best stays")
 
   -- the numbers (a made-up log, noon on a Monday; you are 30)
-  local noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
+  noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
   local function k(ago, vl, ml, z) return { t = noon - ago, c = ns.me, n = "V", vl = vl, ml = ml, z = z } end
   FriendsAndFoesDB.killLog = {
     k(3600, 20, 30, "Duskwood"),     -- grey (22 or less), today, Monday 11:00
@@ -6404,7 +6407,7 @@ do
     k(40 * 86400, -1, 30, "Ashenvale"), -- skull, older than a month
     k(5 * 86400, nil, 30, nil),      -- unknown level: not in the bars or averages
   }
-  local s = St.Compute(noon)
+  local s = comp()
   check(s.tiers.grey == 1 and s.tiers.lower == 1 and s.tiers.even == 3 and s.tiers.higher == 2 and s.tiers.skull == 1 and s.tiered == 8,
     "gap tiers: grey / lower / even / higher / skull, unknown left out")
   check(s.today == 3 and s.week == 7 and s.month == 8 and s.n == 9, "kills today / last 7 days / last 30 days: " .. s.today .. "/" .. s.week .. "/" .. s.month)
@@ -6416,43 +6419,43 @@ do
   local many = {}
   for i = 1, 8 do many[#many + 1] = { t = noon, c = ns.me, vl = 30, ml = 30, z = "Zone" .. i } end
   FriendsAndFoesDB.killLog = many
-  check(#St.Compute(noon).zones == 5, "at most 5 zones")
+  check(#comp().zones == 5, "at most 5 zones")
   -- busiest weekday and hour: only from 20 logged kills (19 shows nothing)
   local mon = time({ year = 2026, month = 6, day = 15, hour = 11, min = 30 })
   local busy = {}
   for i = 1, 19 do busy[i] = { t = mon - i, c = ns.me, vl = 30, ml = 30, z = "A" } end
   FriendsAndFoesDB.killLog = busy
-  s = St.Compute(noon)
+  s = comp()
   check(s.n == 19 and s.busyDay == nil and s.busyHour == nil, "19 kills: no busiest weekday or hour yet")
   busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
-  s = St.Compute(noon)
+  s = comp()
   check(s.n == 20 and s.busyDay == 2 and s.busyHour == 11, "20 kills: busiest weekday and hour (Monday, 11:00)")
   -- average level and gap: only from 5 kills with a known, non-skull level (4 shows nothing)
   local function lv(n) local l = {} for i = 1, n do l[i] = { t = noon - i, c = ns.me, vl = 30 + i, ml = 30 } end return l end
   FriendsAndFoesDB.killLog = lv(4)
-  s = St.Compute(noon)
+  s = comp()
   check(s.avgLevel == nil and s.avgGap == nil and s.levelN == 4, "4 known levels: no average level or gap yet")
-  local tiles4 = ns.UI.StatsView().tiles
+  local tiles4 = sv().tiles
   check(tiles4[3][1] == "-" and tiles4[3][4] and tiles4[3][2] == "Average victim" and tiles4[3][6] == "4/5 kills" and tiles4[3][7] == "4/5 kills", "locked average shows its progress, visibly")
-  check(ns.UI.StatsView().hunt[4][2] == "4/20 kills" and ns.UI.StatsView().hunt[4][3] and ns.UI.StatsView().hunt[4][4] == "4/20 kills" and ns.UI.StatsView().hunt[4][5], "locked busiest day shows its progress and explains the unlock")
+  check(sv().hunt[4][2] == "4/20 kills" and sv().hunt[4][3] and sv().hunt[4][4] == "4/20 kills" and sv().hunt[4][5], "locked busiest day shows its progress and explains the unlock")
   busy[20] = nil
   FriendsAndFoesDB.killLog = busy -- (19 kills)
-  check(ns.UI.StatsView().hunt[5][4] == "19/20 kills", "19/20 kills: still locked")
+  check(sv().hunt[5][4] == "19/20 kills", "19/20 kills: still locked")
   busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
-  check(ns.UI.StatsView().hunt[5][4] == nil and ns.UI.StatsView().hunt[4][2] == "Monday", "20/20: the lock is gone and the value shows")
+  check(sv().hunt[5][4] == nil and sv().hunt[4][2] == "Monday", "20/20: the lock is gone and the value shows")
   FriendsAndFoesDB.killLog = lv(5)
-  s = St.Compute(noon)
+  s = comp()
   check(s.avgLevel == 33 and s.avgGap == 3, "5 known levels: the averages show")
   -- per character: another character's entries and entries without one don't count
   FriendsAndFoesDB.killLog = { { t = noon - 5, c = "Other Char", vl = 30, ml = 30, z = "Elsewhere" }, { t = noon - 6, vl = 30, ml = 30, z = "Elsewhere" },
     { t = noon - 7, c = ns.me, vl = 30, ml = 30, z = "Here" } }
-  s = St.Compute(noon)
+  s = comp()
   check(s.n == 1 and s.today == 1 and s.tiered == 1 and #s.zones == 1 and s.zones[1].name == "Here", "only this character's entries count")
   St.Log("Mine Too", "30", "Here")
   check(FriendsAndFoesDB.killLog[#FriendsAndFoesDB.killLog].c == ns.me, "a logged kill records its character")
   -- the tiles: Kills logged first, and no overlap with the profile
-  local vw = ns.UI.StatsView()
-  check(#vw.tiles == 3 and vw.tiles[1][1] == "2" and vw.tiles[1][2] == "Kills logged", "Kills logged is the first tile and counts this character's log")
+  local vw = sv()
+  check(#vw.tiles == 4 and vw.tiles[1][1] == "2" and vw.tiles[1][2] == "Kills logged", "Kills logged is the first tile and counts this character's log")
   check(vw.tiles[2][2] == "Best streak" and vw.tiles[2][6]:find("now ", 1, true) and vw.tiles[1][6] == "", "the streak tile shows the best and, on its own line, the current run")
   local blob = ""
   for _, tl in ipairs(vw.tiles) do blob = blob .. tl[2] end
@@ -6460,7 +6463,7 @@ do
   check(not blob:find("Nemesis", 1, true) and not blob:find("Most killed", 1, true) and not blob:find("Players killed", 1, true), "the profile's lines are not repeated")
   -- the tile for the average: level, and the gap folded into its caption
   FriendsAndFoesDB.killLog = lv(5)
-  vw = ns.UI.StatsView()
+  vw = sv()
   check(vw.tiles[3][1] == "Level 33.0" and vw.tiles[3][2] == "Average victim" and vw.tiles[3][6] == "3 higher than you" and not vw.tiles[3][4], "average tile: level, with the gap in words on its own line")
   -- the charts: Skull to Grey, counts with their share of Kills logged; a long zone name is kept whole
   local longZone = "Hillsbrad Foothills (Tarren Mill and the Whole Old Hillsbrad Area)"
@@ -6470,7 +6473,7 @@ do
     { t = noon - 3, c = ns.me, vl = 30, ml = 30, z = "Duskwood" },
     { t = noon - 4, c = ns.me, vl = 10, ml = 30, z = "Duskwood" },
   }
-  vw = ns.UI.StatsView()
+  vw = sv()
   local order = {}
   for _, r in ipairs(vw.gap) do order[#order + 1] = r[1] end
   check(table.concat(order, ",") == "Skull,Higher,Even,Lower,Grey", "level-gap rows run Skull to Grey")
@@ -6478,7 +6481,7 @@ do
   check(vw.gap[4][5] and vw.gap[4][5]:find("3 or more levels below you", 1, true), "a level-gap row explains its tier")
   check(vw.zones[1][1] == "Duskwood" and vw.zones[2][1] == longZone and vw.zones[2][4] == "2 (50%)", "zone names are not cut in the view data")
   FriendsAndFoesDB.killLog = {}
-  vw = ns.UI.StatsView()
+  vw = sv()
   check(vw.empty and vw.tiles[1][1] == "0" and vw.tiles[3][1] == "-" and vw.tiles[3][6] == "0/5 kills" and vw.hunt[1][2] == "0", "empty log: zeros, dashes and progress")
 
   -- the page: a Stats button on your own profile only
@@ -6492,12 +6495,13 @@ do
   ns.UI.ShowProfile(ns.me)
   for _, log2 in ipairs({ {}, { { t = noon - 100, c = ns.me, n = "Log Bob", vl = 33, ml = 30, z = "Duskwood" }, { t = noon - 5, c = ns.me, vl = -1, ml = 30 } } }) do
     FriendsAndFoesDB.killLog = log2
+    St.Seed(true)
     ns.UI.ShowProfile(ns.me)
     ns.UI.ShowStats()
     local page = ns.UI.Frames().stats
     check(ns.UI.CurrentTab() == "stats" and page:IsShown() and not ns.UI.Frames().profile:IsShown(), "Stats opens in the tab (" .. #log2 .. " kills)")
-    local v = ns.UI.StatsView()
-    check(v.empty == (#log2 == 0) and #v.tiles == 3 and #v.hunt == 5 and #v.gap == 5, "the page has its lines and five gap bars")
+    local v = sv()
+    check(v.empty == (#log2 == 0) and #v.tiles == 4 and #v.hunt == 6 and #v.gap == 5, "the page has its lines and five gap bars")
     local frames = ns.UI.Frames().stats
     if #log2 == 0 then
       local allGap = true
@@ -6520,6 +6524,209 @@ do
   FriendsAndFoesDB.killLog, FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = logWas, nil, bestWas, streakWas
   drainToasts()
   check(ns.errors == errs, "no errors in the Stats page (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0.2: time played, PvP death log, lives, kills per hour, level brackets
+do
+  local errs = ns.errors
+  local St = ns.Stats
+  local c = FriendsAndFoesCharDB
+  local saved = { played = c.played, lifeStart = c.lifeStart, kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog,
+    brackets = c.brackets, seeded = c.bracketsSeeded, best = c.bestStreak, streak = c.streak }
+  local deadNow = false
+  local deadWas, levelWas = UnitIsDeadOrGhost, UnitLevel
+  UnitIsDeadOrGhost = function() return deadNow end
+  local function fresh() c.brackets = {}; c.bracketsSeeded = true; FriendsAndFoesDB.killLog = {}; FriendsAndFoesDB.deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
+
+  -- bracket keys by your level
+  check(St.BracketOf(1) == "u20" and St.BracketOf(19) == "u20" and St.BracketOf(20) == "20" and St.BracketOf(29) == "20"
+    and St.BracketOf(59) == "50" and St.BracketOf(60) == "60" and St.BracketOf(61) == "60" and St.BracketOf(0) == nil and St.BracketOf(nil) == nil,
+    "brackets: <20, 20s ... 50s, 60 and above")
+
+  -- the counter: only alive (and logged in); each step also lands in your level's bracket (30 in the mock)
+  fresh()
+  St.Flush()
+  c.played = 0
+  St.Bracket("30").played = 0
+  ADVANCE(100)
+  check(math.abs(St.Played() - 100) < 1e-6, "played counts time alive, including the part not saved yet")
+  deadNow = true
+  FIRE("PLAYER_DEAD")
+  ADVANCE(500)
+  check(math.abs(St.Played() - 100) < 1e-6 and math.abs(c.played - 100) < 1e-6, "dead or ghost: the counter stops (and what was counted is saved)")
+  deadNow = false
+  FIRE("PLAYER_ALIVE")
+  ADVANCE(50)
+  check(math.abs(St.Played() - 150) < 1e-6, "alive again: it counts again")
+  ADVANCE(30)
+  FIRE("PLAYER_LOGOUT")
+  check(math.abs(c.played - 180) < 1e-6, "logout saves it")
+  check(math.abs(St.Bracket("30").played - 180) < 1e-6, "the played time lands in the bracket of your level")
+  check(St.Duration(2700) == "45m" and St.Duration(6720) == "1h 52m" and St.Duration(183600) == "2d 3h" and St.Duration(20) == "0m", "durations: 45m, 1h 52m, 2d 3h")
+
+  -- the death log: your own live PvP deaths only; the life that ends goes in the bracket
+  local killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 })
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = killer, conf = "c", assists = "" })
+  local d1 = FriendsAndFoesDB.deathLog[1]
+  check(d1 and d1.c == ns.me and d1.k == "Bob Gank" and d1.z == "Duskwood" and d1.p == math.floor(St.Played()) and d1.t, "a PvP death is logged: character, played, killer, zone")
+  check(c.lifeStart == d1.p, "your life starts over at the death")
+  local b30 = St.Bracket("30")
+  check(b30.deaths == 1 and b30.lives == 1 and b30.lifeSum == d1.p and b30.lifeMax == d1.p, "the death and its life go into the bracket")
+  ns.past = true
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = killer, conf = "c", assists = "" })
+  ns.past = nil
+  check(#FriendsAndFoesDB.deathLog == 1 and b30.deaths == 1, "a caught-up death is not logged")
+  FIRE("PLAYER_DEAD") -- (a death out of PvP: nothing resolves into a DIE)
+  RUN_TIMERS()
+  check(#FriendsAndFoesDB.deathLog == 1, "a death that is not PvP is not logged")
+  deadNow = false
+  FIRE("PLAYER_ALIVE")
+
+  -- kills and streaks update the bracket as they happen
+  fresh()
+  c.streak = 0
+  ns.Events.Emit("KILL", { victim = "Brk Bob", vclass = "MAGE", vlevel = "33", vguild = "", zone = "Duskwood" })
+  ns.Events.Emit("KILL", { victim = "Brk Sue", vclass = "MAGE", vlevel = "0", vguild = "", zone = "Duskwood" })
+  b30 = St.Bracket("30")
+  check(b30.kills == 2 and b30.vlN == 1 and b30.vlSum == 33 and b30.gapSum == 3 and b30.tiers.higher == 1 and b30.tiers.skull == 1
+    and b30.zones.Duskwood == 2 and b30.pkills == 2, "a kill updates its bracket: levels, tiers, zones, rate")
+  check(b30.bestStreak == 2 and (b30.wday[1] or 0) + (b30.wday[2] or 0) + (b30.wday[3] or 0) + (b30.wday[4] or 0) + (b30.wday[5] or 0) + (b30.wday[6] or 0) + (b30.wday[7] or 0) == 2,
+    "the best streak and the weekday counts too")
+  -- an unknown level of yours: logged, but no bracket
+  UnitLevel = function() return nil end
+  St.Log("Lvl Unknown", "30", "Duskwood")
+  UnitLevel = levelWas
+  check(#FriendsAndFoesDB.killLog == 3 and St.Bracket("30").kills == 2, "unknown level: still logged, no bracket updated")
+  -- the zone cap
+  fresh()
+  for i = 1, St.ZONE_CAP + 1 do St.Log("Zone Vic", "30", "Zone" .. i) end
+  local n = 0
+  for _ in pairs(St.Bracket("30").zones) do n = n + 1 end
+  check(n == St.ZONE_CAP and St.Bracket("30").kills == St.ZONE_CAP + 1, "zones are capped per bracket (the totals keep counting)")
+
+  -- backfill: once, from the 1.0.1 log entries that know your level; later kills aren't counted twice
+  fresh()
+  c.bracketsSeeded = nil
+  FriendsAndFoesDB.killLog = {
+    { t = time(), c = ns.me, vl = 20, ml = 25, z = "Barrens" }, { t = time(), c = ns.me, vl = 50, ml = 45, z = "Ashenvale" },
+    { t = time(), c = "Other Toon", vl = 50, ml = 45 }, { t = time(), c = ns.me, vl = 50 },
+  }
+  local all = St.Compute()
+  check(St.Bracket("20").kills == 1 and St.Bracket("40").kills == 1 and all.n == 2, "backfill: this character's entries that know your level")
+  St.Compute()
+  St.Seed()
+  check(all.n == 2 and St.Compute().n == 2, "backfill runs once")
+  St.Log("Late Vic", "30", "Duskwood")
+  St.Compute()
+  check(St.Bracket("30").kills == 1 and St.Compute().n == 3, "a kill after the backfill isn't counted twice")
+
+  -- All is the sum of the brackets
+  fresh()
+  St.Bracket("20").kills, St.Bracket("20").zones.A, St.Bracket("20").tiers.even, St.Bracket("20").deaths = 3, 3, 3, 1
+  St.Bracket("50").kills, St.Bracket("50").zones.A, St.Bracket("50").zones.B, St.Bracket("50").tiers.higher, St.Bracket("50").deaths = 4, 2, 2, 4, 2
+  St.Bracket("20").bestStreak, St.Bracket("50").bestStreak = 3, 7
+  all = St.Compute()
+  check(all.n == 7 and all.deaths == 3 and all.tiers.even == 3 and all.tiers.higher == 4 and all.zones[1].name == "A" and all.zones[1].n == 5 and all.bestStreak == 7,
+    "All adds the brackets up (charts, kills, deaths, best streak)")
+  check(St.Compute("50").n == 4 and St.Compute("20").n == 3 and St.Compute("50").zones[1].n == 2, "one bracket shows only its own totals")
+
+  -- the selector: brackets without data are disabled and can't be picked
+  St.Bracket("40") -- (an empty one)
+  local vw = ns.UI.StatsView()
+  local enabled = {}
+  for _, bt in ipairs(vw.brackets) do enabled[#enabled + 1] = (bt[4] and "1" or "0") end
+  check(table.concat(enabled) == "1010010" and vw.brackets[1][2] == "All" and vw.brackets[2][2] == "<20" and vw.brackets[7][2] == "60",
+    "empty brackets are disabled: " .. table.concat(enabled))
+  ns.UI.SetStatsBracket("40")
+  check(ns.UI.StatsBracket() == nil, "an empty bracket can't be selected")
+  check(vw.brackets[7][3]:find("Level 60 and above", 1, true) and vw.brackets[4][3]:find("Levels 30 to 39", 1, true), "each button explains its level range")
+  St.Bracket("50").played, St.Bracket("50").lives, St.Bracket("50").lifeSum, St.Bracket("50").lifeMax = 3600, 2, 3000, 2000
+  ns.UI.SetStatsBracket("50")
+  vw = ns.UI.StatsView()
+  check(ns.UI.StatsBracket() == "50" and vw.brackets[6][5] and vw.hunt[1][1] == "Time played" and vw.hunt[1][2] == "1h 0m" and vw.hunt[2][1] == "K/D" and vw.hunt[2][2] == "2.00"
+    and vw.hunt[3][1] == "Busiest day" and #vw.hunt == 5 and vw.tiles[1][1] == "4", "a bracket view: time played and K/D replace the day counts")
+  ns.UI.SetStatsBracket(nil)
+  vw = ns.UI.StatsView()
+  check(vw.hunt[1][1] == "Today" and vw.hunt[3][1] == "Last 30 days" and #vw.hunt == 6 and vw.tiles[1][1] == "7", "All view: today and the last 7 / 30 days")
+
+  -- thresholds per view: 3 deaths, 60 minutes, 5 levels, 20 kills
+  fresh()
+  local b = St.Bracket("50")
+  b.deaths, b.lives, b.lifeSum, b.lifeMax = 2, 2, 7200, 4000
+  St.Bracket("20").deaths, St.Bracket("20").lives, St.Bracket("20").lifeSum = 1, 1, 100
+  check(St.Compute("50").avgLife == nil and St.Compute().avgLife == 7300 / 3, "3 deaths unlock the average life, counted per view (2 in the bracket, 3 in All)")
+  b.played, b.pkills = 3540, 3
+  check(St.Compute("50").perHour == nil, "59 minutes in the bracket: no rate yet")
+  b.played = 3600
+  check(math.abs(St.Compute("50").perHour - 3) < 1e-9, "60 minutes: the rate shows")
+  b.kills, b.vlN, b.gapN = 4, 4, 4
+  check(St.Compute("50").avgLevel == nil and St.Compute("50").busyDay == nil, "4 known levels and under 20 kills: still locked in the bracket")
+
+  -- the current life shows on All and on your own bracket only
+  St.Bracket("30").kills, St.Bracket("30").played = 1, 10
+  ns.UI.SetStatsBracket("50")
+  check(ns.UI.StatsView().tiles[2][6] == "", "another bracket: no 'now' line")
+  ns.UI.SetStatsBracket("30")
+  check(ns.UI.StatsView().tiles[2][6]:find("now ", 1, true), "your own bracket: the 'now' line")
+  ns.UI.SetStatsBracket(nil)
+
+  -- lives and current life (account for the log): kills with a played stamp since the last death
+  fresh()
+  c.played = 13000
+  St.Flush()
+  c.played = 13000
+  c.lifeStart = 12600
+  FriendsAndFoesDB.killLog = {
+    { t = 1, c = ns.me, p = 12700, vl = 30, ml = 30 }, { t = 2, c = ns.me, p = 12000, vl = 30, ml = 30 },
+    { t = 3, c = ns.me, vl = 30, ml = 30 }, { t = 4, c = "Other Toon", p = 12900, vl = 30, ml = 30 },
+  }
+  local life = St.CurrentLife()
+  check(math.abs(life.time - 400) < 1e-6 and life.kills == 1, "current life: time and kills since the last death (kills without a played stamp left out)")
+  b = St.Bracket("30")
+  b.deaths, b.lives, b.lifeSum, b.lifeMax = 3, 3, 12600, 7200
+  vw = ns.UI.StatsView()
+  check(vw.tiles[4][1] == "1h 10m" and vw.tiles[4][2] == "Average life" and vw.tiles[4][6] == "now 6m \194\183 1 kill" and not vw.tiles[4][7], "life tile: average, and the current life on line 2")
+  check(vw.tiles[4][3]:find("Longest life: 2h 0m", 1, true), "the life tooltip names the longest life")
+  b.deaths = 2
+  vw = ns.UI.StatsView()
+  check(vw.tiles[4][1] == "-" and vw.tiles[4][7] == "2/3 deaths" and vw.tiles[4][6] == "2/3 deaths", "2 deaths: locked, progress shown")
+  b.deaths = 3
+  b.played, b.pkills = 3540, 3
+  check(vw.hunt[6][1] == "Kills per hour" and ns.UI.StatsView().hunt[6][4] ~= nil, "kills per hour is locked below an hour")
+  b.played = 3600
+  check(ns.UI.StatsView().hunt[6][2] == "3.0 per hour" and not ns.UI.StatsView().hunt[6][4], "60 minutes played: 3 kills with a stamp per hour")
+
+  -- layout: six rows in "When you hunt" still end above the footnote; the selector is there
+  ns.UI.ShowProfile(ns.me)
+  ns.UI.ShowStats()
+  local page = ns.UI.Frames().stats
+  local rows = page.hunt.rows
+  check(#rows == 6 and rows[6].y < rows[5].y and rows[6].y - 24 >= -(380 - 12 - 30) - 1, "six hunt rows fit above the footnote")
+  check(#page.tiles == 4 and #page.brackets == 7, "four tiles and seven bracket buttons")
+  -- the hunt values sit inside the first column (right edge from the same constants the layout uses)
+  local lay = ns.UI.StatsLayout
+  local inside = true
+  for _, r in ipairs(rows) do inside = inside and r.valueRight > 0 and r.valueRight <= lay.colW end
+  check(inside, "every hunt value's right edge is inside the first column")
+  -- all three columns share one row pitch and the rows end above the footnote
+  check(rows[2].y == lay.rowsTop - lay.rowStep and rows[6].y == lay.rowsTop - 5 * lay.rowStep, "the hunt rows use the shared row pitch (the charts start at the same top)")
+  local marked = 0
+  for _, bt in ipairs(page.brackets) do if bt.mark:IsShown() then marked = marked + 1 end end
+  check(marked == 1 and page.brackets[1].mark:IsShown(), "exactly one bracket button has the gold bar, on the selected one (" .. marked .. ")")
+  ns.UI.SetStatsBracket("30")
+  check(page.brackets[4].mark:IsShown() and not page.brackets[1].mark:IsShown(), "the gold bar follows the selection")
+  ns.UI.SetStatsBracket(nil)
+  ns.UI.SetStatsBracket("30")
+  check(page.brackets[4].selected and not page.brackets[1].selected and page.brackets[2].disabled, "the selected button is marked, an empty one is disabled")
+  ns.UI.SetStatsBracket(nil)
+  ns.UI.Back()
+
+  UnitIsDeadOrGhost, UnitLevel = deadWas, levelWas
+  c.played, c.lifeStart, c.brackets, c.bracketsSeeded, c.bestStreak, c.streak = saved.played, saved.lifeStart, saved.brackets, saved.seeded, saved.best, saved.streak
+  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  St.Flush()
+  drainToasts()
+  check(ns.errors == errs, "no errors in played time, lives and brackets (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

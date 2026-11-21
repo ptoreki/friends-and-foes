@@ -446,6 +446,7 @@ H.DIE = function(msg, isSelf, p, f)
   if killer and killer.name and onYourSide(killer.name) then killer = nil end
   if isSelf then
     Events.WeeklyAdd("d", killer and killer.name)
+    if not ns.past then ns.Stats.LogDeath(killer and killer.name, f.zone) end -- (your PvP death log, Stats.lua)
     ns.Profile.Changed() -- friends' leaderboards
   end
   local suspect = f.conf == "s"
