@@ -377,9 +377,11 @@ function UI.RenderProfile()
   c:SetShown(v ~= nil)
   if not v then return end
   -- Victims (n): who they killed, how many in all
-  UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Total(ns.Kills.List(profileName))))
+  UI.SetButtonText(c.kills, L.BTN_KILL_LIST_N:format(ns.Kills.Unique(ns.Kills.List(profileName))))
   c.kills:Show()
   c.stats:SetShown(v.isMe == true)
+  c.killedby:SetShown(v.isMe == true)
+  if v.isMe == true then UI.SetButtonText(c.killedby, L.BTN_KILLEDBY_N:format(#UI.KilledByList())) end
   c.post:SetShown(v.kind == "enemy")
   -- a friend: add to or take off your alert list
   local action = c.action
@@ -693,6 +695,7 @@ function UI.BuildProfile(win)
   c.kills = c.row:Add(button(c, 90, L.BTN_KILL_LIST, function() UI.ShowKills(UI.ProfileName()) end), 8)
   -- your own profile: your stats (UIStats.lua)
   c.stats = c.row:Add(button(c, 70, L.BTN_STATS, function() UI.ShowStats() end), 8)
+  c.killedby = c.row:Add(button(c, 90, L.BTN_KILLEDBY, function() UI.ShowKilledBy() end), 8)
   -- an enemy: put a bounty on them (the Bounty board)
   c.post = c.row:Add(button(c, 100, L.BTN_POST_BOUNTY, function() UI.PostBounty(UI.ProfileName()) end), 8)
   profile.controls = c

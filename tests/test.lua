@@ -3395,7 +3395,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_104_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_105_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -4315,6 +4315,63 @@ do
   check(v and v.rank and v.rank:find(L.RAMPAGE_TAG, 1, true) and v.rank:find(L.RANK_WANTED, 1, true), "the profile says on a rampage: " .. tostring(v and v.rank))
   h.killTimes = { now - 7000, now - 6000, now - 5000 }
   check(not B.OnRampage("Hit Hank") and B.Open("Hit Hank") == 200, "3 kills but not within the hour: no rampage")
+
+  -- the Hitlist's Notoriety column: after Kills, before Victims; the number the poster shows
+  do
+    local cols = ns.UI.TabColumns("hitlist")
+    local total = 0
+    for _, col in ipairs(cols) do total = total + col[2] end
+    check(cols[4][1] == L.COL_KILLS and cols[5][1] == L.COL_BOUNTY and cols[6][1] == L.COL_VICTIMS, "Hitlist: Notoriety sits between Kills and Victims")
+    check(total == 660 and #cols == 7, "Hitlist: columns still add up to 660, got " .. total)
+    local ws = {}
+    for i, col in ipairs(cols) do ws[i] = col[2] end
+    check(table.concat(ws, ",") == "165,30,105,40,65,125,130", "Hitlist: widths " .. table.concat(ws, ","))
+    check(cols[2][5] == "RIGHT" and cols[4][5] == "RIGHT" and cols[5][5] == "RIGHT" and cols[1][5] == nil and cols[3][5] == nil and cols[7][5] == nil, "Hitlist: Lvl, Kills, Notoriety are right-aligned")
+    ns.UI.Show("hitlist")
+    for _, c in ipairs({ 2, 4, 5 }) do
+      local cj, hj = ns.UI.CellJustify(c)
+      check(cj == "RIGHT" and hj == "RIGHT", "Hitlist: column " .. c .. " cell and header right-aligned")
+    end
+    local cj, hj = ns.UI.CellJustify(1)
+    check(cj == "LEFT" and hj == "LEFT", "Hitlist: Name stays left-aligned")
+    do
+      local fake = { lastSeen = ns.Now() - 61200, lastZone = "Tanaris (Steamwheedle Port)" }
+      local text = cols[7][3](fake)
+      check(text:find("Tanaris", 1, true) and not text:find("Steamwheedle", 1, true) and not text:find("(", 1, true), "Hitlist: Last seen drops the subzone: " .. text)
+      check(cols[7][3]({ lastSeen = ns.Now(), lastZone = "Orgrimmar" }):find("Orgrimmar", 1, true), "Hitlist: a plain zone stays")
+      check(ns.Data.FindHit("Hit Hank") and fake.lastZone == "Tanaris (Steamwheedle Port)", "stored place untouched")
+      SHOWN = {}
+      ns.UI.HitTooltip(GameTooltip, fake)
+      local seen = table.concat(SHOWN, " ")
+      SHOWN = nil
+      check(seen:find("Steamwheedle Port", 1, true), "Hitlist tooltip has the full place")
+    end
+    check(ns.UI.ColumnTip("hitlist", L.COL_BOUNTY), "Hitlist: Notoriety has a header tip")
+    local cell, sortKey = cols[5][3], cols[5][4]
+    local hank = ns.Data.FindHit("Hit Hank")
+    local view = ns.UI.ProfileView("Hit Hank")
+    check(ns.UI.Notoriety(hank) == B.Open("Hit Hank") and view.bounty == ns.UI.Notoriety(hank), "Hitlist: the column shows the profile's notoriety")
+    check(cell(hank):find(ns.Art.Points(B.Open("Hit Hank")), 1, true) and not cell(hank):find("!", 1, true), "Hitlist: 200 points, no rampage mark")
+    h.killTimes = { now - 300, now - 200, now - 100 }
+    check(cell(hank):find("300", 1, true) and cell(hank):find("!", 1, true), "Hitlist: a rampage gets a mark")
+    h.killTimes = { now - 7000, now - 6000, now - 5000 }
+    local hugo = ns.Data.FindHit("Hit Hugo")
+    check(sortKey(hank) == 200 and sortKey(hugo) == 50 and sortKey(hank) > sortKey(hugo), "Hitlist: sorts by points")
+    ns.UI.Show("hitlist")
+    ns.UI.SortBy(5)
+    local pos = {}
+    for i, e in ipairs(ns.UI.Rows()) do pos[e.name] = i end
+    check(pos["Hit Hank"] and pos["Hit Hugo"] and pos["Hit Hank"] < pos["Hit Hugo"], "Hitlist: most notorious first when sorted by Notoriety")
+    ns.UI.SortBy(5)
+    pos = {}
+    for i, e in ipairs(ns.UI.Rows()) do pos[e.name] = i end
+    check(pos["Hit Hugo"] < pos["Hit Hank"], "Hitlist: and the other way round")
+    ns.UI.SortBy(7) -- (back to Last seen, newest first)
+    -- nothing to collect: a grey dash
+    FriendsAndFoesDB.repeats = { ["Hit Hugo"] = { now - 300, now - 200, now - 100 } }
+    check(B.Open("Hit Hugo") == 0 and cell(hugo) == "|cff888888-|r", "Hitlist: no points: a dash")
+    FriendsAndFoesDB.repeats = nil
+  end
 
   -- cooling: x0.9 per full day since their last offence
   h.lastOffence = now - 3 * 86400 - 100
@@ -6878,6 +6935,189 @@ do
   c.streak, c.bestStreak, c.brackets, c.bracketsSeeded = saved.streak, saved.best, saved.brackets, saved.seeded
   drainToasts()
   check(ns.errors == errs, "no errors in battleground handling (" .. tostring(ns.lastError) .. ")")
+end
+
+-- 1.0.4: the death side of the Stats page, and the Killed by list
+do
+  local errs = ns.errors
+  local St = ns.Stats
+  local c = FriendsAndFoesCharDB
+  local realm = ns.Data.ViewRealm()
+  local saved = { kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog, brackets = c.brackets, seeded = c.bracketsSeeded,
+    streak = c.streak, best = c.bestStreak, life = c.lifeStart }
+  local function fresh() c.brackets = {}; c.bracketsSeeded = true; FriendsAndFoesDB.killLog = {}; FriendsAndFoesDB.deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
+  local function unit(level, skull) return ns.EncodeUnit({ name = "Gank Lord", class = "ROGUE", level = level, skull = skull }) end
+  local noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
+
+  -- the death log keeps both levels (you are 30 in the mock)
+  fresh()
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = unit(33), conf = "c", assists = "" })
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = unit(nil, true), conf = "c", assists = "" })
+  ns.Events.Emit("DIE", { zone = "Duskwood", killer = ns.EncodeUnit({ name = "Gank Lord" }), conf = "c", assists = "" })
+  local dl = FriendsAndFoesDB.deathLog
+  check(#dl == 3 and dl[1].kl == 33 and dl[1].ml == 30 and dl[2].kl == -1 and dl[3].kl == nil and dl[3].ml == 30, "the death log stores the killer's level (skull -1, unknown nil) and yours")
+  -- tiers from the killer's side (you are 30; grey is 22 and below)
+  local function tier(kl) return St.DeathTier({ kl = kl, ml = 30 }) end
+  check(tier(-1) == "skull" and tier(33) == "higher" and tier(32) == "even" and tier(28) == "even" and tier(27) == "lower" and tier(23) == "lower"
+    and tier(22) == "grey" and tier(10) == "grey" and tier(nil) == nil, "death tiers: skull / higher (+3) / even (within 2) / lower / grey")
+
+  -- the bracket's death side
+  fresh()
+  St.LogDeath("Gank Lord", "Duskwood", 33)
+  St.LogDeath("Gank Lord", "Barrens", -1)
+  St.LogDeath("Gank Lord", "Barrens", nil)
+  local b = St.Bracket("30")
+  check(b.deaths == 3 and b.dtiers.higher == 1 and b.dtiers.skull == 1 and b.dzones.Barrens == 2 and b.dzones.Duskwood == 1, "a death updates its bracket: killer tier and zone")
+  local sum = 0
+  for _, n in pairs(b.dwday) do sum = sum + n end
+  local hsum = 0
+  for _, n in pairs(b.dhour) do hsum = hsum + n end
+  check(sum == 3 and hsum == 3, "...and the weekday and hour")
+  IN_INSTANCE = true
+  St.LogDeath("Gank Lord", "Warsong Gulch", 33)
+  IN_INSTANCE = false
+  check(b.deaths == 3 and b.dzones["Warsong Gulch"] == nil, "an instance death touches nothing")
+  fresh()
+  for i = 1, St.ZONE_CAP + 1 do St.LogDeath("Gank Lord", "DZone" .. i, 30) end
+  local n = 0
+  for _ in pairs(St.Bracket("30").dzones) do n = n + 1 end
+  check(n == St.ZONE_CAP and St.Bracket("30").deaths == St.ZONE_CAP + 1, "death zones are capped per bracket")
+  -- an old save's bracket gets the death side
+  c.brackets["40"] = { kills = 1, deaths = 0, played = 0, lives = 0, lifeSum = 0, lifeMax = 0, bestStreak = 0, vlSum = 0, vlN = 0, gapSum = 0, gapN = 0, pkills = 0,
+    tiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, wday = {}, hour = {}, zones = {} }
+  check(St.Bracket("40").dtiers ~= nil and St.Compute("40").dtiered == 0, "a bracket saved before the death side is filled in")
+
+  -- Compute: the death fields, All = the sum, the day counts from the log
+  fresh()
+  local b20, b50 = St.Bracket("20"), St.Bracket("50")
+  b20.deaths, b20.dtiers.even, b20.dzones.A = 2, 2, 2
+  b50.deaths, b50.dtiers.higher, b50.dtiers.skull, b50.dzones.A, b50.dzones.B = 3, 2, 1, 2, 1
+  FriendsAndFoesDB.deathLog = { { t = noon - 100, c = ns.me, p = 1 }, { t = noon - 2 * 86400, c = ns.me, p = 2 }, { t = noon - 20 * 86400, c = ns.me, p = 3 }, { t = noon - 100, c = "Other Toon", p = 4 } }
+  local all = St.Compute(nil, noon)
+  check(all.deaths == 5 and all.dtiers.even == 2 and all.dtiers.higher == 2 and all.dtiers.skull == 1 and all.dzones[1].name == "A" and all.dzones[1].n == 4
+    and all.dtoday == 1 and all.dweek == 2 and all.dmonth == 3, "All: the death side adds the brackets up; deaths today / 7 / 30 days from the log")
+  check(St.Compute("50", noon).dtiers.higher == 2 and St.Compute("20", noon).dzones[1].n == 2, "a bracket shows only its own deaths")
+  check(all.dbusyDay == nil and all.dperHour == nil, "locked: fewer than 20 deaths, under an hour")
+  b50.deaths, b50.played = 20, 7200
+  local again = St.Compute("50", noon)
+  check(again.dbusyDay == nil or again.dbusyDay >= 1, "20 deaths: the busiest day can show")
+  check(math.abs(again.dperHour - 10) < 1e-9, "deaths per hour: deaths / time out in the world")
+
+  -- the toggle
+  fresh()
+  b20, b50 = St.Bracket("20"), St.Bracket("50")
+  b50.kills, b50.deaths, b50.dtiers.higher, b50.dzones.Duskwood, b50.tiers.even, b50.zones.Barrens = 4, 3, 3, 3, 4, 4
+  ns.UI.ShowProfile(ns.me)
+  ns.UI.SetStatsBracket(nil)
+  ns.UI.ShowStats()
+  local page = ns.UI.Frames().stats
+  local v = ns.UI.StatsView()
+  check(ns.UI.StatsMode() == "hunt" and v.huntHeader == "When you hunt" and v.gapHeader == "Kills by level gap" and v.zoneHeader == "Top zones" and v.hunt[1][1] == "Today",
+    "hunting is the default")
+  ns.UI.SetStatsMode("hunted")
+  v = ns.UI.StatsView()
+  check(v.huntHeader == "When you die" and v.gapHeader == "Killed by level gap" and v.zoneHeader == "Where you die" and v.hunt[1][1] == "Deaths today" and v.hunt[6][1] == "Deaths per hour",
+    "hunted: the three columns change")
+  check(v.hunt[4][4] == "3/20 deaths" and v.hunt[4][2] == "3/20 deaths" and v.hunt[5][4] == "3/20 deaths" and v.hunt[4][5], "busiest day and hour lock until 20 deaths")
+  check(v.gap[1][1] == "Skull" and v.gap[2][1] == "Higher" and v.gap[2][4] == "3 (100%)" and v.gap[2][5]:find("killers 3 or more levels above you", 1, true), "killed by level gap: Skull to Grey, shares of deaths, killer-side tooltips")
+  check(v.zones[1][1] == "Duskwood" and v.zones[1][4] == "3 (100%)" and not v.empty, "where you die: zones by deaths")
+  check(page.modes[2].mark:IsShown() and not page.modes[1].mark:IsShown() and page.hunt.header:GetText() == "When you die", "the toggle marks the mode and the column header follows")
+  -- bracket view in hunted mode: time and K/D
+  ns.UI.SetStatsBracket("50")
+  v = ns.UI.StatsView()
+  check(v.hunt[1][1] == "Time out in the world" and v.hunt[2][1] == "K/D" and #v.hunt == 5, "hunted, one bracket: time out in the world and K/D, as when hunting")
+  ns.UI.SetStatsBracket(nil)
+  -- no deaths yet: the skeleton
+  b50.deaths, b50.dtiers.higher, b50.dzones.Duskwood = 0, 0, nil
+  ns.UI.RenderStats()
+  v = ns.UI.StatsView()
+  local rowsOk = true
+  for _, r in ipairs(page.gap.rows) do rowsOk = rowsOk and r:IsShown() and r.count:GetText() == "0" end
+  local bare = true
+  for _, r in ipairs(page.zones.rows) do bare = bare and r:IsShown() and r.label:GetText() == "" end
+  check(v.empty and rowsOk and bare and page.gap.alpha == 0.4 and page.empty:IsShown() and page.empty:GetText() == "Your first PvP death fills these in.",
+    "hunted with no deaths: five zero rows, bare zone rows, faded, one message")
+  ns.UI.SetStatsMode("hunt")
+  check(not ns.UI.StatsView().empty and page.modes[1].mark:IsShown() and not page.modes[2].mark:IsShown(), "back to hunting: kills are there")
+  -- layout: the toggle sits between the title and the level selector
+  local lay = ns.UI.StatsLayout
+  check(lay.modeLeft > 140 and lay.modeRight < lay.selectorLeft and lay.selectorLeft + 328 <= 662, "the toggle doesn't overlap the level selector or the title")
+  ns.UI.SetStatsMode("hunted")
+  local rows = page.hunt.rows
+  check(#rows == 6 and rows[6].y - 24 >= -(380 - 12 - 30) - 1, "hunted: the rows still end above the footnote")
+  ns.UI.SetStatsMode("hunt")
+  ns.UI.Back()
+
+  -- Killed by: the enemies who killed you
+  local hl = realm.hitlist
+  local hlWas = {}
+  for k, h in pairs(hl) do hlWas[k] = h; hl[k] = nil end
+  local now = time()
+  hl["Gank One"] = { name = "Gank One", class = "ROGUE", level = 32, guild = "Grim Crew", lastSeen = now - 100, lastZone = "Tanaris", kills = 3, attacks = 0, kv = { [ns.me] = 3, ["Buddy Pal"] = 9 }, kt = { [ns.me] = now - 61200 } }
+  hl["Gank Two"] = { name = "Gank Two", class = "MAGE", level = 30, lastSeen = now - 500, kills = 5, attacks = 0, kv = { [ns.me] = 5 }, kt = { [ns.me] = now - 300 } }
+  hl["Gank Three"] = { name = "Gank Three", class = "MAGE", level = 30, lastSeen = now - 500, kills = 2, attacks = 0, kv = { ["Buddy Pal"] = 2 } }
+  hl["Buddy Pal"] = { name = "Buddy Pal", class = "PRIEST", level = 40, lastSeen = now, kills = 1, attacks = 0, kv = { [ns.me] = 4 }, kt = { [ns.me] = now } }
+  FriendsAndFoesDB.deathLog = { { t = now - 61200, c = ns.me, p = 1, k = "Gank One", z = "Duskwood (Raven Hill)" } }
+  ns.UI.ShowProfile(ns.me)
+  local ctl = ns.UI.Frames().profile.controls
+  check(ctl.killedby:IsShown(), "your own profile has a Killed by button")
+  check(ctl.killedby._text == "Killed by (2)", "Killed by counts enemies, not kills: " .. tostring(ctl.killedby._text))
+  do
+    -- Victims: one player killed twice is one victim; "Name not readable" is not a player
+    local mine = realm.players[ns.me]
+    local slainWas, kxWas = mine.slain, mine.kx
+    mine.slain, mine.kx = { ["Vic Tim"] = { n = 2, t = now } }, 3
+    check(ns.Kills.Unique(ns.Kills.List(ns.me)) == 1 and ns.Kills.Total(ns.Kills.List(ns.me)) == 5, "Kills.Unique: one victim killed twice, the unreadable line not counted")
+    ns.UI.ShowProfile(ns.me)
+    check(ctl.kills._text == "Victims (1)", "Victims (1) for one player killed twice: " .. tostring(ctl.kills._text))
+    ns.UI.ShowKills(ns.me)
+    local hint
+    for _, f in ipairs(FRAMES) do
+      if f._shown and type(f._text) == "string" and f._text:find("players killed", 1, true) then hint = f._text end
+    end
+    check(hint and hint:find(" 1 players killed, 5 kills in all", 1, true), "kill list hint counts players, not rows: " .. tostring(hint))
+    ns.UI.Back()
+    mine.slain, mine.kx = slainWas, kxWas
+  end
+  ns.UI.ShowKilledBy()
+  do
+    local hint
+    for _, f in ipairs(FRAMES) do
+      if f._shown and type(f._text) == "string" and f._text:find("enemies have killed you", 1, true) then hint = f._text end
+    end
+    check(hint and hint:find("2 enemies have killed you, 8 times", 1, true), "Killed by hint: unique enemies, then total times: " .. tostring(hint))
+  end
+  ns.UI.Back()
+  ns.UI.ShowKilledBy()
+  check(ns.UI.CurrentTab() == "killedby" and ns.UI.BackLabel() == ns.me, "Killed by opens in the tab, Back goes to your profile")
+  local list = ns.UI.Rows()
+  check(#list == 2 and list[1].name == "Gank Two" and list[2].name == "Gank One", "Killed by: the enemies who killed you, most times first (not friends, not who only killed others)")
+  local cols = ns.UI.TabColumns("killedby")
+  check(#cols == 5 and cols[4][3](list[1]) == "5" and cols[4][5] == "RIGHT" and cols[2][5] == "RIGHT", "times and level are right-aligned")
+  local lastText = ns.Plain(cols[5][3](list[2]))
+  check(lastText:find("17h ago", 1, true) and lastText:find("Duskwood", 1, true) and not lastText:find("Raven", 1, true), "last time: how long ago and the main zone (from your death log)")
+  check(list[1].name and cols[1][3](list[1]):find("Gank Two", 1, true) and cols[3][3](list[2]):find("Grim Crew", 1, true), "name and guild cells")
+  ns.UI.Back()
+  ns.UI.ShowProfile("Buddy Pal")
+  check(not ns.UI.Frames().profile.controls.killedby:IsShown(), "no Killed by button on a friend's profile")
+  ns.UI.ShowProfile(ns.me)
+  hl["Gank One"], hl["Gank Two"] = nil, nil
+  ns.UI.ShowKilledBy()
+  check(#ns.UI.Rows() == 0, "nobody has killed you: an empty list")
+  ns.UI.Back()
+  check(ctl.killedby._text == "Killed by (0)", "no enemies: Killed by (0), like Victims (0)")
+  ns.UI.ShowKilledBy()
+  local said = false
+  for _, f in ipairs(FRAMES) do if f._text == "Nobody has killed you yet." then said = true end end
+  check(said, "...with its own empty line")
+  ns.UI.Back()
+  for k in pairs(hl) do hl[k] = nil end
+  for k, h in pairs(hlWas) do hl[k] = h end
+
+  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  c.brackets, c.bracketsSeeded, c.streak, c.bestStreak, c.lifeStart = saved.brackets, saved.seeded, saved.streak, saved.best, saved.life
+  drainToasts()
+  check(ns.errors == errs, "no errors in the death side (" .. tostring(ns.lastError) .. ")")
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

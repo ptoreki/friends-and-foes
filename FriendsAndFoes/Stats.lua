@@ -64,7 +64,9 @@ end
 local function blank()
   return { kills = 0, deaths = 0, played = 0, lives = 0, lifeSum = 0, lifeMax = 0, bestStreak = 0,
     vlSum = 0, vlN = 0, gapSum = 0, gapN = 0, pkills = 0,
-    tiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, wday = {}, hour = {}, zones = {} }
+    tiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, wday = {}, hour = {}, zones = {},
+    -- the death side (1.0.4): who killed you by level gap (their level against yours), where, when
+    dtiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, dwday = {}, dhour = {}, dzones = {} }
 end
 
 -- a bracket's totals (made on first use); nil for an unknown key
@@ -74,6 +76,11 @@ function Stats.Bracket(key)
   c.brackets = c.brackets or {}
   local b = c.brackets[key]
   if not b then b = blank(); c.brackets[key] = b end
+  -- (a bracket saved before the death side existed)
+  if not b.dtiers then
+    local fresh = blank()
+    b.dtiers, b.dwday, b.dhour, b.dzones = fresh.dtiers, fresh.dwday, fresh.dhour, fresh.dzones
+  end
   return b
 end
 
@@ -105,6 +112,11 @@ function Stats.Tier(e)
   return "lower"
 end
 Stats.TIERS = { "grey", "lower", "even", "higher", "skull" }
+
+-- Tier of one death from the killer's side: their level (kl) against yours (ml), with the same
+-- boundaries as Stats.Tier. "skull" (a ?? killer), "higher" (3+ above you), "even", "lower" (3+
+-- below, not grey to you), "grey" (at or below your grey level); nil when a level is unknown.
+function Stats.DeathTier(e) return Stats.Tier({ vl = e.kl, ml = e.ml }) end
 
 -- one kill (a log entry) into a bracket's totals
 local function addKill(b, e)
@@ -267,13 +279,14 @@ end
 
 -- one of your own live PvP deaths (killer: name or nil). The life that ends here goes into the
 -- bracket of your level now.
-function Stats.LogDeath(killer, zone)
+function Stats.LogDeath(killer, zone, killerLevel)
   if Stats.InInstance() then return end
   flush()
   local c = FriendsAndFoesCharDB
   local played = math.floor(Stats.Played())
   local log = Stats.DeathList()
-  local e = { t = ns.Now(), c = ns.me, p = played }
+  -- kl: the killer's level then (nil unknown, -1 skull), ml: yours
+  local e = { t = ns.Now(), c = ns.me, p = played, kl = logLevel(killerLevel), ml = myLevel() }
   if type(killer) == "string" and killer ~= "" then e.k = killer end
   if type(zone) == "string" and zone ~= "" and not ns.issecret(zone) then e.z = zone end
   log[#log + 1] = e
@@ -284,6 +297,14 @@ function Stats.LogDeath(killer, zone)
   if b then
     b.deaths, b.lives = b.deaths + 1, b.lives + 1
     b.lifeSum, b.lifeMax = b.lifeSum + len, math.max(b.lifeMax, len)
+    local tier = Stats.DeathTier(e)
+    if tier then b.dtiers[tier] = b.dtiers[tier] + 1 end
+    if e.z then addZone(b.dzones, e.z) end
+    local d = date("*t", tonumber(e.t))
+    if d then
+      b.dwday[d.wday] = (b.dwday[d.wday] or 0) + 1
+      b.dhour[d.hour] = (b.dhour[d.hour] or 0) + 1
+    end
   end
   c.lifeStart = played
 end
@@ -325,14 +346,21 @@ function Stats.Compute(key, now)
   Stats.Seed()
   now = now or time()
   local r = { key = key, tiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, tiered = 0,
-    today = 0, week = 0, month = 0, zones = {}, n = 0, deaths = 0, lives = 0, lifeSum = 0, lifeMax = 0,
+    today = 0, week = 0, month = 0, zones = {}, n = 0, dtiers = { grey = 0, lower = 0, even = 0, higher = 0, skull = 0 }, dtiered = 0,
+    dzones = {}, dtoday = 0, dweek = 0, dmonth = 0, deaths = 0, lives = 0, lifeSum = 0, lifeMax = 0,
     bestStreak = 0, pkills = 0 }
   local vlSum, vlN, gapSum, gapN, played = 0, 0, 0, 0, 0
   local byDay, byHour, byZone = {}, {}, {}
+  local dDay, dHour, dZone = {}, {}, {}
   local c = FriendsAndFoesCharDB
   for _, def in ipairs(Stats.BRACKETS) do
     local b = (not key or key == def.key) and c and c.brackets and c.brackets[def.key]
     if b then
+      b = Stats.Bracket(def.key) -- (fills in what an older save lacks)
+      for tier, n in pairs(b.dtiers) do r.dtiers[tier] = r.dtiers[tier] + n; r.dtiered = r.dtiered + n end
+      for k, n in pairs(b.dwday) do dDay[k] = (dDay[k] or 0) + n end
+      for k, n in pairs(b.dhour) do dHour[k] = (dHour[k] or 0) + n end
+      for z, n in pairs(b.dzones) do dZone[z] = (dZone[z] or 0) + n end
       r.n, r.deaths, r.lives = r.n + b.kills, r.deaths + b.deaths, r.lives + b.lives
       r.lifeSum, r.lifeMax = r.lifeSum + b.lifeSum, math.max(r.lifeMax, b.lifeMax)
       r.bestStreak, r.pkills, played = math.max(r.bestStreak, b.bestStreak), r.pkills + b.pkills, played + b.played
@@ -357,6 +385,15 @@ function Stats.Compute(key, now)
     end
   end
 
+  for _, e in ipairs(Stats.DeathList()) do
+    local t = e.c == ns.me and tonumber(e.t)
+    if t then
+      if t >= dayStart then r.dtoday = r.dtoday + 1 end
+      if now - t < Stats.WEEK_DAYS * 86400 then r.dweek = r.dweek + 1 end
+      if now - t < Stats.MONTH_DAYS * 86400 then r.dmonth = r.dmonth + 1 end
+    end
+  end
+
   r.levelN, r.gapN = vlN, gapN
   r.avgLevel = vlN >= Stats.MIN_LEVELS and (vlSum / vlN) or nil
   r.avgGap = gapN >= Stats.MIN_LEVELS and (gapSum / gapN) or nil
@@ -368,13 +405,20 @@ function Stats.Compute(key, now)
     return at
   end
   if r.n >= Stats.MIN_BUSY then r.busyDay, r.busyHour = best(byDay, 1, 7), best(byHour, 0, 23) end
+  if r.deaths >= Stats.MIN_BUSY then r.dbusyDay, r.dbusyHour = best(dDay, 1, 7), best(dHour, 0, 23) end
+  for z, n in pairs(dZone) do r.dzones[#r.dzones + 1] = { name = z, n = n } end
+  table.sort(r.dzones, function(a, b) if a.n ~= b.n then return a.n > b.n end return a.name < b.name end)
+  while #r.dzones > Stats.TOP_ZONES do r.dzones[#r.dzones] = nil end
   for z, n in pairs(byZone) do r.zones[#r.zones + 1] = { name = z, n = n } end
   table.sort(r.zones, function(a, b) if a.n ~= b.n then return a.n > b.n end return a.name < b.name end)
   while #r.zones > Stats.TOP_ZONES do r.zones[#r.zones] = nil end
   -- lives (completed ones) and the rate
   if r.deaths >= Stats.MIN_DEATHS and r.lives > 0 then r.avgLife = r.lifeSum / r.lives end
   r.longest = r.lives > 0 and r.lifeMax or nil
-  if r.played >= Stats.MIN_PLAYED then r.perHour = r.pkills / (r.played / 3600) end
+  if r.played >= Stats.MIN_PLAYED then
+    r.perHour = r.pkills / (r.played / 3600)
+    r.dperHour = r.deaths / (r.played / 3600)
+  end
   return r
 end
 

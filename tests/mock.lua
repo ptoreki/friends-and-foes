@@ -24,6 +24,8 @@ local function newObj()
     if k == "IsShown" then return function(self) return self._shown end end
     if k == "SetText" then return function(self, v) self._text = v; if SHOWN then SHOWN[#SHOWN + 1] = v end end end
     if k == "AddLine" or k == "AddDoubleLine" then return function(self, a, b) if SHOWN then SHOWN[#SHOWN + 1] = a; if type(b) == "string" then SHOWN[#SHOWN + 1] = b end end end end
+    if k == "SetJustifyH" then return function(self, v) self._justify = v end end
+    if k == "GetJustifyH" then return function(self) return self._justify end end
     if k == "GetText" then return function(self) return self._text end end
     if k == "GetChecked" then return function(self) return self._checked end end
     if k == "SetChecked" then return function(self, v) self._checked = v end end

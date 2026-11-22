@@ -10,7 +10,7 @@ epic loot and world PvP fights, and put a bounty on everyone who ganks your grou
   and where. When several of you kill the same enemy, there is one toast and one Feed line
   naming everyone ("Rogz Fang and Buddy Pal killed Bob Gank"); a second one only for a new death
   (they got back up and died again).
-- **Hitlist:** anyone who kills you or a friend, or attacks one of you first.
+- **Hitlist:** anyone who kills you or a friend, or attacks one of you first. The Notoriety column shows what killing each enemy is worth right now (the number on their Wanted poster), coloured by rank, with a red ! when they are on a rampage; click the header to sort by it.
   - Hover them to see who of your friends they killed and how often.
   - They get a skull on their nameplate.
   - You're alerted when you or a friend spots them.
@@ -59,6 +59,7 @@ epic loot and world PvP fights, and put a bounty on everyone who ganks your grou
   which of your friends they killed. Opens from a profile. A friend's own list is fetched from
   them.
 - **Stats:** a **Stats** button on your own profile opens a one-page view of this character's kill log (what your profile doesn't show): four headline tiles (kills logged, best streak with your current run, average life between PvP deaths with your current life (from 3 deaths), average victim level with how far above or below you that is, from 5 kills with a known level), a "When you hunt" column (today, last 7 days, last 30 days, busiest day and hour from 20 kills, kills per hour from 1 hour out in the world: time you could be ganked, so not AFK, resting, on a flight, in an instance or dead) and two bar charts, kills by level gap (Skull, Higher, Even, Lower, Grey, with each share) and your top zones. Times, zones and levels are counted from version 1.0.1 on. A selector at the top (All, <20, 20s ... 60) shows it for the time you were that level; each character keeps running totals per bracket. Only open-world PvP counts (no dungeons, raids or battlegrounds). Only you see it; nothing is sent to friends.
+- **Hunted and Killed by:** the Stats page has a Hunting / Hunted toggle: Hunted shows when you die, who kills you (their level against yours) and where. A **Killed by** button on your own profile lists the enemies who killed you, how often and when last.
 - **Profiles:** click a name for a friend's or enemy's page: K/D and rank, nemesis, where a
   friend is right now, who an enemy has killed, the bounties on them, and recent PvP.
 - **Battlegrounds:** never counted (no kills, hitlist, notoriety, bounties or stats). A kill or death there can show as a Feed line and an alert, unless Dungeons, raids, battlegrounds is off.

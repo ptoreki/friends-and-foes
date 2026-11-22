@@ -81,6 +81,15 @@ function Kills.List(name)
   return rows
 end
 
+-- how many different players are in a list (the "Name not readable" line is not a player)
+function Kills.Unique(rows)
+  local n = 0
+  for _, r in ipairs(rows) do
+    if not r.unknown then n = n + 1 end
+  end
+  return n
+end
+
 -- total kills in a list
 function Kills.Total(rows)
   local n = 0

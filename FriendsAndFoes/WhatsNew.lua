@@ -9,6 +9,10 @@ ns.WhatsNew = WhatsNew
 
 WhatsNew.NOTES = {
   {
+    version = "1.0.5",
+    lines = { L.NEW_105_1, L.NEW_105_2, L.NEW_105_3, L.NEW_105_4 },
+  },
+  {
     version = "1.0.4",
     lines = { L.NEW_104_1, L.NEW_104_2, L.NEW_104_3 },
   },

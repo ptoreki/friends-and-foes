@@ -26,7 +26,11 @@ local function stepFor(n) return math.floor((-(-PAGE_H + FOOT_H + FOOT_GAP) + RO
 -- tallest column (the six "When you hunt" rows) above the footnote; the charts leave space at the bottom
 local ROW_STEP = stepFor(HUNT_ROWS)
 local HUNT_STEP = ROW_STEP
-UI.StatsLayout = { colW = COL_W, colGap = COL_GAP, rowStep = ROW_STEP, rowH = ROW_H, rowsTop = ROWS_TOP, lockW = 18 }
+-- the level selector (All + six brackets, 2px apart) fills the right end of the header line; the
+-- Hunting / Hunted toggle sits between it and the title
+local SEL_W = 40 + 6 * 46 + 6 * 2
+local MODE_W, MODE_X = 64, 186
+UI.StatsLayout = { selectorLeft = PAGE_W - SEL_W, modeLeft = MODE_X, modeRight = MODE_X + 2 * MODE_W + 2, colW = COL_W, colGap = COL_GAP, rowStep = ROW_STEP, rowH = ROW_H, rowsTop = ROWS_TOP, lockW = 18 }
 local DIM = "|cff888888"
 local DASH = "-"
 -- the level-gap ramp, mildest to most dangerous
@@ -39,7 +43,7 @@ local FILL_ALPHA = 0.7
 local GAP_ORDER = { "skull", "higher", "even", "lower", "grey" } -- (most dangerous first)
 
 -- "4/5 kills" while a stat is still locked behind a minimum, else nil
-local function progress(have, want) return have < want and L.STATS_PROGRESS:format(have, want) or nil end
+local function progress(have, want, fmt) return have < want and (fmt or L.STATS_PROGRESS):format(have, want) or nil end
 local FADED = 0.4 -- the skeleton charts, and the value of a locked stat
 
 local function percent(n, total) return total > 0 and math.floor(n * 100 / total + 0.5) or 0 end
@@ -53,6 +57,12 @@ local function percent(n, total) return total > 0 and math.floor(n * 100 / total
 --   zones   { { name, n, color, countText }, ... } up to 5
 --   empty   nothing logged for this character yet (the charts show as faded skeletons)
 local selected -- the level bracket shown (nil: All); kept while the game runs, not saved
+local mode = "hunt" -- "hunt" (kills) or "hunted" (deaths), likewise
+function UI.StatsMode() return mode end
+function UI.SetStatsMode(m)
+  mode = m == "hunted" and "hunted" or "hunt"
+  UI.RenderStats()
+end
 function UI.StatsBracket() return selected end
 function UI.SetStatsBracket(key)
   if key ~= nil and not ns.Stats.HasData(key) then return end
@@ -73,7 +83,7 @@ end
 function UI.StatsView()
   local key = selected
   local s = ns.Stats.Compute(key)
-  local v = { empty = s.n == 0, key = key }
+  local v = { empty = (mode == "hunted" and s.deaths or s.n) == 0, key = key }
   local _, class = UnitClass("player")
   v.sub = ns.ClassColored(ns.me, class) .. "  " .. DIM .. L.STATS_LEVEL_OF:format(UnitLevel("player") or 0) .. "|r"
   v.brackets = bracketButtons()
@@ -104,30 +114,55 @@ function UI.StatsView()
   local rateLock = s.perHour == nil and L.STATS_PROGRESS_MIN:format(math.floor(s.played / 60), ns.Stats.MIN_PLAYED / 60) or nil
   local busyLock = progress(s.n, ns.Stats.MIN_BUSY)
   local busyTip = busyLock and L.STATS_LOCK_BUSY:format(ns.Stats.MIN_BUSY) or nil
+  local hunted = mode == "hunted"
+  v.mode = mode
   v.hunt = {}
   if key == nil then
-    v.hunt[1] = { L.STATS_TODAY, tostring(s.today) }
-    v.hunt[2] = { L.STATS_WEEK, tostring(s.week) }
-    v.hunt[3] = { L.STATS_MONTH, tostring(s.month) }
+    v.hunt[1] = { hunted and L.STATS_DEATHS_TODAY or L.STATS_TODAY, tostring(hunted and s.dtoday or s.today) }
+    v.hunt[2] = { L.STATS_WEEK, tostring(hunted and s.dweek or s.week) }
+    v.hunt[3] = { L.STATS_MONTH, tostring(hunted and s.dmonth or s.month) }
   else
     -- (the log's day counts aren't per bracket: time played and K/D instead)
     v.hunt[1] = { L.STATS_PLAYED, ns.Stats.Duration(s.played), nil, nil, L.STATS_PLAYED_TIP }
     v.hunt[2] = { L.STATS_KD, UI.Util.kdText(s.n, s.deaths, ns.Profile.KD(s.n, s.deaths)) }
   end
-  v.hunt[#v.hunt + 1] = { L.STATS_BUSY_DAY, s.busyDay and L.STATS_DAYS[s.busyDay] or busyLock or DASH, s.busyDay == nil, busyLock, busyTip }
-  v.hunt[#v.hunt + 1] = { L.STATS_BUSY_HOUR, s.busyHour and L.STATS_HOUR:format(s.busyHour, (s.busyHour + 1) % 24) or busyLock or DASH, s.busyHour == nil, busyLock, busyTip }
-  v.hunt[#v.hunt + 1] = { L.STATS_RATE, s.perHour and L.STATS_PER_HOUR:format(s.perHour) or rateLock or DASH, s.perHour == nil, rateLock,
-    L.STATS_TIP_RATE .. (rateLock and (" " .. L.STATS_LOCK_RATE:format(ns.Stats.MIN_PLAYED / 60)) or "") }
-
-  v.gap = {}
-  for _, tier in ipairs(GAP_ORDER) do
-    local n = s.tiers[tier]
-    v.gap[#v.gap + 1] = { L["STATS_TIER_" .. tier:upper()], n, TIER_COLORS[tier],
-      n == 0 and "0" or L.STATS_COUNT:format(n, percent(n, s.n)), L.STATS_TIER_TIPS[tier] }
-  end
-  v.zones = {}
-  for _, z in ipairs(s.zones) do
-    v.zones[#v.zones + 1] = { z.name, z.n, ZONE_COLOR, L.STATS_COUNT:format(z.n, percent(z.n, s.n)) }
+  if not hunted then
+    v.huntHeader, v.gapHeader, v.zoneHeader = L.STATS_HUNT, L.STATS_CHART_GAP, L.STATS_CHART_ZONES
+    v.emptyText = L.STATS_EMPTY
+    v.hunt[#v.hunt + 1] = { L.STATS_BUSY_DAY, s.busyDay and L.STATS_DAYS[s.busyDay] or busyLock or DASH, s.busyDay == nil, busyLock, busyTip }
+    v.hunt[#v.hunt + 1] = { L.STATS_BUSY_HOUR, s.busyHour and L.STATS_HOUR:format(s.busyHour, (s.busyHour + 1) % 24) or busyLock or DASH, s.busyHour == nil, busyLock, busyTip }
+    v.hunt[#v.hunt + 1] = { L.STATS_RATE, s.perHour and L.STATS_PER_HOUR:format(s.perHour) or rateLock or DASH, s.perHour == nil, rateLock,
+      L.STATS_TIP_RATE .. (rateLock and (" " .. L.STATS_LOCK_RATE:format(ns.Stats.MIN_PLAYED / 60)) or "") }
+    v.gap = {}
+    for _, tier in ipairs(GAP_ORDER) do
+      local n = s.tiers[tier]
+      v.gap[#v.gap + 1] = { L["STATS_TIER_" .. tier:upper()], n, TIER_COLORS[tier],
+        n == 0 and "0" or L.STATS_COUNT:format(n, percent(n, s.n)), L.STATS_TIER_TIPS[tier] }
+    end
+    v.zones = {}
+    for _, z in ipairs(s.zones) do
+      v.zones[#v.zones + 1] = { z.name, z.n, ZONE_COLOR, L.STATS_COUNT:format(z.n, percent(z.n, s.n)), L.STATS_ZONE_TIP:format(z.name, z.n) }
+    end
+  else
+    -- the death side: when you die, who kills you (their level against yours), where
+    v.huntHeader, v.gapHeader, v.zoneHeader = L.STATS_HUNTED, L.STATS_CHART_DGAP, L.STATS_CHART_DZONES
+    v.emptyText = L.STATS_EMPTY_DEATH
+    local dLock = progress(s.deaths, ns.Stats.MIN_BUSY, L.STATS_PROGRESS_DEATHS)
+    local dTip = dLock and L.STATS_LOCK_DBUSY:format(ns.Stats.MIN_BUSY) or nil
+    v.hunt[#v.hunt + 1] = { L.STATS_BUSY_DAY, s.dbusyDay and L.STATS_DAYS[s.dbusyDay] or dLock or DASH, s.dbusyDay == nil, dLock, dTip }
+    v.hunt[#v.hunt + 1] = { L.STATS_BUSY_HOUR, s.dbusyHour and L.STATS_HOUR:format(s.dbusyHour, (s.dbusyHour + 1) % 24) or dLock or DASH, s.dbusyHour == nil, dLock, dTip }
+    v.hunt[#v.hunt + 1] = { L.STATS_DRATE, s.dperHour and L.STATS_PER_HOUR:format(s.dperHour) or rateLock or DASH, s.dperHour == nil, rateLock,
+      L.STATS_TIP_DRATE .. (rateLock and (" " .. L.STATS_LOCK_RATE:format(ns.Stats.MIN_PLAYED / 60)) or "") }
+    v.gap = {}
+    for _, tier in ipairs(GAP_ORDER) do
+      local n = s.dtiers[tier]
+      v.gap[#v.gap + 1] = { L["STATS_TIER_" .. tier:upper()], n, TIER_COLORS[tier],
+        n == 0 and "0" or L.STATS_COUNT:format(n, percent(n, s.deaths)), L.STATS_DTIER_TIPS[tier] }
+    end
+    v.zones = {}
+    for _, z in ipairs(s.dzones) do
+      v.zones[#v.zones + 1] = { z.name, z.n, ZONE_COLOR, L.STATS_COUNT:format(z.n, percent(z.n, s.deaths)), L.STATS_DZONE_TIP:format(z.name, z.n) }
+    end
   end
   v.stats = s
   return v
@@ -266,6 +301,23 @@ function UI.BuildStats(win)
   end
   selRow:Layout()
 
+  -- Hunting / Hunted: between the title and the level selector
+  page.modes = {}
+  for i, m in ipairs({ { "hunt", L.STATS_MODE_HUNT, L.STATS_MODE_HUNT_TIP }, { "hunted", L.STATS_MODE_HUNTED, L.STATS_MODE_HUNTED_TIP } }) do
+    local btn = UI.Button(page, MODE_W, m[2], function(self) UI.SetStatsMode(self.mode) end)
+    btn:SetPoint("TOPLEFT", page, "TOPLEFT", MODE_X + (i - 1) * (MODE_W + 2), 0)
+    btn.mode, btn.tip, btn.tipTitle = m[1], m[3], m[2]
+    btn:SetScript("OnEnter", function(self) tooltip(self, self.tipTitle, self.tip) end)
+    btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    btn.mark = btn:CreateTexture(nil, "OVERLAY")
+    btn.mark:SetPoint("TOPLEFT", btn, "BOTTOMLEFT", 0, -1)
+    btn.mark:SetPoint("TOPRIGHT", btn, "BOTTOMRIGHT", 0, -1)
+    btn.mark:SetHeight(2)
+    btn.mark:SetColorTexture(1, 0.82, 0, 1)
+    btn.mark:Hide()
+    page.modes[i] = btn
+  end
+
   -- headline tiles
   local tileW = math.floor((PAGE_W - 3 * TILE_GAP) / 4)
   page.tiles = {}
@@ -340,7 +392,12 @@ function UI.RenderStats()
     tile.lock:SetShown(t[7] ~= nil and ns.Art.SetLockIcon(tile.lock))
   end
   local hunt = page.hunt
-  hunt.header:SetText(L.STATS_HUNT)
+  for _, btn in ipairs(page.modes) do
+    local on = btn.mode == v.mode
+    btn.mark:SetShown(on)
+    UI.SetButtonText(btn, on and ("|cffffffff" .. btn.tipTitle .. "|r") or btn.tipTitle)
+  end
+  hunt.header:SetText(v.huntHeader)
   for i, row in ipairs(hunt.rows) do
     local h = v.hunt[i]
     row.label:SetShown(h ~= nil)
@@ -358,10 +415,11 @@ function UI.RenderStats()
     row.value:SetPoint("TOPRIGHT", page, "TOPLEFT", row.valueRight, row.y)
     row.tipTitle, row.tip = h[1], h[5]
   end
-  fillBars(page.gap, L.STATS_CHART_GAP, v.gap, function(it) return it[5] end)
+  fillBars(page.gap, v.gapHeader, v.gap, function(it) return it[5] end)
+  page.empty:SetText(v.emptyText)
   if v.empty then
     -- nothing logged yet: the level rows with their zeros, five bare zone rows, all faded
-    fillBars(page.zones, L.STATS_CHART_ZONES, {}, nil)
+    fillBars(page.zones, v.zoneHeader, {}, nil)
     for _, row in ipairs(page.zones.rows) do
       row:Show()
       row.label:SetText("")
@@ -370,7 +428,7 @@ function UI.RenderStats()
       row.tipTitle, row.tip = nil, nil
     end
   else
-    fillBars(page.zones, L.STATS_CHART_ZONES, v.zones, function(it) return L.STATS_ZONE_TIP:format(it[1], it[2]) end)
+    fillBars(page.zones, v.zoneHeader, v.zones, function(it) return it[5] end)
   end
   local alpha = v.empty and FADED or 1
   for _, col in ipairs({ page.gap, page.zones }) do

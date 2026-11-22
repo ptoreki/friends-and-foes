@@ -194,21 +194,58 @@ end
 ---------------------------------------------------------------------------
 -- tabs
 ---------------------------------------------------------------------------
--- column: { header, width, cell text, sort key (click the header to sort) }
+-- column: { header, width, cell text, sort key (click the header to sort), "RIGHT" (optional: numbers) }
 local function byName(e) return (e.name or ""):lower() end
 local function byLevel(e) return tonumber(e.level) or 0 end
 local function byGuild(e) return (e.guild or ""):lower() end
 local function byLast(e) return e.lastSeen or 0 end
 local function count(t) local n = 0; for _ in pairs(t or {}) do n = n + 1 end; return n end
 
+-- Notoriety column: what the enemy's poster says (Bounty.Open: collecting on them now, before your
+-- share and level adjustments). Looked up once per refresh and enemy (the sort asks again and again).
+local noteCache -- name -> points, only while a refresh runs
+local function notoriety(e)
+  local name = e.name
+  if not name then return 0 end
+  if noteCache and noteCache[name] then return noteCache[name] end
+  local ok, points = pcall(ns.Bounty.Open, name)
+  points = ok and tonumber(points) or 0
+  if noteCache then noteCache[name] = points end
+  return points
+end
+-- colour by rank (Nuisance: grey up to Public Enemy: red), thresholds as in Bounty.RANKS
+local NOTE_COLOURS = { { 1000, "|cffff3333" }, { 600, "|cffff6a2a" }, { 300, "|cffffa500" },
+  { 100, "|cffffd100" }, { 0, "|cffcccccc" } }
+local function noteColour(points)
+  for _, c in ipairs(NOTE_COLOURS) do
+    if points >= c[1] then return c[2] end
+  end
+  return NOTE_COLOURS[#NOTE_COLOURS][2]
+end
+local function noteCell(e)
+  local points = notoriety(e)
+  if points <= 0 then return "|cff888888-|r" end
+  local text = noteColour(points) .. ns.Art.Points(points) .. "|r"
+  if e.name and ns.Bounty.OnRampage(e.name) then text = text .. " |cffff3333!|r" end
+  return text
+end
+
+-- the Last seen cell: the main zone only ("Tanaris (Steamwheedle Port)" -> "Tanaris"); the row tooltip has it all
+local function hitLast(e)
+  local zone = e.lastZone and e.lastZone:gsub("%s*%b()%s*$", "")
+  return ns.Ago(e.lastSeen) .. ((zone and zone ~= "") and (" - " .. zone) or "")
+end
+
 local HITLIST_COLS = {
   { L.COL_NAME, 165, nameCol, byName },
-  { L.COL_LEVEL, 30, lvl, byLevel },
-  { L.COL_GUILD, 95, guild, byGuild },
-  { L.COL_KILLS, 70, hitKills, function(e) return e.kills or 0 end },
-  { L.COL_VICTIMS, 155, function(e) return victimsText(e) end, function(e) return count(e.victims) end },
-  { L.COL_LAST, 145, lastText, byLast },
+  { L.COL_LEVEL, 30, lvl, byLevel, "RIGHT" },
+  { L.COL_GUILD, 105, guild, byGuild },
+  { L.COL_KILLS, 40, hitKills, function(e) return e.kills or 0 end, "RIGHT" },
+  { L.COL_BOUNTY, 65, noteCell, notoriety, "RIGHT" },
+  { L.COL_VICTIMS, 125, function(e) return victimsText(e) end, function(e) return count(e.victims) end },
+  { L.COL_LAST, 130, hitLast, byLast },
 }
+UI.Notoriety = notoriety -- (for tests)
 
 -- Friends tab cells: just the number. Group boards: empty for an invite, or a member whose
 -- numbers haven't reached you yet.
@@ -257,6 +294,44 @@ local KILL_COLS = {
   { L.COL_LAST_KILL, 210, function(r)
     if not r.t then return "" end
     return ns.Ago(r.t) .. (r.zone and ("  |cff888888" .. r.zone .. "|r") or "")
+  end, function(r) return r.t or 0 end },
+}
+
+-- Killed by: the enemies who killed you, on this character, most first. Built once per refresh from
+-- the hitlist (each enemy's per-victim kill counts and times, h.kv / h.kt, the data the nemesis
+-- uses), without friends and your own alts; the zone is where your death log last had them.
+local killedByTotal = 0 -- (for the hint line)
+local function fetchKilledBy()
+  local me = ns.me
+  local zones = {}
+  local deaths = ns.Stats and ns.Stats.DeathList() or {}
+  for i = #deaths, 1, -1 do -- (newest first: the first one found for a killer is their latest)
+    local d = deaths[i]
+    if d.c == me and d.k and d.z and not zones[d.k] then zones[d.k] = d.z end
+  end
+  local rows, total = {}, 0
+  for _, h in pairs(R().hitlist) do
+    local n = C(type(h.kv) == "table" and h.kv[me] or 0)
+    if n > 0 and not isFriendRecord(h.name) then
+      local t = type(h.kt) == "table" and h.kt[me] or nil
+      rows[#rows + 1] = { name = h.name, class = h.class, level = h.level, guild = h.guild, lastSeen = h.lastSeen,
+        n = n, t = t, lastZone = zones[h.name] or h.lastZone }
+      total = total + n
+    end
+  end
+  killedByTotal = total
+  return rows
+end
+function UI.KilledByList() return fetchKilledBy() end -- (one row per enemy; the profile button counts them)
+local KILLEDBY_COLS = {
+  { L.COL_NAME, 220, nameCol, byName },
+  { L.COL_LEVEL, 30, lvl, byLevel, "RIGHT" },
+  { L.COL_GUILD, 130, guild, byGuild },
+  { L.COL_TIMES, 60, function(r) return tostring(C(r.n)) end, function(r) return C(r.n) end, "RIGHT" },
+  { L.COL_LAST_TIME, 210, function(r)
+    if not r.t then return "" end
+    local zone = r.lastZone and r.lastZone:gsub("%s*%b()%s*$", "")
+    return ns.Ago(r.t) .. ((zone and zone ~= "") and ("  |cff888888" .. zone .. "|r") or "")
   end, function(r) return r.t or 0 end },
 }
 
@@ -347,6 +422,9 @@ local TABS = {
   -- reached from a profile's Kill list button (no tab of its own)
   { key = "kills", label = L.TAB_KILLS, hidden = true, columns = KILL_COLS, defaultSort = { col = 4, desc = true },
     fetch = function() return killsOf and ns.Kills.List(killsOf) or {} end },
+  -- reached from your own profile's Killed by button (no tab of its own)
+  { key = "killedby", label = L.TAB_KILLEDBY, hidden = true, columns = KILLEDBY_COLS, defaultSort = { col = 4, desc = true },
+    fetch = fetchKilledBy },
   -- reached from your own profile's Stats button (no tab of its own)
   { key = "stats", label = L.TAB_STATS, hidden = true, columns = {}, fetch = function() return {} end },
 }
@@ -441,6 +519,7 @@ end
 
 -- the rows currently listed (sorted), for tests
 function UI.Rows() return data end
+function UI.CellJustify(c) return rows[1].cells[c]:GetJustifyH(), header.cells[c]:GetJustifyH() end -- (for tests)
 
 -- for tests: a tab's columns, and the width the list has for them
 function UI.TabColumns(key) return colsOf(tabDef(key)) end
@@ -485,6 +564,14 @@ local function layoutColumns(cols)
       h:SetPoint("LEFT", header, "LEFT", x, 0)
       h:SetSize(col[2] - 2, ROW_H)
       h.text:SetText(col[1])
+      h.text:ClearAllPoints()
+      if col[5] == "RIGHT" then
+        h.text:SetPoint("RIGHT", h, "RIGHT", -14, 0) -- (room for the sort arrow after it)
+        h.text:SetJustifyH("RIGHT")
+      else
+        h.text:SetPoint("LEFT", h, "LEFT", 4, 0)
+        h.text:SetJustifyH("LEFT")
+      end
       h:EnableMouse(col[4] ~= nil)
       local sorted = col[4] ~= nil and st.col == c
       if sorted then h.text:SetTextColor(1, 1, 1) else h.text:SetTextColor(1, 0.82, 0) end
@@ -497,7 +584,8 @@ local function layoutColumns(cols)
         local cell = row.cells[c]
         cell:ClearAllPoints()
         cell:SetPoint("LEFT", row, "LEFT", x + 4, 0)
-        cell:SetWidth(col[2] - 6)
+        cell:SetWidth(col[2] - (col[5] == "RIGHT" and 12 or 6)) -- (right-aligned: a little padding before the next column)
+        cell:SetJustifyH(col[5] or "LEFT")
         cell:Show()
       end
       x = x + col[2]
@@ -666,7 +754,7 @@ end
 local function killsHint()
   local name = killsOf or "?"
   local list = ns.Kills.List(name)
-  local line = L.KILLS_HINT:format(ns.ClassColored(name), #list, ns.Kills.Total(list))
+  local line = L.KILLS_HINT:format(ns.ClassColored(name), ns.Kills.Unique(list), ns.Kills.Total(list))
   local kind = ns.Profile.KindOf(name)
   local players = R().players
   local p = players[ns.Data.Resolve(players, name)]
@@ -683,7 +771,7 @@ function UI.Refresh()
   if not win or not win:IsShown() then return end
   local def = tabDef(currentTab)
   currentTab = def.key
-  if currentTab ~= "profile" and currentTab ~= "kills" and currentTab ~= "stats" then homeTab = currentTab end
+  if currentTab ~= "profile" and currentTab ~= "kills" and currentTab ~= "stats" and currentTab ~= "killedby" then homeTab = currentTab end
   for _, b in ipairs(tabButtons) do selectTabButton(b, b.key == homeTab) end
   refreshGroupBar()
 
@@ -697,7 +785,7 @@ function UI.Refresh()
   if currentTab == "friends" then UI.RefreshGroupWindow() else UI.HideGroupWindow() end
   searchBox:SetShown(not isPage)
   -- Back: on the Profile page, the Stats page and the Kill list, if there's somewhere to go back to
-  local backTo = (isPage or currentTab == "kills") and history[#history]
+  local backTo = (isPage or currentTab == "kills" or currentTab == "killedby") and history[#history]
   backButton:SetShown(backTo and true or false)
   if backTo then UI.SetButtonText(backButton, L.BTN_BACK:format(placeLabel(backTo))) end
   if isPage then
@@ -715,6 +803,7 @@ function UI.Refresh()
 
   local cols = colsOf(def)
   data = def.fetch()
+  noteCache = {}
   -- search box: keep rows whose name or guild (or Feed text) contains the search
   if search ~= "" then
     local kept = {}
@@ -746,8 +835,9 @@ function UI.Refresh()
       row:Hide()
     end
   end
+  noteCache = nil
   emptyText:SetShown(#data == 0)
-  emptyText:SetText(search ~= "" and L.SEARCH_NONE or L.EMPTY)
+  emptyText:SetText(search ~= "" and L.SEARCH_NONE or (currentTab == "killedby" and L.KILLEDBY_EMPTY or L.EMPTY))
   local paged = #data > ROWS
   if paged then
     pageText:SetText(string.format("%d-%d of %d", offset + 1, math.min(offset + ROWS, #data), #data))
@@ -760,8 +850,10 @@ function UI.Refresh()
   prevPage:SetEnabled(offset > 0)
   nextPage:SetEnabled(offset + ROWS < #data)
   refreshDetail()
-  friendsHint:SetShown(friendsView() or currentTab == "kills")
-  if currentTab == "kills" then
+  friendsHint:SetShown(friendsView() or currentTab == "kills" or currentTab == "killedby")
+  if currentTab == "killedby" then
+    friendsHint:SetText(L.KILLEDBY_HINT:format(#data, killedByTotal))
+  elseif currentTab == "kills" then
     friendsHint:SetText(killsHint())
   elseif friendsView() then
     local g = currentGroup()
@@ -786,7 +878,7 @@ end
 -- going to the Profile page or a Kill list: remember where you are, for Back
 local function rememberPlace(target, name)
   local same = currentTab == target
-    and ((target == "profile" and profileName == name) or (target == "kills" and killsOf == name) or target == "stats")
+    and ((target == "profile" and profileName == name) or (target == "kills" and killsOf == name) or target == "stats" or target == "killedby")
   if same then return end
   history[#history + 1] = { tab = currentTab, offset = offset, boardView = boardView,
     profileName = profileName, killsOf = killsOf }
@@ -1311,6 +1403,12 @@ function UI.ShowKills(name)
   killsOf = name
   if ns.Profile.KindOf(name) == "friend" then ns.Kills.Ask(name) end
   openPage("kills")
+end
+
+-- who killed you (opened from your own profile), inside the tab you're on, with Back
+function UI.ShowKilledBy()
+  rememberPlace("killedby")
+  openPage("killedby")
 end
 
 -- your Stats page (opened from your own profile), inside the tab you're on, with Back

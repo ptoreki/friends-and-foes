@@ -44,7 +44,7 @@ Friends & Foes connects you and your Battle.net friends in WoW Forever, even whe
 - The **Friends** tab ranks you and your friends who run the add-on: kills, deaths, K/D, notoriety, bounty gold collected, and where everyone is right now. Low-level bank alts are hidden.
 - **Shared groups:** follow a group's stats together, even with friends of friends.
 - **Profiles:** click any name for their record, nemesis, victims, recent fights and the bounties on them.
-- **Your stats:** when and where you hunt, the levels of your victims, your best kill streak, how long you survive between PvP deaths, and all of it per level range (20s, 30s and so on).
+- **Your stats:** when and where you hunt, the levels of your victims, your best kill streak, how long you survive between PvP deaths, and all of it per level range (20s, 30s and so on). Flip to **Hunted** to see when and where you die, and who kills you.
 - **Friends' progress:** level-ups, epic loot and new epic gear.
 
 ### Missed something?
