@@ -41,8 +41,7 @@ local function build(main)
     })
   end
   UI.SolidBackground(f)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -4, -4)
+  UI.CloseButton(f)
 
   f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   ns.Art.UseTitleFont(f.title, 20)

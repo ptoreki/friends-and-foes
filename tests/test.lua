@@ -3395,7 +3395,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_105_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_106_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")

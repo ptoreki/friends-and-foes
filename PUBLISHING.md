@@ -51,6 +51,22 @@ The packager reads these lines to know where to upload.
 3. Create an API token in your Wago account settings.
 4. Add it as a GitHub secret named `WAGO_API_TOKEN`.
 
+## Version numbers (MAJOR.MINOR.PATCH)
+Pick the bump from the **biggest** change in the release:
+
+- **MAJOR (2.0.0)**: friends on the old version can't share with you any more (`ns.PROTOCOL`
+  bumped), saved data is reset or can't be read by the old version, or a feature or option players
+  rely on is removed. Rare; say clearly in the patch notes what changes.
+- **MINOR (1.1.0)**: anything new a player can see or use, like a new view, column, alert,
+  option, command or window, or a change to how something is counted or scored (e.g. battlegrounds
+  no longer counting). Resets PATCH to 0.
+- **PATCH (1.0.1)**: fixes only. Bugs, wrong numbers, layout glitches, wording and translations,
+  speed. Nothing new to learn.
+
+Released versions are never renumbered (players' apps and the tags already have them); numbers
+only go up. 1.0.1-1.0.5 were really minor releases. From now on the next feature release is
+**1.1.0**.
+
 ## Each release
 1. Bump the version in **both** `FriendsAndFoes/FriendsAndFoes.toc` (`## Version:`) and
    `FriendsAndFoes/Core.lua` (`ns.VERSION`), plus `package.json`.

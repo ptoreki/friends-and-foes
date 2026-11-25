@@ -100,8 +100,7 @@ local function build()
     })
   end
   UI.SolidBackground(f)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -4, -4)
+  UI.CloseButton(f)
   tinsert(UISpecialFrames, "FriendsAndFoesAlertList")
 
   f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")

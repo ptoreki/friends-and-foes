@@ -136,6 +136,18 @@ function UI.SolidBackground(f)
   return t
 end
 
+-- The game's close (X) button closes through HideUIPanel, which the game blocks in combat for
+-- add-on windows. Ours just hide their own window, which always works.
+function UI.CloseOnClick(btn, frame)
+  if btn and btn.SetScript then btn:SetScript("OnClick", function() frame:Hide() end) end
+  return btn
+end
+function UI.CloseButton(frame)
+  local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+  close:SetPoint("TOPRIGHT", -4, -4)
+  return UI.CloseOnClick(close, frame)
+end
+
 -- Blizzard's plain window frame if available, else a dialog box
 function UI.CreateWindow()
   local ok, f = pcall(CreateFrame, "Frame", "FriendsAndFoesFrame", UIParent, "BasicFrameTemplateWithInset")
@@ -143,8 +155,9 @@ function UI.CreateWindow()
   if not templated then
     if not (ok and f) then f = CreateFrame("Frame", "FriendsAndFoesFrame", UIParent, "BackdropTemplate") end
     if f.SetBackdrop then f:SetBackdrop(FALLBACK_BACKDROP) end
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
+    UI.CloseButton(f)
+  else
+    UI.CloseOnClick(f.CloseButton, f) -- (the template's own X)
   end
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   if templated then title:SetPoint("CENTER", f.TitleBg, "CENTER", 0, 0) else title:SetPoint("TOP", 0, -14) end

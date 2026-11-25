@@ -9,6 +9,10 @@ ns.WhatsNew = WhatsNew
 
 WhatsNew.NOTES = {
   {
+    version = "1.0.6",
+    lines = { L.NEW_106_1, L.NEW_106_2, L.NEW_106_3 },
+  },
+  {
     version = "1.0.5",
     lines = { L.NEW_105_1, L.NEW_105_2, L.NEW_105_3, L.NEW_105_4 },
   },
@@ -79,8 +83,7 @@ local function build()
     })
   end
   ns.UI.SolidBackground(f)
-  local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  close:SetPoint("TOPRIGHT", -4, -4)
+  ns.UI.CloseButton(f)
   tinsert(UISpecialFrames, "FriendsAndFoesWhatsNew")
 
   f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")

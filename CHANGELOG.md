@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6
+
+- **Close buttons work in combat:** the X on the main window, the alert list, the Bounty and Group windows and the What's new popup hid their window through the game's `HideUIPanel`, which is blocked for add-on windows in combat, so the X did nothing during a fight. They now hide their own window directly (`UI.CloseButton` / `UI.CloseOnClick`).
+- **Stats: Hunting / Hunted toggle spacing:** buttons grow to fit their label, and "Hunting" is wider than the 64px the layout assumed, so the Hunted button overlapped it. Hunted now hangs off Hunting's real right edge (2px gap, like the level selector), and the pair is centred between the title and the level selector using their real widths.
+
 ## 1.0.5
 
 - **Victims and Killed by counts are players:** the profile buttons now say how many different players ("Victims (3)", "Killed by (2)"), not total kills, and the "Name not readable" line is not counted as a player (in the button or in the list's hint line).

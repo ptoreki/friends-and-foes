@@ -707,6 +707,9 @@ L.NEW_105_1 = "Stats page: switch between Hunting and Hunted to see when and whe
 L.NEW_105_2 = "New Killed by list on your profile: everyone who killed you, and how often."
 L.NEW_105_3 = "The Hitlist shows each enemy's notoriety, with a red ! when they're on a rampage."
 L.NEW_105_4 = "Victims and Killed by count players, not kills, and the Hitlist columns are tidier."
+L.NEW_106_1 = "The window's close (X) button now works in combat."
+L.NEW_106_2 = "The same goes for the alert list, Bounty, Group and What's new windows."
+L.NEW_106_3 = "Stats page: the Hunting and Hunted buttons no longer overlap."
 L.NEW_104_3 = "The old \"Battlegrounds\" tracking checkbox is gone; that one setting controls it."
 
 -- 1.0.1: add by name, bounty notes, bounty target spotted

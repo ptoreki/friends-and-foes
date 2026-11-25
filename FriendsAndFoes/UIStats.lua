@@ -29,7 +29,7 @@ local HUNT_STEP = ROW_STEP
 -- the level selector (All + six brackets, 2px apart) fills the right end of the header line; the
 -- Hunting / Hunted toggle sits between it and the title
 local SEL_W = 40 + 6 * 46 + 6 * 2
-local MODE_W, MODE_X = 64, 186
+local MODE_W, MODE_X, MODE_GAP = 64, 186, 2 -- (MODE_W is a minimum: a button grows to fit its label)
 UI.StatsLayout = { selectorLeft = PAGE_W - SEL_W, modeLeft = MODE_X, modeRight = MODE_X + 2 * MODE_W + 2, colW = COL_W, colGap = COL_GAP, rowStep = ROW_STEP, rowH = ROW_H, rowsTop = ROWS_TOP, lockW = 18 }
 local DIM = "|cff888888"
 local DASH = "-"
@@ -305,7 +305,8 @@ function UI.BuildStats(win)
   page.modes = {}
   for i, m in ipairs({ { "hunt", L.STATS_MODE_HUNT, L.STATS_MODE_HUNT_TIP }, { "hunted", L.STATS_MODE_HUNTED, L.STATS_MODE_HUNTED_TIP } }) do
     local btn = UI.Button(page, MODE_W, m[2], function(self) UI.SetStatsMode(self.mode) end)
-    btn:SetPoint("TOPLEFT", page, "TOPLEFT", MODE_X + (i - 1) * (MODE_W + 2), 0)
+    if i == 1 then btn:SetPoint("TOPLEFT", page, "TOPLEFT", MODE_X, 0)
+    else btn:SetPoint("LEFT", page.modes[1], "RIGHT", MODE_GAP, 0) end
     btn.mode, btn.tip, btn.tipTitle = m[1], m[3], m[2]
     btn:SetScript("OnEnter", function(self) tooltip(self, self.tipTitle, self.tip) end)
     btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -370,8 +371,25 @@ function UI.BuildStats(win)
   return page
 end
 
+-- the toggle sits centred between the end of the title and the level selector (the title's real
+-- width is only known once it's drawn, so this runs on every render; MODE_X is the fallback)
+local function placeModes()
+  local titleRight = math.ceil(page.title:GetStringWidth() or 0)
+  local x = MODE_X
+  local free = UI.StatsLayout.selectorLeft - titleRight
+  -- buttons grow to fit their label, so use their real widths, and hang the second off the first
+  local a, b = page.modes[1], page.modes[2]
+  local w = (a:GetWidth() or MODE_W) + MODE_GAP + (b:GetWidth() or MODE_W)
+  if titleRight > 0 and free > w then x = titleRight + math.floor((free - w) / 2) end
+  a:ClearAllPoints()
+  a:SetPoint("TOPLEFT", page, "TOPLEFT", x, 0)
+  b:ClearAllPoints()
+  b:SetPoint("LEFT", a, "RIGHT", MODE_GAP, 0)
+end
+
 function UI.RenderStats()
   if not page then return end
+  placeModes()
   local v = UI.StatsView()
   page.sub:SetText(v.sub)
   for i, btn in ipairs(page.brackets) do

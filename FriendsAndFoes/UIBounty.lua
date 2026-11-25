@@ -54,8 +54,7 @@ local function build()
   end
   UI.SolidBackground(f)
   if UISpecialFrames then tinsert(UISpecialFrames, "FriendsAndFoesBountyDialog") end
-  local x = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  x:SetPoint("TOPRIGHT", -4, -4)
+  UI.CloseButton(f)
 
   local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   title:SetText(L.BOUNTY_DLG_TITLE)
