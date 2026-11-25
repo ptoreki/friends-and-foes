@@ -4,18 +4,28 @@ local _, ns = ...
 --
 -- FriendsAndFoesDB (account-wide: every character on the account shares it)
 --   settings      your options (Core.lua DEFAULTS fills in anything missing)
---   realms        the data: realms.Forever = { players, hitlist, feed } (Data.lua). Forever has
---                 no realms, so there is one store (an old `sim` store from before 0.9.4 is removed)
---   profile       your own profile: stats time, notoriety claimed (Profile, Bounty)
+--   realms        the data: realms["Forever-<ruleset>"] = { players, hitlist, feed, and the world data
+--                 below } (Data.lua). Forever has no realms, but its rulesets (PvP, PvE, RP, RPPvP,
+--                 Hardcore) never meet, so each has its own store. If the ruleset can't be read the
+--                 old single realms.Forever is used. The first ruleset logged in after the update
+--                 takes over the old realms.Forever (legacyClaimedBy remembers which; Data.ClaimLegacy)
+--                 (an old `sim` store from before 0.9.4 is removed)
+--   World data, inside each store (per ruleset, it describes that world):
+--     profile       your own profile: stats time, notoriety claimed (Profile, Bounty)
+--     weekly        this week's summary
+--     repeats       enemy name -> recent claim times (last few, pruned after 30 min; Bounty.lua)
+--     contracts     the Bounty board (Contracts.lua)
+--     killLog, deathLog   your kills and deaths for the Stats page (Stats.lua)
+--     groupStat     your group card; relay: members' relayed cards (Groups.lua)
+--     got, heard, digestAt   catch-up: events already received / heard, for passing on; when each
+--                 friend last got your hitlist digest (by BattleTag) (Comm.lua)
+--   Shared by all rulesets (about you, not the world):
 --   friendTags    friends' character names -> BattleTag, for picks (never sent anywhere)
 --   group         your alert list (picked friends, by BattleTag)
---   groups, relay shared groups and members' relayed cards (Groups.lua); groupStat: your card
---   got, heard    catch-up: events already received / heard, for passing on (Comm.lua)
---   outbox        your recent events, all your characters (catch-up; each says which character)
---   digestAt      when each friend last got your hitlist digest (by BattleTag)
+--   groups        shared groups and who is in them (Groups.lua; what they show comes from the store)
+--   outbox        your recent events, all your characters (catch-up; each says which character and
+--                 which ruleset, and only the current ruleset's are sent)
 --   lastOnline    when you were last online (for catch-up)
---   weekly        this week's summary
---   repeats       enemy name -> recent claim times (last few, pruned after 30 min; Bounty.lua)
 --   welcomed      the first-run tour was shown
 --   caps          what works on this client (shown in Options and the debug report)
 --   debugLog, errorLog   logs (capped)
@@ -192,6 +202,19 @@ local STEPS = {
   -- 15 (1.0.4): the "Battlegrounds" tracking switch is gone (battlegrounds never count)
   function(db)
     if type(db.settings.track) == "table" then db.settings.track.pvp = nil end
+  end,
+  -- 16 (1.1.0): data about the game world is kept per ruleset (Data.lua), inside the store. What
+  -- was saved account-wide moves into the single "Forever" store; the first ruleset you log in
+  -- with then takes that store over (Data.ClaimLegacy)
+  function(db)
+    db.realms = db.realms or {}
+    for _, f in ipairs(ns.Data.WORLD_FIELDS) do
+      if db[f] ~= nil then
+        db.realms.Forever = db.realms.Forever or {}
+        if db.realms.Forever[f] == nil then db.realms.Forever[f] = db[f] end
+        db[f] = nil
+      end
+    end
   end,
 }
 Saved.STEPS = STEPS

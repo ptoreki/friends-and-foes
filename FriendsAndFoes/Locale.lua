@@ -710,6 +710,9 @@ L.NEW_105_4 = "Victims and Killed by count players, not kills, and the Hitlist c
 L.NEW_106_1 = "The window's close (X) button now works in combat."
 L.NEW_106_2 = "The same goes for the alert list, Bounty, Group and What's new windows."
 L.NEW_106_3 = "Stats page: the Hunting and Hunted buttons no longer overlap."
+L.NEW_110_1 = "Each ruleset (PvP, PvE, RP, RP-PvP, Hardcore) now keeps its own hitlist, Feed, Stats and bounties."
+L.NEW_110_2 = "Friends' kills and deaths only count when they play the same ruleset as you."
+L.NEW_110_3 = "Your existing data stays with the first ruleset you log in with; the others start fresh."
 L.NEW_104_3 = "The old \"Battlegrounds\" tracking checkbox is gone; that one setting controls it."
 
 -- 1.0.1: add by name, bounty notes, bounty target spotted

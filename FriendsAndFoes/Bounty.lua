@@ -77,8 +77,9 @@ local KILL_ICON = "Interface\\Icons\\Ability_DualWield"
 -- Your notoriety fades: b.total is what you have NOW; b.allTime is everything you ever claimed.
 -- b.clock is the last claim, or the last full week already taken off (so a week is never applied twice).
 local function mine()
-  FriendsAndFoesDB.profile = FriendsAndFoesDB.profile or {}
-  local p = FriendsAndFoesDB.profile
+  local world = ns.Data.Realm()
+  world.profile = world.profile or {}
+  local p = world.profile
   p.bounty = p.bounty or { total = 0, count = 0 }
   local b = p.bounty
   b.total = ns.Count(b.total)
@@ -104,13 +105,13 @@ function Bounty.AllTime() return mine().allTime end
 -- this week's claimed points (0 once the week is over), and the week's id (its start, in days)
 -- for friends to tell a stale number from a fresh one
 function Bounty.Week()
-  local w = FriendsAndFoesDB.weekly
+  local w = ns.Data.Realm().weekly
   if not w or not w.start or time() - w.start >= WEEK then return 0 end
   return ns.Count(w.bt)
 end
 
 function Bounty.WeekId()
-  local w = FriendsAndFoesDB.weekly
+  local w = ns.Data.Realm().weekly
   return w and w.start and math.floor(w.start / 86400) or 0
 end
 
@@ -168,11 +169,11 @@ function Bounty.OnRampage(name)
   return n >= Bounty.RAMPAGE_KILLS
 end
 
--- Claim times per enemy (FriendsAndFoesDB.repeats[name] = { t, t, ... }, oldest first), for the
+-- Claim times per enemy (the store's repeats[name] = { t, t, ... }, oldest first), for the
 -- repeat chain. Every client records one time per claim (a kill reported by several friends is one
 -- claim), so they all count the same.
 local function repeatList(name)
-  local all = FriendsAndFoesDB.repeats
+  local all = ns.Data.Realm().repeats
   return type(all) == "table" and type(all[name]) == "table" and all[name] or nil
 end
 
@@ -200,8 +201,9 @@ end
 -- back (earned > 0) resets the chain to 0 (that claim isn't counted); old chains and old enemies are dropped.
 local function noteClaim(name, fought)
   local now = ns.Now()
-  FriendsAndFoesDB.repeats = type(FriendsAndFoesDB.repeats) == "table" and FriendsAndFoesDB.repeats or {}
-  local all = FriendsAndFoesDB.repeats
+  local world = ns.Data.Realm()
+  world.repeats = type(world.repeats) == "table" and world.repeats or {}
+  local all = world.repeats
   local list = repeatList(name)
   if fought then
     all[name] = nil -- (that claim paid in full and starts the count from 0)

@@ -1058,20 +1058,20 @@ do
   C_BattleNet.GetFriendGameAccountInfo = origInfo
   ns.Comm.RebuildRoster()
   -- weekly summary
-  local w = FriendsAndFoesDB.weekly
+  local w = ns.Data.Realm().weekly
   check(w and w.start, "weekly tracking started")
   local k0 = w.k or 0
   FriendsAndFoesCharDB.streak = 0
   ns.Events.Emit("KILL", { victim = "Week Victim", vclass = "MAGE", vlevel = "60", vguild = "", zone = "Duskwood" })
-  check(FriendsAndFoesDB.weekly.k == k0 + 1, "your takedowns count toward the week")
-  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 3, d = 2, killers = { ["Rogz Fang"] = 2 } }
+  check(ns.Data.Realm().weekly.k == k0 + 1, "your takedowns count toward the week")
+  ns.Data.Realm().weekly = { start = time() - 8 * 86400, k = 3, d = 2, killers = { ["Rogz Fang"] = 2 } }
   CHAT = {}
   FIRE("PLAYER_LOGIN")
   RUN_TIMERS()
   local weekly
   for _, line in ipairs(CHAT) do if line:find("Your PvP week", 1, true) then weekly = line end end
   check(weekly and weekly:find("3 kills, 2 deaths", 1, true) and weekly:find("Nemesis: Rogz Fang (2", 1, true), "weekly summary after a week: " .. tostring(weekly))
-  check(FriendsAndFoesDB.weekly.k == 0 and time() - FriendsAndFoesDB.weekly.start < 60, "new week started")
+  check(ns.Data.Realm().weekly.k == 0 and time() - ns.Data.Realm().weekly.start < 60, "new week started")
   FriendsAndFoesCharDB.streak = 0
   -- minimap / addon-menu tooltip
   local fr, hl = ns.Minimap.Summary()
@@ -1443,7 +1443,7 @@ do
   RUN_TICKERS(4)
   local req
   for _, s in ipairs(SENT) do if s.payload:find("\tREQ\t", 1, true) then req = s.payload end end
-  check(req and req:find("\t7200$") ~= nil, "REQ carries the window: " .. tostring(req))
+  check(req and req:find("\t7200\t[^\t]*$") ~= nil, "REQ carries the window: " .. tostring(req))
   -- answering: a friend asks, we send them our own recent events
   RUN_TICKERS(60)
   SENT = {}
@@ -1451,7 +1451,7 @@ do
   RUN_TICKERS(60)
   local die
   for _, s in ipairs(SENT) do if s.payload:find("Out Box", 1, true) then die = s.payload end end
-  check(die and die:find("\tDIE\t", 1, true) and die:match("\t(%d+)$") ~= nil, "answer replays our DIE with its age: " .. tostring(die))
+  check(die and die:find("\tDIE\t", 1, true) and die:match("\t(%d+)\t[^\t]*\t[^\t]*$") ~= nil, "answer replays our DIE with its age: " .. tostring(die))
   -- receiving: past events go to the Feed and hitlist, no toast and no chat line per event
   local t0 = toasted(function()
     FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Past Ganker:ROGUE:60:", conf = "c", assists = "", ago = 3600 }, "past1"), "WHISPER", 77)
@@ -1467,7 +1467,7 @@ do
   RUN_TIMERS()
   check(#CHAT == 1 and CHAT[1]:find("While you were away", 1, true) ~= nil, "one summary chat line after a catch-up: " .. tostring(CHAT[1]))
   -- something already seen live isn't applied twice
-  FriendsAndFoesDB.got["Buddy Pal:old1"] = time() - 600
+  ns.Data.Realm().got["Buddy Pal:old1"] = time() - 600
   local n = #rr.feed
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("DIE", { zone = "Duskwood", killer = "Old News:ROGUE:60:", conf = "c", assists = "", ago = 600 }, "old1"), "WHISPER", 77)
   check(#rr.feed == n and rr.hitlist["Old News"] == nil, "replay of an event seen live is ignored")
@@ -1540,8 +1540,8 @@ do
 
   -- changes are sent once, after a short wait; unchanged = not sent again
   RUN_TIMERS(); RUN_TICKERS(8); SENT = {}
-  FriendsAndFoesDB.profile.bounty = FriendsAndFoesDB.profile.bounty or { total = 0, count = 0 }
-  FriendsAndFoesDB.profile.bounty.total = ns.Count(FriendsAndFoesDB.profile.bounty.total) + 1 -- (something changed)
+  ns.Data.Realm().profile.bounty = ns.Data.Realm().profile.bounty or { total = 0, count = 0 }
+  ns.Data.Realm().profile.bounty.total = ns.Count(ns.Data.Realm().profile.bounty.total) + 1 -- (something changed)
   ns.Profile.Changed()
   RUN_TIMERS()
   RUN_TICKERS(8)
@@ -2477,7 +2477,7 @@ do
   local mine = rr.players[ns.me]
   -- you: some kills; an invited friend: nothing yet
   local savedK, savedD = mine.k, mine.d
-  FriendsAndFoesDB.groupStat = nil
+  ns.Data.Realm().groupStat = nil
   g.members[G.KeyOf("Invitee#42")] = { a = time(), name = "Invited Pal" }
   ns.UI.Show("board")
   ns.UI.SetBoardView(g.id)
@@ -2491,15 +2491,15 @@ do
   -- totals: "1 member", "1 kill"
   mine.k, mine.d = 1, 6
   for _, p in pairs(rr.players) do if p.self and p ~= mine then p.k, p.d = 0, 0 end end
-  FriendsAndFoesDB.groupStat = nil
+  ns.Data.Realm().groupStat = nil
   local hint = ns.Plain(ns.UI.GroupHint(g))
   check(hint:find("1 member, 1 kill, 6 deaths", 1, true) ~= nil, "totals in the singular: " .. hint)
   mine.k = 3
-  FriendsAndFoesDB.groupStat = nil
+  ns.Data.Realm().groupStat = nil
   hint = ns.Plain(ns.UI.GroupHint(g))
   check(hint:find("3 kills", 1, true) ~= nil and not hint:find("takedown", 1, true), "plural, and 'kills' like the column: " .. hint)
   mine.k, mine.d = savedK, savedD
-  FriendsAndFoesDB.groupStat = nil
+  ns.Data.Realm().groupStat = nil
   G.Leave(g)
   ns.UI.SetBoardView("friends")
   BNGetInfo = oldInfo
@@ -3039,7 +3039,7 @@ end
 do
   local B = ns.Bounty
   local rr = ns.Data.RealRealm()
-  local savedBounty = FriendsAndFoesDB.profile.bounty
+  local savedBounty = ns.Data.Realm().profile.bounty
   local origLevel, origChat = UnitLevel, ns.Toast.Chat
   local chats = {}
   ns.Toast.Chat = function(line) chats[#chats + 1] = line end
@@ -3048,7 +3048,7 @@ do
   local function kill(name, vlevel, myLevel)
     -- a 500-point enemy (4 murders, 4 attacks) at the given level, killed alone by you
     rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = vlevel, lastSeen = time() }
-    FriendsAndFoesDB.profile.bounty = nil
+    ns.Data.Realm().profile.bounty = nil
     UnitLevel = function(u) if u == "player" then return myLevel end return 0 end
     chats = {}
     ADVANCE(120)
@@ -3069,7 +3069,7 @@ do
   check(kill("Lv NoMe", 40, 0) == 500, "unknown killer level: x1")
   -- a shared kill: your share is halved first, then only YOUR factor applies
   rr.players["Lv Shared"] = { name = "Lv Shared", enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = 45, lastSeen = time() }
-  FriendsAndFoesDB.profile.bounty = nil
+  ns.Data.Realm().profile.bounty = nil
   UnitLevel = function(u) if u == "player" then return 35 end return 0 end
   ADVANCE(120)
   B.OnKill(ns.me, "Lv Shared")
@@ -3077,7 +3077,7 @@ do
   B.SettleAll()
   check(B.Mine() == 375, "shared kill: 250 x1.5 for you, got " .. B.Mine())
   UnitLevel, ns.Toast.Chat = origLevel, origChat
-  FriendsAndFoesDB.profile.bounty = savedBounty
+  ns.Data.Realm().profile.bounty = savedBounty
   for _, n in ipairs({ "Lv Grey", "Lv Low", "Lv Mid", "Lv Even", "Lv High", "Lv Top", "Lv Skull", "Lv Nil", "Lv Zero", "Lv NoMe", "Lv Shared" }) do
     rr.players[n] = nil
   end
@@ -3088,7 +3088,7 @@ do
   local errs = ns.errors
   local B = ns.Bounty
   local rr = ns.Data.RealRealm()
-  local savedBounty = FriendsAndFoesDB.profile.bounty
+  local savedBounty = ns.Data.Realm().profile.bounty
   local saved = { UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitIsUnit, C_UnitAuras, ns.Toast.Chat }
   local chats = {}
   ns.Toast.Chat = function(line) chats[#chats + 1] = line end
@@ -3104,7 +3104,7 @@ do
   local function sickKill(name, level, list)
     UnitName = function(u) if u == "player" then return ME, MY_SURNAME end if u == "target" then return name:match("^(%S+)"), name:match("^%S+ (.+)$") end end
     rr.players[name] = { name = name, enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, level = level > 0 and level or nil, lastSeen = time() }
-    FriendsAndFoesDB.profile.bounty = nil
+    ns.Data.Realm().profile.bounty = nil
     if list == "sick" then list = { { spellId = 15007, expirationTime = GetTime() + 300 } } end
     targetLevel, auras = level, list
     ns.PvP.ReadEnemy("target")
@@ -3126,7 +3126,7 @@ do
   sickKill("Sick Gone", 35, sick)
   ADVANCE(2000)
   check(not ns.PvP.IsSick("Sick Gone"), "sickness expires")
-  FriendsAndFoesDB.profile.bounty = nil
+  ns.Data.Realm().profile.bounty = nil
   B.OnKill(ns.me, "Sick Gone")
   B.SettleAll()
   check(B.Mine() > 0, "sickness over: normal notoriety (a repeat kill, so less than 500: " .. B.Mine() .. ")")
@@ -3142,7 +3142,7 @@ do
   C_UnitAuras = { GetAuraDataByIndex = function() error("boom") end }
   check(sickKill("Boom", 35, nil) == 500, "an aura read that errors: normal notoriety")
   UnitExists, UnitIsPlayer, UnitFactionGroup, UnitName, UnitClass, UnitLevel, UnitIsUnit, C_UnitAuras, ns.Toast.Chat = (unpack or table.unpack)(saved, 1, 9)
-  FriendsAndFoesDB.profile.bounty = savedBounty
+  ns.Data.Realm().profile.bounty = savedBounty
   for _, n in ipairs({ "Sick Same", "Sick Skull", "Sick Plus", "Sick Over", "Well Same", "Other Aura", "Sick Gone", "Sick NoExp", "Unavail", "Boom" }) do rr.players[n] = nil end
   check(ns.errors == errs, "no errors in resurrection sickness (" .. tostring(ns.lastError) .. ")")
 end
@@ -3152,8 +3152,8 @@ do
   local errs = ns.errors
   local B = ns.Bounty
   local rr = ns.Data.RealRealm()
-  local saved = FriendsAndFoesDB.profile.bounty
-  FriendsAndFoesDB.profile.bounty = nil
+  local saved = ns.Data.Realm().profile.bounty
+  ns.Data.Realm().profile.bounty = nil
   rr.players["Bounty Bob"] = { name = "Bounty Bob", enemy = true, class = "ROGUE", k = 4, d = 0, atk = 4, lastSeen = time() }
   check(B.Open("Bounty Bob") == 500, "open bounty: 4 murders and 4 attacks = 500, got " .. B.Open("Bounty Bob"))
   check(B.Mine() == 0, "nothing collected yet")
@@ -3216,7 +3216,7 @@ do
   rr.players["Bounty Bob"] = nil
   rr.players["Bounty Pal"] = nil
   rr.hitlist["Bounty Bob"] = nil
-  FriendsAndFoesDB.profile.bounty = saved
+  ns.Data.Realm().profile.bounty = saved
   check(ns.errors == errs, "no errors with bounties (" .. tostring(ns.lastError) .. ")")
 end
 
@@ -3395,7 +3395,7 @@ do
   db.toured, db.seenVersion = true, nil
   ns.UI.Show("hitlist")
   check(WN.IsShown() and db.seenVersion == ns.VERSION, "upgrade: popup shown, seenVersion set")
-  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_106_1, 1, true), "popup has the version header and the notes")
+  check(WN.Text():find(ns.VERSION, 1, true) and WN.Text():find(ns.L.NEW_110_1, 1, true), "popup has the version header and the notes")
   WN.Frame():Hide()
   ns.UI.Show("hitlist")
   check(not WN.IsShown(), "second open: not again")
@@ -3590,8 +3590,8 @@ do
   rr.players["Neg Foe"] = { name = "Neg Foe", enemy = true, class = "ROGUE", level = -1, k = -1, d = -2, a = -1, lastSeen = future }
   rr.hitlist["Neg Foe"] = { name = "Neg Foe", class = "ROGUE", level = -1, kills = -2, attacks = -5, suspect = -1,
     revenge = -1, victims = { ["Neg Friend"] = true }, kv = { ["Neg Friend"] = -3 }, lastSeen = future, bk0 = 99, ba0 = 99 }
-  local bounty = FriendsAndFoesDB.profile.bounty
-  FriendsAndFoesDB.profile.bounty = { total = -100, count = -2, best = -50 }
+  local bounty = ns.Data.Realm().profile.bounty
+  ns.Data.Realm().profile.bounty = { total = -100, count = -2, best = -50 }
   SHOWN = {}
   for _, key in ipairs({ "hitlist", "contracts", "board", "friends", "feed", "profile" }) do ns.UI.Show(key) end
   for _, who in ipairs({ "Neg Friend", "Neg Foe", ns.me }) do
@@ -3643,7 +3643,7 @@ do
   check(tip:find("2 of them likely", 1, true) and tip:find("probably higher now", 1, true),
     "the hitlist tooltip says how many kills were likely, and that an old level is probably higher: " .. tip)
   check(n > 50 and #bad == 0, "no minus in front of any number (" .. n .. " texts): " .. table.concat(bad, " || "))
-  FriendsAndFoesDB.profile.bounty = bounty
+  ns.Data.Realm().profile.bounty = bounty
   rr.players["Neg Friend"], rr.players["Neg Foe"], rr.hitlist["Neg Foe"] = nil, nil, nil
   ns.UI.Show("hitlist")
   check(ns.errors == errs, "no errors showing odd numbers (" .. tostring(ns.lastError) .. ")")
@@ -3654,8 +3654,8 @@ do
   local errs = ns.errors
   local C = ns.Contracts
   local rr = ns.Data.RealRealm()
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   check(showWas == "toast" and ns.S().sound.contract == true, "Bounty board alerts: toasts with sound by default")
   ns.S().show.contract = "chat" -- (so the tests can read them)
@@ -3708,7 +3708,7 @@ do
   CHAT = {}
   local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
   bty({ cid = "abc1", target = "Their Mark:MAGE:50:", amount = 5000, state = "open", killer = "", age = 60, updage = 60, days = 2 }, "bt1")
-  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/abc1"]
+  local theirs = ns.Data.Realm().contracts["Buddy Pal/abc1"]
   check(theirs and theirs.days == 2 and C.TimeLeft(theirs) == "1d", "a friend's bounty keeps the days they picked: " .. tostring(theirs and C.TimeLeft(theirs)))
   local postedLine = false
   for _, l in ipairs(CHAT) do if l:find("put a bounty of", 1, true) then postedLine = true end end
@@ -3718,8 +3718,8 @@ do
   bty({ cid = "abc3", target = "Odd One:MAGE:50:", amount = -5, state = "open", killer = "", age = 1, updage = 1 }, "bt3")
   bty({ cid = "abc4", target = "Odd Two:MAGE:50:", amount = 500, state = "weird", killer = "", age = 1, updage = 1 }, "bt4")
   bty({ cid = "abc5", target = "Sim Mark:MAGE:50:", amount = 500, state = "open", killer = "", age = 1, updage = 1 }, "Sbt5")
-  check(not FriendsAndFoesDB.contracts["Buddy Pal/abc2"] and not FriendsAndFoesDB.contracts["Buddy Pal/abc3"]
-    and not FriendsAndFoesDB.contracts["Buddy Pal/abc4"] and not FriendsAndFoesDB.contracts["Buddy Pal/abc5"],
+  check(not ns.Data.Realm().contracts["Buddy Pal/abc2"] and not ns.Data.Realm().contracts["Buddy Pal/abc3"]
+    and not ns.Data.Realm().contracts["Buddy Pal/abc4"] and not ns.Data.Realm().contracts["Buddy Pal/abc5"],
     "ignored: a bounty on one of us, a negative amount, an unknown state, a simulated one")
 
   -- you get the kill on their target: done, you're told you'll be paid
@@ -3786,7 +3786,7 @@ do
   for _, name in ipairs({ "Bad Guy", "Their Mark", "Extra1 Foe", "Extra2 Foe", "Extra3 Foe", "Extra4 Foe" }) do
     rr.hitlist[name], rr.players[name] = nil, nil
   end
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   ns.UI.Show("hitlist")
   check(ns.errors == errs, "no errors on the Bounty board (" .. tostring(ns.lastError) .. ")")
 end
@@ -3804,8 +3804,8 @@ do
   local errs = ns.errors
   local C = ns.Contracts
   local rr = ns.Data.RealRealm()
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
@@ -3847,11 +3847,11 @@ do
 
   -- a friend's bounty: the poster's word on who got it wins; a cancel never undoes a kill
   bty({ cid = "e1", target = "Edge Three:MAGE:50:", amount = 700, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "edg1")
-  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/e1"]
+  local theirs = ns.Data.Realm().contracts["Buddy Pal/e1"]
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("KILL", { victim = "Edge Three", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" }, "edg2"), "WHISPER", 77)
   check(theirs.state == "paid" and theirs.killer == "Buddy Pal", "(the poster got them: closed, nothing to pay)")
   bty({ cid = "e2", target = "Edge Four:MAGE:50:", amount = 700, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "edg3")
-  local four = FriendsAndFoesDB.contracts["Buddy Pal/e2"]
+  local four = ns.Data.Realm().contracts["Buddy Pal/e2"]
   ns.Events.Emit("KILL", { victim = "Edge Four", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood" })
   check(four.state == "done" and four.killer == ns.me, "(you got them)")
   bty({ cid = "e2", target = "Edge Four:MAGE:50:", amount = 700, state = "cancelled", killer = "", age = 60, updage = 0, days = 5 }, "edg4")
@@ -3866,12 +3866,12 @@ do
   ns.Toast.Push = function(spec) if spec.kind == "contract" then pushed = pushed + 1 end end
   bty({ cid = "e3", target = "Edge Five:MAGE:50:", amount = 700, state = "open", killer = "", age = 3 * 86400, updage = 3 * 86400, days = 5 }, "edg6")
   ns.Toast.Push = push
-  check(pushed == 0 and FriendsAndFoesDB.contracts["Buddy Pal/e3"] ~= nil, "an old bounty from a friend who just came online: on the board, no toast")
+  check(pushed == 0 and ns.Data.Realm().contracts["Buddy Pal/e3"] ~= nil, "an old bounty from a friend who just came online: on the board, no toast")
   ns.S().show.contract = "chat"
 
   -- a friend who ran out here, then the poster posts it again: open again
   bty({ cid = "e4", target = "Edge Six:MAGE:50:", amount = 700, state = "open", killer = "", age = 3 * 86400, updage = 3 * 86400, days = 2 }, "edg7")
-  local six = FriendsAndFoesDB.contracts["Buddy Pal/e4"]
+  local six = ns.Data.Realm().contracts["Buddy Pal/e4"]
   C.Tidy()
   check(six.state == "expired", "(ran out here)")
   bty({ cid = "e4", target = "Edge Six:MAGE:50:", amount = 900, state = "open", killer = "", age = 0, updage = 0, days = 2 }, "edg8")
@@ -3894,7 +3894,7 @@ do
   for _, name in ipairs({ "Edge Foe", "Edge Two", "Firstonly", "Firstonly Fullname", "Edge Three", "Edge Four", "Edge Five", "Edge Six", "Edge Seven" }) do
     rr.hitlist[name], rr.players[name] = nil, nil
   end
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   ns.S().show.contract = showWas
   check(ns.errors == errs, "no errors in the Bounty board edge cases (" .. tostring(ns.lastError) .. ")")
 end
@@ -3924,7 +3924,7 @@ do
   local sp = db.settings.soundPick
   check(sp.trouble == "whisper" and sp.victory == "default" and sp.pvp == nil and sp.sighting == "mapping" and sp.progress == "coin" and sp.bounty == "default" and sp.attacked == nil
     and db.settings.milestones == nil and db.settings.gearMin == nil, "upgrade: per-alert sounds become one per kind; fixed settings dropped")
-  check(#ns.Saved.STEPS == 15, "fifteen upgrade steps")
+  check(#ns.Saved.STEPS == 16, "sixteen upgrade steps")
   local g = { settings = { show = { attacked = "chat", engage = "toast", died = "off", kill = "toast", loot = "toast", gear = "chat", level = "chat" },
     sound = { attacked = true, engage = true, died = false, kill = false, loot = true, gear = false, level = true } } }
   ns.Saved.STEPS[12](g)
@@ -3945,8 +3945,8 @@ do
     if c[1] == ns.L.COL_BOUNTIES then bcol = i end
   end
   check(not hasAlerts and bcol ~= nil, "Friends tab: no Alerts column; a Bounties column")
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {
     ["Someone Else/a1"] = { id = "a1", by = "Someone Else", target = "X Y", amount = 50000, state = "paid", killer = "Buddy Pal", t = time() },
     ["Someone Else/a2"] = { id = "a2", by = "Someone Else", target = "X Z", amount = 1234, state = "done", killer = "Buddy Pal", t = time() },
     ["Buddy Pal/a3"] = { id = "a3", by = "Buddy Pal", target = "X W", amount = 9999, state = "paid", killer = "Buddy Pal", t = time() },
@@ -3954,7 +3954,7 @@ do
   check(ns.Contracts.EarnedBy("Buddy Pal") == 50000, "bounties collected: paid ones only, not their own")
   check(ns.Plain(cols[bcol][3]({ name = "Buddy Pal" })):find("5 ", 1, true) and cols[bcol][3]({ name = "Nobody Here" }) == "",
     "the Bounties cell: gold collected, empty for none")
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   -- the window: one tick box per friend account; ticking adds them to the alert list
   ns.Comm.ClearPicks()
   ns.UI.ShowAlertList()
@@ -4004,8 +4004,8 @@ do
   rr.players["Kb Target"] = nil
 
   -- the bounty board: a killing blow closes it, even if someone else reported the kill first
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local c = C.Post({ name = "Kb Mark", class = "ROGUE" }, 10000, 3)
@@ -4021,7 +4021,7 @@ do
   -- a friend's bounty: their message without a killing blow doesn't undo the one you know of
   local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
   bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "open", killer = "", age = 60, updage = 60, days = 3 }, "kbm1")
-  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/kb1"]
+  local theirs = ns.Data.Realm().contracts["Buddy Pal/kb1"]
   ns.Events.Emit("KILL", { victim = "Kb Other", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood", blow = "1" })
   check(theirs.killer == ns.me and theirs.blow, "your killing blow on a friend's target")
   bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, blow = "" }, "kbm2")
@@ -4029,7 +4029,7 @@ do
   bty({ cid = "kb1", target = "Kb Other:MAGE:50:", amount = 500, state = "paid", killer = ns.me, age = 60, updage = 0, days = 3, blow = "1" }, "kbm3")
   check(theirs.state == "paid" and theirs.killer == ns.me, "and their 'paid' goes through")
   for _, name in ipairs({ "Kb Mark", "Kb Other" }) do rr.hitlist[name], rr.players[name] = nil, nil end
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   ns.S().show.contract = showWas
   RUN_TICKERS(80)
   check(ns.errors == errs, "no errors in killing-blow credit (" .. tostring(ns.lastError) .. ")")
@@ -4213,8 +4213,8 @@ do
   rr.players["Lp Target"] = nil
 
   -- the bounty board
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local c = C.Post({ name = "Lp Mark", class = "ROGUE" }, 10000, 3)
@@ -4231,7 +4231,7 @@ do
   -- a friend's bounty: the poster's message with a worse credit doesn't override yours
   local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
   bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "open", killer = "", age = 60, updage = 60, days = 3 }, "lpm1")
-  local theirs = FriendsAndFoesDB.contracts["Buddy Pal/lp1"]
+  local theirs = ns.Data.Realm().contracts["Buddy Pal/lp1"]
   ns.Events.Emit("KILL", { victim = "Lp Other", vclass = "MAGE", vlevel = 50, vguild = "", zone = "Duskwood", last = "5" })
   check(theirs.killer == ns.me and theirs.last == 5 and not theirs.blow, "your last attack counted on a friend's target")
   bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, last = "40" }, "lpm2")
@@ -4239,7 +4239,7 @@ do
   bty({ cid = "lp1", target = "Lp Other:MAGE:50:", amount = 500, state = "done", killer = "Alice Wonder", age = 60, updage = 0, days = 3, blow = "pet", last = "" }, "lpm3")
   check(theirs.killer == "Alice Wonder" and theirs.blow == "pet", "...but one with a pet's blow outranks it")
   for _, name in ipairs({ "Lp Mark", "Lp Other" }) do rr.hitlist[name], rr.players[name] = nil, nil end
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   ns.S().show.contract = showWas
   RUN_TICKERS(80)
   check(ns.errors == errs, "no errors in pet and last-attack credit (" .. tostring(ns.lastError) .. ")")
@@ -4252,10 +4252,10 @@ do
   local B = ns.Bounty
   local L = ns.L
   local rr = ns.Data.RealRealm()
-  local P = FriendsAndFoesDB.profile
-  local savedB, savedW = P.bounty, FriendsAndFoesDB.weekly
+  local P = ns.Data.Realm().profile
+  local savedB, savedW = P.bounty, ns.Data.Realm().weekly
   P.bounty = nil
-  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  ns.Data.Realm().weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
   B.SettleAll() -- (leftover claims settle too)
   local pushed = {}
   local realPush = ns.Toast.Push
@@ -4281,7 +4281,7 @@ do
   local names = { "Rando One", "Hit Hank", "Hit Hugo", "Rank Ron", "Title Tim", "Wk Wendy" }
 
   -- a random: 10, then less for repeats within 30 minutes (wall time moves with ns.eventTime)
-  FriendsAndFoesDB.repeats = nil
+  ns.Data.Realm().repeats = nil
   local wall = time()
   local function at(secs) ns.eventTime = wall + secs end
   at(0)
@@ -4291,7 +4291,7 @@ do
   claim("Rando One")
   check(B.Mine() == before + 10, "claimed a random: 10")
   check(B.Open("Rando One") == 5, "the same random again within 30 minutes: 5")
-  FriendsAndFoesDB.repeats = nil
+  ns.Data.Realm().repeats = nil
   hit("Rando One", 0, 0)
   check(B.Open("Rando One") == 10 and B.Rank("Rando One") == nil, "an empty hitlist entry is still a random")
 
@@ -4368,9 +4368,9 @@ do
     check(pos["Hit Hugo"] < pos["Hit Hank"], "Hitlist: and the other way round")
     ns.UI.SortBy(7) -- (back to Last seen, newest first)
     -- nothing to collect: a grey dash
-    FriendsAndFoesDB.repeats = { ["Hit Hugo"] = { now - 300, now - 200, now - 100 } }
+    ns.Data.Realm().repeats = { ["Hit Hugo"] = { now - 300, now - 200, now - 100 } }
     check(B.Open("Hit Hugo") == 0 and cell(hugo) == "|cff888888-|r", "Hitlist: no points: a dash")
-    FriendsAndFoesDB.repeats = nil
+    ns.Data.Realm().repeats = nil
   end
 
   -- cooling: x0.9 per full day since their last offence
@@ -4456,14 +4456,14 @@ do
   check(find(L.HEADER_TAKEDOWN) == nil, "100 is no takedown: no toast")
 
   -- this week
-  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  ns.Data.Realm().weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
   P.bounty = { total = 0, allTime = 0, count = 0, clock = time() }
   enemy("Wk Wendy", 2, 0)
   hit("Wk Wendy", 2, 0)
   claim("Wk Wendy")
-  check(B.Week() == 200 and FriendsAndFoesDB.weekly.bt == 200, "this week: 200")
+  check(B.Week() == 200 and ns.Data.Realm().weekly.bt == 200, "this week: 200")
   local f = ns.Profile.Fields()
-  check(tostring(f.btw) == "200" and f.bwk == math.floor(FriendsAndFoesDB.weekly.start / 86400), "this week goes out with your profile")
+  check(tostring(f.btw) == "200" and f.bwk == math.floor(ns.Data.Realm().weekly.start / 86400), "this week goes out with your profile")
   local weekLine
   for _, l in ipairs(ns.UI.ProfileView(ns.me).lines) do if l[1] == L.PROF_BOUNTIES_WEEK then weekLine = ns.Plain(tostring(l[2])) end end
   check(weekLine and weekLine:find("200", 1, true), "your profile shows this week")
@@ -4475,12 +4475,12 @@ do
   check(B.FriendWeek(pal) == 0, "a stale week shows as 0")
   ns.Profile.Apply(pal, { k = "1", d = "1", wanted = "", zone = "", status = "", t = "", bt = "900" })
   check(B.FriendWeek(pal) == nil, "an older version: unknown")
-  FriendsAndFoesDB.weekly.start = time() - 8 * 86400
+  ns.Data.Realm().weekly.start = time() - 8 * 86400
   check(B.Week() == 0, "the week is over: back to 0")
   rr.players["Wk Wendy"].k = 3
   claim("Wk Wendy")
-  check(B.Week() == 100 and time() - FriendsAndFoesDB.weekly.start < 60, "a claim after the boundary starts a new week with it, got " .. B.Week())
-  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 0, killers = {}, bt = 350 }
+  check(B.Week() == 100 and time() - ns.Data.Realm().weekly.start < 60, "a claim after the boundary starts a new week with it, got " .. B.Week())
+  ns.Data.Realm().weekly = { start = time() - 8 * 86400, k = 1, d = 0, killers = {}, bt = 350 }
   CHAT = {}
   ns.Events.WeeklyRoll()
   RUN_TIMERS()
@@ -4490,9 +4490,9 @@ do
 
   ns.Toast.Push = realPush
   ns.eventTime = nil
-  FriendsAndFoesDB.repeats = nil
+  ns.Data.Realm().repeats = nil
   for _, n in ipairs(names) do rr.players[n], rr.hitlist[n] = nil, nil end
-  P.bounty, FriendsAndFoesDB.weekly = savedB, savedW
+  P.bounty, ns.Data.Realm().weekly = savedB, savedW
   RUN_TICKERS(80)
   check(ns.errors == errs, "no errors with the notoriety rules (" .. tostring(ns.lastError) .. ")")
 end
@@ -4502,11 +4502,11 @@ do
   local errs = ns.errors
   local B = ns.Bounty
   local rr = ns.Data.RealRealm()
-  local P = FriendsAndFoesDB.profile
-  local savedB, savedW, savedR = P.bounty, FriendsAndFoesDB.weekly, FriendsAndFoesDB.repeats
+  local P = ns.Data.Realm().profile
+  local savedB, savedW, savedR = P.bounty, ns.Data.Realm().weekly, ns.Data.Realm().repeats
   P.bounty = { total = 0, allTime = 0, count = 0, clock = time() }
-  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
-  FriendsAndFoesDB.repeats = nil
+  ns.Data.Realm().weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  ns.Data.Realm().repeats = nil
   B.SettleAll()
   local pushed = {}
   local realPush = ns.Toast.Push
@@ -4576,13 +4576,13 @@ do
   at(400)
   kill("Camp Carl", 400)
   local n = 0
-  for _ in pairs(FriendsAndFoesDB.repeats) do n = n + 1 end
-  check(n == 1 and #FriendsAndFoesDB.repeats["Camp Carl"] <= 4, "old chains are dropped from the saved list")
+  for _ in pairs(ns.Data.Realm().repeats) do n = n + 1 end
+  check(n == 1 and #ns.Data.Realm().repeats["Camp Carl"] <= 4, "old chains are dropped from the saved list")
 
   ns.Toast.Push = realPush
   ns.eventTime = nil
   for _, nm in ipairs({ "Camp Carl", "Chain Cher", "Hit Hal", "Dup Dan", "Past Pat" }) do rr.players[nm], rr.hitlist[nm] = nil, nil end
-  P.bounty, FriendsAndFoesDB.weekly, FriendsAndFoesDB.repeats = savedB, savedW, savedR
+  P.bounty, ns.Data.Realm().weekly, ns.Data.Realm().repeats = savedB, savedW, savedR
   RUN_TICKERS(80)
   check(ns.errors == errs, "no errors with repeat kills (" .. tostring(ns.lastError) .. ")")
 end
@@ -4641,7 +4641,7 @@ do
   FriendsAndFoesDB.outbox = {}
   ns.Comm.Remember("LVL", "mine1", { level = 31 })
   local box = ns.Comm.Outbox()
-  box[#box + 1] = { t = time() - 600, kind = "KILL", id = "altk1", who = "Testme Alt", c = "MAGE", l = 22,
+  box[#box + 1] = { t = time() - 600, kind = "KILL", id = "altk1", who = "Testme Alt", c = "MAGE", l = 22, rs = "PvP",
     f = { victim = "Alt Victim", vclass = "MAGE", vlevel = "40", vguild = "", zone = "Duskwood", streak = "1", rl = "" } }
   check(box[1].who == ns.me and box[1].c == "WARRIOR", "an event remembers which character it's from")
 
@@ -4737,9 +4737,9 @@ do
   local restore = S.friends(F)
   ns.Comm.ClearPicks()
   local rr = ns.Data.RealRealm()
-  local savedHit, savedAt = rr.hitlist, FriendsAndFoesDB.digestAt
+  local savedHit, savedAt = rr.hitlist, ns.Data.Realm().digestAt
   rr.hitlist = {}
-  FriendsAndFoesDB.digestAt = nil
+  ns.Data.Realm().digestAt = nil
   for i = 1, 60 do
     rr.hitlist["Digest" .. i .. " Foe"] = { name = "Digest" .. i .. " Foe", class = "ROGUE", level = 40 + i % 20, guild = "Some: Guild; Name|x",
       attacks = i, kills = 1, revenge = 0, suspect = 0, victims = { ["Some Victim"] = true }, lastSeen = time() - i * 3600 }
@@ -4771,15 +4771,15 @@ do
   check(#d >= 2 and #entries == ns.Comm.DIGEST_MAX and fits, "a friend you meet gets the 40 most active entries in a few small messages: " .. #d .. " / " .. #entries)
   check(entries[1]:find("^Digest1 Foe:ROGUE:") ~= nil and not entries[1]:find("|", 1, true) and select(2, entries[1]:gsub(":", ":")) == 8
     and not table.concat(entries, ";"):find("Quiet", 1, true), "the newest first, one packed form, nothing empty")
-  check(FriendsAndFoesDB.digestAt["Buddy#1234"] ~= nil, "remembered per BattleTag")
+  check(ns.Data.Realm().digestAt["Buddy#1234"] ~= nil, "remembered per BattleTag")
   meetAgain()
   check(#digests() == 0, "meeting again soon: not sent again")
-  FriendsAndFoesDB.digestAt["Buddy#1234"] = time() - 8 * 86400
+  ns.Data.Realm().digestAt["Buddy#1234"] = time() - 8 * 86400
   meetAgain()
   check(#digests() >= 2, "after a week: sent again")
 
   -- an older add-on gets none, until its messages show a version that has it
-  FriendsAndFoesDB.digestAt = nil
+  ns.Data.Realm().digestAt = nil
   buddy.version = "0.9.3"
   meetAgain()
   check(#digests() == 0, "a friend on 0.9.3 doesn't get one")
@@ -4811,7 +4811,7 @@ do
     "an old version's manual share: one chat line, no toast, no sound")
   ns.S().show.kill = savedShow
 
-  rr.hitlist, FriendsAndFoesDB.digestAt = savedHit, savedAt
+  rr.hitlist, ns.Data.Realm().digestAt = savedHit, savedAt
   for name in pairs(rr.players) do if name:find("^Digest") then rr.players[name] = nil end end
   restore()
   check(ns.errors == errs, "no errors with the digest (" .. tostring(ns.lastError) .. ")")
@@ -4827,9 +4827,9 @@ do
   ns.Comm.RebuildRoster()
   S.drain()
   local rr = ns.Data.RealRealm()
-  local savedStore = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
-  local store = FriendsAndFoesDB.contracts
+  local savedStore = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
+  local store = ns.Data.Realm().contracts
   rr.players["Alice Wonder"] = rr.players["Alice Wonder"] or { name = "Alice Wonder", k = 0, d = 0, a = 0 }
   rr.players["Alice Wonder"].friend, rr.players["Alice Wonder"].version = true, ns.VERSION
   ns.Data.Player("Buddy Pal").version = ns.VERSION
@@ -4890,7 +4890,7 @@ do
   for _, m in ipairs(S.sent(77, "BTY")) do if m.f.poster ~= "" then relayed = relayed + 1 end end
   check(relayed == C.RELAY_MAX, "greeting a friend on 0.9.4 passes them on")
 
-  FriendsAndFoesDB.contracts = savedStore
+  ns.Data.Realm().contracts = savedStore
   rr.hitlist["Bounty Mark"], rr.players["Bounty Mark"] = nil, nil
   for i = 1, 15 do rr.hitlist["Lim" .. i .. " Mark"] = nil end
   restore()
@@ -5046,9 +5046,9 @@ do
   local restore = S.friends(F)
   ns.Comm.ClearPicks()
   local rr = ns.Data.RealRealm()
-  local savedHit, savedAt = rr.hitlist, FriendsAndFoesDB.digestAt
+  local savedHit, savedAt = rr.hitlist, ns.Data.Realm().digestAt
   rr.hitlist = {}
-  FriendsAndFoesDB.digestAt = nil
+  ns.Data.Realm().digestAt = nil
   local buddy = ns.Data.Player("Buddy Pal")
   buddy.friend, buddy.version = true, ns.VERSION
   ns.Data.Player("Mutual Friend").friend = true
@@ -5087,7 +5087,7 @@ do
   check(n <= 10, "hitWho is capped: " .. n)
 
   -- the sender: entries with no victims aren't sent; names are packed (you first), and it all fits
-  FriendsAndFoesDB.digestAt = nil
+  ns.Data.Realm().digestAt = nil
   rr.hitlist = {}
   for i = 1, 45 do
     rr.hitlist["Longname" .. i .. " Verylongsurnamehere"] = { name = "Longname" .. i .. " Verylongsurnamehere", class = "ROGUE", level = 60,
@@ -5116,7 +5116,7 @@ do
   check(fits and who and who:match("^" .. ns.me) and select(2, who:gsub(",", ",")) == 2 and not who:find("[:;|\t]"),
     "long names: packed under 255 bytes, you first, 3 names: " .. tostring(who))
 
-  rr.hitlist, FriendsAndFoesDB.digestAt = savedHit, savedAt
+  rr.hitlist, ns.Data.Realm().digestAt = savedHit, savedAt
   for name in pairs(rr.players) do if name:find("^Fw ") or name == "Mutual Friend" then rr.players[name] = nil end end
   restore()
   check(ns.errors == errs, "no errors with the filtered digest (" .. tostring(ns.lastError) .. ")")
@@ -5128,8 +5128,8 @@ do
   local errs = ns.errors
   local s = ns.S()
   local saved = { s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore }
-  local savedContracts = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local savedContracts = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local function put(name, kills, attacks, days)
     real.hitlist[name] = { name = name, kills = kills, attacks = attacks, victims = {}, lastSeen = time() - days * day }
   end
@@ -5174,10 +5174,10 @@ do
   -- an open contract keeps an old attacker; once it is closed they can go
   set(14, 0, 0)
   put("Ftest Keeper", 0, 1, 200)
-  FriendsAndFoesDB.contracts["Pal/1"] = { id = "1", by = "Pal", target = "Ftest Keeper", amount = 100, state = "open", t = time() }
+  ns.Data.Realm().contracts["Pal/1"] = { id = "1", by = "Pal", target = "Ftest Keeper", amount = 100, state = "open", t = time() }
   ns.Data.ForgetOld(FriendsAndFoesDB)
   check(has("Ftest Keeper"), "an open bounty keeps an old attacker")
-  FriendsAndFoesDB.contracts["Pal/1"].state = "cancelled"
+  ns.Data.Realm().contracts["Pal/1"].state = "cancelled"
   ns.Data.ForgetOld(FriendsAndFoesDB)
   check(not has("Ftest Keeper"), "no open bounty: forgotten")
   -- seeing them again resets the clock
@@ -5191,7 +5191,7 @@ do
   -- upgrade step 14: the old mode becomes three numbers and goes away
   local function upgrade(mode)
     s.forget, s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = mode, 99, 99, 99
-    FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 2
+    FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 3
     ns.Saved.Upgrade(FriendsAndFoesDB)
   end
   upgrade("never")
@@ -5202,12 +5202,12 @@ do
   check(s.forget == nil and s.forgetAttackers == 14 and s.forgetKilledOnce == 0 and s.forgetKilledMore == 0, "upgrade: normal -> the defaults")
   s.forget = nil
   s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = 7, 30, 90
-  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 2
+  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 3
   ns.Saved.Upgrade(FriendsAndFoesDB)
   check(s.forgetAttackers == 7 and s.forgetKilledOnce == 30 and s.forgetKilledMore == 90, "upgrade: new settings are left alone")
   -- step 15: the old battleground tracking value is deleted
   s.track.pvp = true
-  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 1
+  FriendsAndFoesDB.dataVersion = #ns.Saved.STEPS - 2
   ns.Saved.Upgrade(FriendsAndFoesDB)
   check(s.track.pvp == nil and s.track.world == true and FriendsAndFoesDB.dataVersion == #ns.Saved.STEPS, "upgrade: the old battleground tracking switch is deleted")
   -- the login run says so once when it removed players; silent when nothing goes
@@ -5224,7 +5224,7 @@ do
     clear()
   end
   s.forgetAttackers, s.forgetKilledOnce, s.forgetKilledMore = saved[1], saved[2], saved[3]
-  FriendsAndFoesDB.contracts = savedContracts
+  ns.Data.Realm().contracts = savedContracts
   check(ns.errors == errs, "no errors in forgetting (" .. tostring(ns.lastError) .. ")")
 end
 RUN_TICKERS(80)
@@ -5234,8 +5234,8 @@ do
   local errs = ns.errors
   local C = ns.Contracts
   local rr = ns.Data.RealRealm()
-  local saved = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local saved = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local function bty(fields, id) FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("BTY", fields, id), "WHISPER", 77) end
@@ -5369,7 +5369,7 @@ do
 
   -- a friend's bounty: your kill, then the poster's list merges with yours (union, never fewer, at most 5)
   bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "open", killer = "", age = 60, updage = 60, days = 5 }, "mg1")
-  local m = FriendsAndFoesDB.contracts["Buddy Pal/m1"]
+  local m = ns.Data.Realm().contracts["Buddy Pal/m1"]
   C.OnKill(ns.me, "Merge Foe")
   check(m.state == "done" and #m.killers == 1 and m.killers[1] == ns.me, "(you got them)")
   bty({ cid = "m1", target = "Merge Foe:MAGE:50:", amount = 9000, state = "done", killer = "Alice Wonder", killers = "Alice Wonder,Cara Dune", age = 60, updage = 0, days = 5 }, "mg2")
@@ -5385,11 +5385,11 @@ do
 
   -- an older client: no killers field, only the one killer
   bty({ cid = "m2", target = "Old Foe:MAGE:50:", amount = 700, state = "done", killer = "Alice Wonder", age = 60, updage = 5, days = 5 }, "mg6")
-  local old = FriendsAndFoesDB.contracts["Buddy Pal/m2"]
+  local old = ns.Data.Realm().contracts["Buddy Pal/m2"]
   check(old and old.state == "done" and old.killer == "Alice Wonder" and #old.killers == 1 and old.killers[1] == "Alice Wonder" and C.ShareOf(old) == 700,
     "an old-format message (no killers field) still works")
   local legacy = { by = "Buddy Pal", state = "paid", killer = "Alice Wonder", amount = 700 }
-  FriendsAndFoesDB.contracts["Buddy Pal/legacy"] = legacy
+  ns.Data.Realm().contracts["Buddy Pal/legacy"] = legacy
   check(C.EarnedBy("Alice Wonder") == 700 + 30000 and C.ShareOf(legacy) == 700, "a saved contract without a list: the one killer, the full amount")
 
   -- 5 long names still fit in one message
@@ -5410,7 +5410,7 @@ do
   for _, name in ipairs({ "Share Foe", "Own Foe", "Pf Foe", "Pf Two", "Solo Foe", "Merge Foe", "Old Foe", "Long Foe" }) do
     rr.hitlist[name], rr.players[name] = nil, nil
   end
-  FriendsAndFoesDB.contracts = saved
+  ns.Data.Realm().contracts = saved
   ns.S().show.contract = showWas
   ns.eventTime = nil
   check(ns.errors == errs, "no errors in shared bounties (" .. tostring(ns.lastError) .. ")")
@@ -5429,8 +5429,8 @@ do
   local oEmit = ns.Events.Emit
   local asts = {}
   ns.Events.Emit = function(kind, f) if kind == "AST" then asts[#asts + 1] = f end return oEmit(kind, f) end
-  local savedContracts = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local savedContracts = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local mine = rr.players[ns.me]
@@ -5537,7 +5537,7 @@ do
 
   for _, n in ipairs({ "As One", "As Two", "As Three", "As Four", "As Five" }) do rr.players[n], rr.hitlist[n] = nil, nil end
   ns.Events.Emit = oEmit
-  FriendsAndFoesDB.contracts = savedContracts
+  ns.Data.Realm().contracts = savedContracts
   ns.S().show.contract = showWas
   FriendsAndFoesCharDB.streak = streakWas
   check(ns.errors == errs, "no errors in assists by support (" .. tostring(ns.lastError) .. ")")
@@ -5563,8 +5563,8 @@ do
   local debugWas = ns.S().debug
   ns.S().debug = true
   FriendsAndFoesDB.debugLog = {}
-  local savedContracts = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local savedContracts = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local showWas = ns.S().show.contract
   ns.S().show.contract = "chat"
   local buddy = rr.players["Buddy Pal"]
@@ -5713,7 +5713,7 @@ do
   check(logHas("DIGEST-GOT", "entries 1"), "a digest is logged with its counts")
 
   for _, n in ipairs({ "Du One", "Du Two", "Du Five", "Du Six", "Du Seven", "Du Eight", "Du Nine", "Du Dig", "Du Alt Foe", "Du Echo" }) do rr.players[n], rr.hitlist[n] = nil, nil end
-  FriendsAndFoesDB.contracts = savedContracts
+  ns.Data.Realm().contracts = savedContracts
   ns.S().show.contract = showWas
   ns.S().debug = debugWas
   check(ns.errors == errs, "no errors in once-per-death (" .. tostring(ns.lastError) .. ")")
@@ -6117,8 +6117,8 @@ do
   local rr = D.RealRealm()
   local debugWas = ns.S().debug
   ns.S().debug = true
-  local savedContracts = FriendsAndFoesDB.contracts
-  FriendsAndFoesDB.contracts = {}
+  local savedContracts = ns.Data.Realm().contracts
+  ns.Data.Realm().contracts = {}
   local slash = SlashCmdList.FRIENDSANDFOES
   local function printed(text)
     for _, l in ipairs(PRINTED) do if l:find(text, 1, true) then return true end end
@@ -6197,7 +6197,7 @@ do
   PRINTED, SENT = {}, {}
   slash("bounty Zork Quux 10g 3d Caught me AFK")
   local zork
-  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Zork Quux" then zork = c end end
+  for _, c in pairs(ns.Data.Realm().contracts) do if c.target == "Zork Quux" then zork = c end end
   check(zork and zork.amount == 100000 and zork.days == 3 and zork.note == "Caught me AFK", "bounty by name: posted without a target, with days and a note")
   check(rr.hitlist["Zork Quux"] and rr.hitlist["Zork Quux"].manual, "bounty by name: the target is on your hitlist as manual")
   RUN_TICKERS(4)
@@ -6213,15 +6213,15 @@ do
   check(cmd.name == "Père Sévérance" and cmd.note == "quoted words", "/fnf bounty: accents and quotes")
   PRINTED = {}
   local before = 0
-  for _ in pairs(FriendsAndFoesDB.contracts) do before = before + 1 end
+  for _ in pairs(ns.Data.Realm().contracts) do before = before + 1 end
   slash("bounty 10g")
   local after = 0
-  for _ in pairs(FriendsAndFoesDB.contracts) do after = after + 1 end
+  for _ in pairs(ns.Data.Realm().contracts) do after = after + 1 end
   check(printed(L.CONTRACT_NEED_TARGET) and after == before, "/fnf bounty with no name and no target: asks for one")
   enemyUnits.target = { "Targ", "Et", false }
   slash("bounty 7g 2d")
   local targ
-  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Targ Et" then targ = c end end
+  for _, c in pairs(ns.Data.Realm().contracts) do if c.target == "Targ Et" then targ = c end end
   check(targ and targ.amount == 70000 and targ.days == 2 and not (rr.hitlist["Targ Et"] or {}).manual, "/fnf bounty on your target as before (not manual)")
   enemyUnits.target = nil
   PRINTED = {}
@@ -6238,7 +6238,7 @@ do
   fields.name:SetText("dlg foe"); fields.amount:SetText("5g"); fields.days:SetText("2"); fields.note:SetText("From the dialog")
   fields.note._scripts.OnEnterPressed(fields.note)
   local dlg
-  for _, c in pairs(FriendsAndFoesDB.contracts) do if c.target == "Dlg Foe" then dlg = c end end
+  for _, c in pairs(ns.Data.Realm().contracts) do if c.target == "Dlg Foe" then dlg = c end end
   check(dlg and dlg.amount == 50000 and dlg.days == 2 and dlg.note == "From the dialog" and not win:IsShown(), "the dialog posts it and closes")
   enemyUnits.target = { "Pre", "Filled", false }
   ns.UI.PostBounty()
@@ -6256,13 +6256,13 @@ do
   check(accent and P.Length(accent.note) == 60 and #accent.note == 120, "...counted in characters")
   check(C.Post({ name = "Note Foe" }, 100, 3, "   ").note == nil, "an empty note is no note")
   bty({ cid = "n1", target = "Rude Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4, note = "Hitler Fans" }, "n1")
-  local rude = FriendsAndFoesDB.contracts["Buddy Pal/n1"]
+  local rude = ns.Data.Realm().contracts["Buddy Pal/n1"]
   check(rude and rude.note == nil, "a friend's note that fails the filter is dropped when received (the bounty stays)")
   bty({ cid = "n2", target = "Kind Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4, note = "Good |cffff0000luck|r" }, "n2")
-  local kind = FriendsAndFoesDB.contracts["Buddy Pal/n2"]
+  local kind = ns.Data.Realm().contracts["Buddy Pal/n2"]
   check(kind and kind.note and not kind.note:find("|", 1, true), "a received note has its '|' stripped: " .. tostring(kind and kind.note))
   bty({ cid = "n3", target = "Old Foe:MAGE:50:", amount = 700, state = "open", killer = "", age = 1, updage = 1, days = 4 }, "n3")
-  check(FriendsAndFoesDB.contracts["Buddy Pal/n3"] and FriendsAndFoesDB.contracts["Buddy Pal/n3"].note == nil, "an older friend's bounty has no note: fine")
+  check(ns.Data.Realm().contracts["Buddy Pal/n3"] and ns.Data.Realm().contracts["Buddy Pal/n3"].note == nil, "an older friend's bounty has no note: fine")
   -- fits 255 bytes: a full note with a long name and no helper names is kept whole; with everything at its longest the note goes first
   local NAME = "Abcdefghijkl Mnopqrstuvwx"
   local msg = { kind = "BTY", id = "ffffffffff", name = NAME, class = "WARRIOR", level = 60, f = { cid = "ffffffffff",
@@ -6314,16 +6314,16 @@ do
   FIRE("BN_CHAT_MSG_ADDON", "FNF1", payload("SIGHT", { name = "Plain Foe", class = "MAGE", level = "24", guild = "", zone = "Duskwood" }, "sp3"), "WHISPER", 77)
   check(pushed[#pushed].kind == "sighting" and not pushed[#pushed].alert, "a sighting with no bounty is the normal toast")
   -- done or run-out bounties don't count
-  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].state = "done"
+  ns.Data.Realm().contracts["Buddy Pal/sp1"].state = "done"
   ADVANCE(301)
   FIRE("PLAYER_TARGET_CHANGED")
   check(#centre == 2, "a finished bounty: no alert")
-  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].state = "open"
-  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].t = time() - 6 * 86400
+  ns.Data.Realm().contracts["Buddy Pal/sp1"].state = "open"
+  ns.Data.Realm().contracts["Buddy Pal/sp1"].t = time() - 6 * 86400
   ADVANCE(301)
   FIRE("PLAYER_TARGET_CHANGED")
   check(#centre == 2, "a bounty past its days: no alert")
-  FriendsAndFoesDB.contracts["Buddy Pal/sp1"].t = time()
+  ns.Data.Realm().contracts["Buddy Pal/sp1"].t = time()
   -- the bounty alert setting: chat = a chat line only; off = nothing
   ns.S().show.contract = "chat"
   ADVANCE(301)
@@ -6388,24 +6388,24 @@ do
   ns.eventTime = nil
   check(killer.kt and killer.kt["Tie Victim"] == 5000, "a death at their hands records when")
   -- the weekly summary uses the same rule
-  local weeklyWas = FriendsAndFoesDB.weekly
-  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 100, Bbb = 200 }, bt = 0 }
+  local weeklyWas = ns.Data.Realm().weekly
+  ns.Data.Realm().weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 100, Bbb = 200 }, bt = 0 }
   local said = {}
   local chatWas = ns.Toast.Chat
   ns.Toast.Chat = function(text) said[#said + 1] = ns.Plain(text) end
   ns.Events.WeeklyRoll()
   RUN_TIMERS()
   check(said[1] and said[1]:find("Nemesis: Bbb", 1, true), "weekly summary: a tie goes to the most recent killer: " .. tostring(said[1]))
-  FriendsAndFoesDB.weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 300, Bbb = 200 }, bt = 0 }
+  ns.Data.Realm().weekly = { start = time() - 8 * 86400, k = 1, d = 4, killers = { Aaa = 2, Bbb = 2 }, killedAt = { Aaa = 300, Bbb = 200 }, bt = 0 }
   said = {}
   ns.Events.WeeklyRoll()
   RUN_TIMERS()
   check(said[1] and said[1]:find("Nemesis: Aaa", 1, true), "...either way round")
   ns.Toast.Chat = chatWas
-  FriendsAndFoesDB.weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
+  ns.Data.Realm().weekly = { start = time(), k = 0, d = 0, killers = {}, bt = 0 }
   ns.Events.WeeklyAdd("d", "Zed Zed")
-  check(FriendsAndFoesDB.weekly.killedAt and FriendsAndFoesDB.weekly.killedAt["Zed Zed"], "a death records when its killer got you")
-  FriendsAndFoesDB.weekly = weeklyWas
+  check(ns.Data.Realm().weekly.killedAt and ns.Data.Realm().weekly.killedAt["Zed Zed"], "a death records when its killer got you")
+  ns.Data.Realm().weekly = weeklyWas
 
   -- tidy up
   for _, name in ipairs({ "Ru Mia", "Ui Added", "Zork Quux", "Targ Et", "Dlg Foe", "Note Foe", "Rude Foe", "Kind Foe", "Old Foe", "Hunted One",
@@ -6413,7 +6413,7 @@ do
     rr.hitlist[name], rr.players[name] = nil, nil
   end
   for k, v in pairs(o) do _G[k] = v end
-  FriendsAndFoesDB.contracts = savedContracts
+  ns.Data.Realm().contracts = savedContracts
   ns.S().debug = debugWas
   drainToasts()
   check(ns.errors == errs, "no errors in 1.0.1 features (" .. tostring(ns.lastError) .. ")")
@@ -6426,26 +6426,26 @@ do
   local noon -- (set below)
   local function comp(key) St.Seed(true); return St.Compute(key, noon) end -- (the totals come from the log entries)
   local function sv() St.Seed(true); return ns.UI.StatsView() end
-  local logWas, bestWas, streakWas = FriendsAndFoesDB.killLog, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak
-  FriendsAndFoesDB.killLog = nil
+  local logWas, bestWas, streakWas = ns.Data.Realm().killLog, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak
+  ns.Data.Realm().killLog = nil
   -- your own live kill is logged with both levels and the zone (you are level 30 in the mock)
   ns.Events.Emit("KILL", { victim = "Log Bob", vclass = "MAGE", vlevel = "33", vguild = "", zone = "Duskwood" })
-  local e1 = FriendsAndFoesDB.killLog and FriendsAndFoesDB.killLog[1]
+  local e1 = ns.Data.Realm().killLog and ns.Data.Realm().killLog[1]
   check(e1 and e1.n == "Log Bob" and e1.vl == 33 and e1.ml == 30 and e1.z == "Duskwood" and e1.t, "a live kill is logged: name, both levels, zone, time")
   ns.Events.Emit("KILL", { victim = "Log Skull", vclass = "MAGE", vlevel = "0", vguild = "", zone = "Duskwood" })
   ns.Events.Emit("KILL", { victim = "Log Unknown", vclass = "MAGE", vlevel = "", vguild = "", zone = "" })
-  local log = FriendsAndFoesDB.killLog
+  local log = ns.Data.Realm().killLog
   check(#log == 3 and log[2].vl == -1 and log[3].vl == nil and log[3].z == nil, "skull is stored as -1, unknown as nil")
   -- caught-up kills are never logged
   ns.past = true
   ns.Events.Emit("KILL", { victim = "Log Old", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
   ns.past = nil
-  check(#FriendsAndFoesDB.killLog == 3, "a caught-up kill is not logged")
+  check(#ns.Data.Realm().killLog == 3, "a caught-up kill is not logged")
   -- the cap: 1000, oldest dropped
-  FriendsAndFoesDB.killLog = {}
-  for i = 1, St.LOG_MAX do FriendsAndFoesDB.killLog[i] = { t = i, n = "N" .. i, vl = 30, ml = 30 } end
+  ns.Data.Realm().killLog = {}
+  for i = 1, St.LOG_MAX do ns.Data.Realm().killLog[i] = { t = i, n = "N" .. i, vl = 30, ml = 30 } end
   St.Log("Newest One", "31", "Duskwood")
-  local capped = FriendsAndFoesDB.killLog
+  local capped = ns.Data.Realm().killLog
   check(#capped == 1000 and capped[1].n == "N2" and capped[1000].n == "Newest One", "the log keeps the newest 1000")
   -- the best streak is remembered (the current one is Events.lua's)
   FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = 99, nil, 0
@@ -6459,7 +6459,7 @@ do
   -- the numbers (a made-up log, noon on a Monday; you are 30)
   noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
   local function k(ago, vl, ml, z) return { t = noon - ago, c = ns.me, n = "V", vl = vl, ml = ml, z = z } end
-  FriendsAndFoesDB.killLog = {
+  ns.Data.Realm().killLog = {
     k(3600, 20, 30, "Duskwood"),     -- grey (22 or less), today, Monday 11:00
     k(3700, 26, 30, "Duskwood"),     -- lower (4 below), today, Monday 10:58
     k(3650, 28, 30, "Duskwood"),     -- even (2 below), today, Monday 10:59
@@ -6481,13 +6481,13 @@ do
     "top zones: most first, ties by name")
   local many = {}
   for i = 1, 8 do many[#many + 1] = { t = noon, c = ns.me, vl = 30, ml = 30, z = "Zone" .. i } end
-  FriendsAndFoesDB.killLog = many
+  ns.Data.Realm().killLog = many
   check(#comp().zones == 5, "at most 5 zones")
   -- busiest weekday and hour: only from 20 logged kills (19 shows nothing)
   local mon = time({ year = 2026, month = 6, day = 15, hour = 11, min = 30 })
   local busy = {}
   for i = 1, 19 do busy[i] = { t = mon - i, c = ns.me, vl = 30, ml = 30, z = "A" } end
-  FriendsAndFoesDB.killLog = busy
+  ns.Data.Realm().killLog = busy
   s = comp()
   check(s.n == 19 and s.busyDay == nil and s.busyHour == nil, "19 kills: no busiest weekday or hour yet")
   busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
@@ -6495,27 +6495,27 @@ do
   check(s.n == 20 and s.busyDay == 2 and s.busyHour == 11, "20 kills: busiest weekday and hour (Monday, 11:00)")
   -- average level and gap: only from 5 kills with a known, non-skull level (4 shows nothing)
   local function lv(n) local l = {} for i = 1, n do l[i] = { t = noon - i, c = ns.me, vl = 30 + i, ml = 30 } end return l end
-  FriendsAndFoesDB.killLog = lv(4)
+  ns.Data.Realm().killLog = lv(4)
   s = comp()
   check(s.avgLevel == nil and s.avgGap == nil and s.levelN == 4, "4 known levels: no average level or gap yet")
   local tiles4 = sv().tiles
   check(tiles4[3][1] == "-" and tiles4[3][4] and tiles4[3][2] == "Average victim" and tiles4[3][6] == "4/5 kills" and tiles4[3][7] == "4/5 kills", "locked average shows its progress, visibly")
   check(sv().hunt[4][2] == "4/20 kills" and sv().hunt[4][3] and sv().hunt[4][4] == "4/20 kills" and sv().hunt[4][5], "locked busiest day shows its progress and explains the unlock")
   busy[20] = nil
-  FriendsAndFoesDB.killLog = busy -- (19 kills)
+  ns.Data.Realm().killLog = busy -- (19 kills)
   check(sv().hunt[5][4] == "19/20 kills", "19/20 kills: still locked")
   busy[20] = { t = mon - 20, c = ns.me, vl = 30, ml = 30, z = "B" }
   check(sv().hunt[5][4] == nil and sv().hunt[4][2] == "Monday", "20/20: the lock is gone and the value shows")
-  FriendsAndFoesDB.killLog = lv(5)
+  ns.Data.Realm().killLog = lv(5)
   s = comp()
   check(s.avgLevel == 33 and s.avgGap == 3, "5 known levels: the averages show")
   -- per character: another character's entries and entries without one don't count
-  FriendsAndFoesDB.killLog = { { t = noon - 5, c = "Other Char", vl = 30, ml = 30, z = "Elsewhere" }, { t = noon - 6, vl = 30, ml = 30, z = "Elsewhere" },
+  ns.Data.Realm().killLog = { { t = noon - 5, c = "Other Char", vl = 30, ml = 30, z = "Elsewhere" }, { t = noon - 6, vl = 30, ml = 30, z = "Elsewhere" },
     { t = noon - 7, c = ns.me, vl = 30, ml = 30, z = "Here" } }
   s = comp()
   check(s.n == 1 and s.today == 1 and s.tiered == 1 and #s.zones == 1 and s.zones[1].name == "Here", "only this character's entries count")
   St.Log("Mine Too", "30", "Here")
-  check(FriendsAndFoesDB.killLog[#FriendsAndFoesDB.killLog].c == ns.me, "a logged kill records its character")
+  check(ns.Data.Realm().killLog[#ns.Data.Realm().killLog].c == ns.me, "a logged kill records its character")
   -- the tiles: Kills logged first, and no overlap with the profile
   local vw = sv()
   check(#vw.tiles == 4 and vw.tiles[1][1] == "2" and vw.tiles[1][2] == "Kills logged", "Kills logged is the first tile and counts this character's log")
@@ -6525,12 +6525,12 @@ do
   for _, h in ipairs(vw.hunt) do blob = blob .. h[1] end
   check(not blob:find("Nemesis", 1, true) and not blob:find("Most killed", 1, true) and not blob:find("Players killed", 1, true), "the profile's lines are not repeated")
   -- the tile for the average: level, and the gap folded into its caption
-  FriendsAndFoesDB.killLog = lv(5)
+  ns.Data.Realm().killLog = lv(5)
   vw = sv()
   check(vw.tiles[3][1] == "Level 33.0" and vw.tiles[3][2] == "Average victim" and vw.tiles[3][6] == "3 higher than you" and not vw.tiles[3][4], "average tile: level, with the gap in words on its own line")
   -- the charts: Skull to Grey, counts with their share of Kills logged; a long zone name is kept whole
   local longZone = "Hillsbrad Foothills (Tarren Mill and the Whole Old Hillsbrad Area)"
-  FriendsAndFoesDB.killLog = {
+  ns.Data.Realm().killLog = {
     { t = noon - 1, c = ns.me, vl = -1, ml = 30, z = longZone },
     { t = noon - 2, c = ns.me, vl = 30, ml = 30, z = longZone },
     { t = noon - 3, c = ns.me, vl = 30, ml = 30, z = "Duskwood" },
@@ -6543,7 +6543,7 @@ do
   check(vw.gap[1][4] == "1 (25%)" and vw.gap[3][4] == "2 (50%)" and vw.gap[2][4] == "0" and vw.gap[5][4] == "1 (25%)", "counts with their share of Kills logged; zero is just 0")
   check(vw.gap[4][5] and vw.gap[4][5]:find("3 or more levels below you", 1, true), "a level-gap row explains its tier")
   check(vw.zones[1][1] == "Duskwood" and vw.zones[2][1] == longZone and vw.zones[2][4] == "2 (50%)", "zone names are not cut in the view data")
-  FriendsAndFoesDB.killLog = {}
+  ns.Data.Realm().killLog = {}
   vw = sv()
   check(vw.empty and vw.tiles[1][1] == "0" and vw.tiles[3][1] == "-" and vw.tiles[3][6] == "0/5 kills" and vw.hunt[1][2] == "0", "empty log: zeros, dashes and progress")
 
@@ -6557,7 +6557,7 @@ do
   check(not ctl.stats:IsShown(), "an enemy's profile has none")
   ns.UI.ShowProfile(ns.me)
   for _, log2 in ipairs({ {}, { { t = noon - 100, c = ns.me, n = "Log Bob", vl = 33, ml = 30, z = "Duskwood" }, { t = noon - 5, c = ns.me, vl = -1, ml = 30 } } }) do
-    FriendsAndFoesDB.killLog = log2
+    ns.Data.Realm().killLog = log2
     St.Seed(true)
     ns.UI.ShowProfile(ns.me)
     ns.UI.ShowStats()
@@ -6584,7 +6584,7 @@ do
     ns.UI.Back()
     check(ns.UI.CurrentTab() == "profile" and ns.UI.Frames().profile:IsShown() and not page:IsShown(), "Back returns to your profile")
   end
-  FriendsAndFoesDB.killLog, FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = logWas, nil, bestWas, streakWas
+  ns.Data.Realm().killLog, FriendsAndFoesDB.bestStreak, FriendsAndFoesCharDB.bestStreak, FriendsAndFoesCharDB.streak = logWas, nil, bestWas, streakWas
   drainToasts()
   check(ns.errors == errs, "no errors in the Stats page (" .. tostring(ns.lastError) .. ")")
 end
@@ -6594,12 +6594,12 @@ do
   local errs = ns.errors
   local St = ns.Stats
   local c = FriendsAndFoesCharDB
-  local saved = { played = c.played, lifeStart = c.lifeStart, kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog,
+  local saved = { played = c.played, lifeStart = c.lifeStart, kills = ns.Data.Realm().killLog, deaths = ns.Data.Realm().deathLog,
     brackets = c.brackets, seeded = c.bracketsSeeded, best = c.bestStreak, streak = c.streak }
   local deadNow = false
   local deadWas, levelWas = UnitIsDeadOrGhost, UnitLevel
   UnitIsDeadOrGhost = function() return deadNow end
-  local function fresh() c.brackets = {}; c.bracketsSeeded = true; FriendsAndFoesDB.killLog = {}; FriendsAndFoesDB.deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
+  local function fresh() c.brackets = {}; c.bracketsSeeded = true; ns.Data.Realm().killLog = {}; ns.Data.Realm().deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
 
   -- bracket keys by your level
   check(St.BracketOf(1) == "u20" and St.BracketOf(19) == "u20" and St.BracketOf(20) == "20" and St.BracketOf(29) == "20"
@@ -6630,7 +6630,7 @@ do
   -- the death log: your own live PvP deaths only; the life that ends goes in the bracket
   local killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 })
   ns.Events.Emit("DIE", { zone = "Duskwood", killer = killer, conf = "c", assists = "" })
-  local d1 = FriendsAndFoesDB.deathLog[1]
+  local d1 = ns.Data.Realm().deathLog[1]
   check(d1 and d1.c == ns.me and d1.k == "Bob Gank" and d1.z == "Duskwood" and d1.p == math.floor(St.Played()) and d1.t, "a PvP death is logged: character, played, killer, zone")
   check(c.lifeStart == d1.p, "your life starts over at the death")
   local b30 = St.Bracket("30")
@@ -6638,10 +6638,10 @@ do
   ns.past = true
   ns.Events.Emit("DIE", { zone = "Duskwood", killer = killer, conf = "c", assists = "" })
   ns.past = nil
-  check(#FriendsAndFoesDB.deathLog == 1 and b30.deaths == 1, "a caught-up death is not logged")
+  check(#ns.Data.Realm().deathLog == 1 and b30.deaths == 1, "a caught-up death is not logged")
   FIRE("PLAYER_DEAD") -- (a death out of PvP: nothing resolves into a DIE)
   RUN_TIMERS()
-  check(#FriendsAndFoesDB.deathLog == 1, "a death that is not PvP is not logged")
+  check(#ns.Data.Realm().deathLog == 1, "a death that is not PvP is not logged")
   deadNow = false
   FIRE("PLAYER_ALIVE")
 
@@ -6659,7 +6659,7 @@ do
   UnitLevel = function() return nil end
   St.Log("Lvl Unknown", "30", "Duskwood")
   UnitLevel = levelWas
-  check(#FriendsAndFoesDB.killLog == 3 and St.Bracket("30").kills == 2, "unknown level: still logged, no bracket updated")
+  check(#ns.Data.Realm().killLog == 3 and St.Bracket("30").kills == 2, "unknown level: still logged, no bracket updated")
   -- the zone cap
   fresh()
   for i = 1, St.ZONE_CAP + 1 do St.Log("Zone Vic", "30", "Zone" .. i) end
@@ -6670,7 +6670,7 @@ do
   -- backfill: once, from the 1.0.1 log entries that know your level; later kills aren't counted twice
   fresh()
   c.bracketsSeeded = nil
-  FriendsAndFoesDB.killLog = {
+  ns.Data.Realm().killLog = {
     { t = time(), c = ns.me, vl = 20, ml = 25, z = "Barrens" }, { t = time(), c = ns.me, vl = 50, ml = 45, z = "Ashenvale" },
     { t = time(), c = "Other Toon", vl = 50, ml = 45 }, { t = time(), c = ns.me, vl = 50 },
   }
@@ -6739,7 +6739,7 @@ do
   St.Flush()
   c.played = 13000
   c.lifeStart = 12600
-  FriendsAndFoesDB.killLog = {
+  ns.Data.Realm().killLog = {
     { t = 1, c = ns.me, p = 12700, vl = 30, ml = 30 }, { t = 2, c = ns.me, p = 12000, vl = 30, ml = 30 },
     { t = 3, c = ns.me, vl = 30, ml = 30 }, { t = 4, c = "Other Toon", p = 12900, vl = 30, ml = 30 },
   }
@@ -6806,12 +6806,12 @@ do
     ns.Events.Emit("KILL", { victim = "Bg Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Deadmines" })
     ns.Events.Emit("DIE", { zone = "Deadmines", killer = ns.EncodeUnit({ name = "Bob Gank", class = "ROGUE", level = 32 }), conf = "c", assists = "" })
     IN_INSTANCE = false
-    check(#FriendsAndFoesDB.killLog == 0 and #FriendsAndFoesDB.deathLog == 0 and c.lifeStart == nil and (c.bestStreak or 0) == 0
+    check(#ns.Data.Realm().killLog == 0 and #ns.Data.Realm().deathLog == 0 and c.lifeStart == nil and (c.bestStreak or 0) == 0
       and (not c.brackets["30"] or (c.brackets["30"].kills == 0 and c.brackets["30"].deaths == 0 and c.brackets["30"].bestStreak == 0)),
       "an instance kill and death are not logged and touch no bracket or best streak")
     check(#ns.Data.ViewRealm().feed > feedBefore, "...but the Feed still gets them")
     ns.Events.Emit("KILL", { victim = "Open Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
-    check(#FriendsAndFoesDB.killLog == 1, "out in the world it is logged again")
+    check(#ns.Data.Realm().killLog == 1, "out in the world it is logged again")
   end
 
   -- layout: six rows in "When you hunt" still end above the footnote; the selector is there
@@ -6841,7 +6841,7 @@ do
 
   UnitIsDeadOrGhost, UnitLevel = deadWas, levelWas
   c.played, c.lifeStart, c.brackets, c.bracketsSeeded, c.bestStreak, c.streak = saved.played, saved.lifeStart, saved.brackets, saved.seeded, saved.best, saved.streak
-  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  ns.Data.Realm().killLog, ns.Data.Realm().deathLog = saved.kills, saved.deaths
   St.Flush()
   drainToasts()
   check(ns.errors == errs, "no errors in played time, lives and brackets (" .. tostring(ns.lastError) .. ")")
@@ -6854,13 +6854,13 @@ do
   local c = FriendsAndFoesCharDB
   local realm = ns.Data.ViewRealm()
   local instWas = ns.S().instances
-  local saved = { kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog, streak = c.streak, best = c.bestStreak, brackets = c.brackets, seeded = c.bracketsSeeded }
+  local saved = { kills = ns.Data.Realm().killLog, deaths = ns.Data.Realm().deathLog, streak = c.streak, best = c.bestStreak, brackets = c.brackets, seeded = c.bracketsSeeded }
   c.brackets, c.bracketsSeeded, c.streak, c.bestStreak = {}, true, 0, 0
-  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = {}, {}
+  ns.Data.Realm().killLog, ns.Data.Realm().deathLog = {}, {}
   local me = ns.Data.Player(ns.me)
   local function count(t) local n = 0 for _ in pairs(t) do n = n + 1 end return n end
   local function snap()
-    return table.concat({ me.k, me.d, #FriendsAndFoesDB.killLog, #FriendsAndFoesDB.deathLog, count(realm.hitlist), c.streak or 0, c.bestStreak or 0,
+    return table.concat({ me.k, me.d, #ns.Data.Realm().killLog, #ns.Data.Realm().deathLog, count(realm.hitlist), c.streak or 0, c.bestStreak or 0,
       (ns.Bounty.Mine()), count(ns.Data.Player("Buddy Pal").slain or {}), count(ns.Data.Player("Buddy Pal").slain or {}) }, ",")
   end
   local function feedCount() return #realm.feed end
@@ -6925,13 +6925,13 @@ do
   -- the world, unchanged: own kill counts, is logged and sent
   before = snap()
   ns.Events.Emit("KILL", { victim = "World Victim", vclass = "MAGE", vlevel = "30", vguild = "", zone = "Duskwood" })
-  check(snap() ~= before and #FriendsAndFoesDB.killLog == 1 and (c.streak or 0) == 1, "a world kill of your own still counts, logs and streaks")
+  check(snap() ~= before and #ns.Data.Realm().killLog == 1 and (c.streak or 0) == 1, "a world kill of your own still counts, logs and streaks")
   -- a zone that only sounds like one is the world
   check(ns.IsBattlegroundZone("Alterac Valley (Dun Baldar)") and not ns.IsBattlegroundZone("Alterac Mountains") and not ns.IsBattlegroundZone("Arathi Highlands") and not ns.IsBattlegroundZone(nil),
     "battleground zone names")
 
   ns.S().instances = instWas
-  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  ns.Data.Realm().killLog, ns.Data.Realm().deathLog = saved.kills, saved.deaths
   c.streak, c.bestStreak, c.brackets, c.bracketsSeeded = saved.streak, saved.best, saved.brackets, saved.seeded
   drainToasts()
   check(ns.errors == errs, "no errors in battleground handling (" .. tostring(ns.lastError) .. ")")
@@ -6943,9 +6943,9 @@ do
   local St = ns.Stats
   local c = FriendsAndFoesCharDB
   local realm = ns.Data.ViewRealm()
-  local saved = { kills = FriendsAndFoesDB.killLog, deaths = FriendsAndFoesDB.deathLog, brackets = c.brackets, seeded = c.bracketsSeeded,
+  local saved = { kills = ns.Data.Realm().killLog, deaths = ns.Data.Realm().deathLog, brackets = c.brackets, seeded = c.bracketsSeeded,
     streak = c.streak, best = c.bestStreak, life = c.lifeStart }
-  local function fresh() c.brackets = {}; c.bracketsSeeded = true; FriendsAndFoesDB.killLog = {}; FriendsAndFoesDB.deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
+  local function fresh() c.brackets = {}; c.bracketsSeeded = true; ns.Data.Realm().killLog = {}; ns.Data.Realm().deathLog = {}; c.lifeStart = nil; c.bestStreak = 0 end
   local function unit(level, skull) return ns.EncodeUnit({ name = "Gank Lord", class = "ROGUE", level = level, skull = skull }) end
   local noon = time({ year = 2026, month = 6, day = 15, hour = 12 })
 
@@ -6954,7 +6954,7 @@ do
   ns.Events.Emit("DIE", { zone = "Duskwood", killer = unit(33), conf = "c", assists = "" })
   ns.Events.Emit("DIE", { zone = "Duskwood", killer = unit(nil, true), conf = "c", assists = "" })
   ns.Events.Emit("DIE", { zone = "Duskwood", killer = ns.EncodeUnit({ name = "Gank Lord" }), conf = "c", assists = "" })
-  local dl = FriendsAndFoesDB.deathLog
+  local dl = ns.Data.Realm().deathLog
   check(#dl == 3 and dl[1].kl == 33 and dl[1].ml == 30 and dl[2].kl == -1 and dl[3].kl == nil and dl[3].ml == 30, "the death log stores the killer's level (skull -1, unknown nil) and yours")
   -- tiers from the killer's side (you are 30; grey is 22 and below)
   local function tier(kl) return St.DeathTier({ kl = kl, ml = 30 }) end
@@ -6992,7 +6992,7 @@ do
   local b20, b50 = St.Bracket("20"), St.Bracket("50")
   b20.deaths, b20.dtiers.even, b20.dzones.A = 2, 2, 2
   b50.deaths, b50.dtiers.higher, b50.dtiers.skull, b50.dzones.A, b50.dzones.B = 3, 2, 1, 2, 1
-  FriendsAndFoesDB.deathLog = { { t = noon - 100, c = ns.me, p = 1 }, { t = noon - 2 * 86400, c = ns.me, p = 2 }, { t = noon - 20 * 86400, c = ns.me, p = 3 }, { t = noon - 100, c = "Other Toon", p = 4 } }
+  ns.Data.Realm().deathLog = { { t = noon - 100, c = ns.me, p = 1 }, { t = noon - 2 * 86400, c = ns.me, p = 2 }, { t = noon - 20 * 86400, c = ns.me, p = 3 }, { t = noon - 100, c = "Other Toon", p = 4 } }
   local all = St.Compute(nil, noon)
   check(all.deaths == 5 and all.dtiers.even == 2 and all.dtiers.higher == 2 and all.dtiers.skull == 1 and all.dzones[1].name == "A" and all.dzones[1].n == 4
     and all.dtoday == 1 and all.dweek == 2 and all.dmonth == 3, "All: the death side adds the brackets up; deaths today / 7 / 30 days from the log")
@@ -7057,7 +7057,7 @@ do
   hl["Gank Two"] = { name = "Gank Two", class = "MAGE", level = 30, lastSeen = now - 500, kills = 5, attacks = 0, kv = { [ns.me] = 5 }, kt = { [ns.me] = now - 300 } }
   hl["Gank Three"] = { name = "Gank Three", class = "MAGE", level = 30, lastSeen = now - 500, kills = 2, attacks = 0, kv = { ["Buddy Pal"] = 2 } }
   hl["Buddy Pal"] = { name = "Buddy Pal", class = "PRIEST", level = 40, lastSeen = now, kills = 1, attacks = 0, kv = { [ns.me] = 4 }, kt = { [ns.me] = now } }
-  FriendsAndFoesDB.deathLog = { { t = now - 61200, c = ns.me, p = 1, k = "Gank One", z = "Duskwood (Raven Hill)" } }
+  ns.Data.Realm().deathLog = { { t = now - 61200, c = ns.me, p = 1, k = "Gank One", z = "Duskwood (Raven Hill)" } }
   ns.UI.ShowProfile(ns.me)
   local ctl = ns.UI.Frames().profile.controls
   check(ctl.killedby:IsShown(), "your own profile has a Killed by button")
@@ -7114,10 +7114,199 @@ do
   for k in pairs(hl) do hl[k] = nil end
   for k, h in pairs(hlWas) do hl[k] = h end
 
-  FriendsAndFoesDB.killLog, FriendsAndFoesDB.deathLog = saved.kills, saved.deaths
+  ns.Data.Realm().killLog, ns.Data.Realm().deathLog = saved.kills, saved.deaths
   c.brackets, c.bracketsSeeded, c.streak, c.bestStreak, c.lifeStart = saved.brackets, saved.seeded, saved.streak, saved.best, saved.life
   drainToasts()
   check(ns.errors == errs, "no errors in the death side (" .. tostring(ns.lastError) .. ")")
+end
+
+-- rulesets (WoW Forever): data and friends' events are kept apart by ruleset
+do
+  local errs = ns.errors
+  local D, C = ns.Data, ns.Comm
+  local function setRules(hc, rp, pvp)
+    GAME_RULES = { [1] = hc, [2] = rp, [3] = pvp }
+    ns.ResetRuleset()
+  end
+  local function debugHas(text)
+    for _, l in ipairs(FriendsAndFoesDB.debugLog or {}) do if l:find(text, 1, true) then return true end end
+    return false
+  end
+  local gameRulesWas, enumWas = C_GameRules, Enum.GameRule
+
+  -- detection
+  setRules(true, true, true)
+  check(ns.Ruleset() == "Hardcore", "ruleset: Hardcore comes first")
+  setRules(false, true, true)
+  check(ns.Ruleset() == "RPPvP", "ruleset: RP + PvP")
+  setRules(false, true, false)
+  check(ns.Ruleset() == "RP", "ruleset: RP")
+  setRules(false, false, true)
+  check(ns.Ruleset() == "PvP", "ruleset: PvP")
+  setRules(false, false, false)
+  check(ns.Ruleset() == "PvE", "ruleset: PvE")
+  GAME_RULES = { [1] = true, [2] = true, [3] = true }
+  check(ns.Ruleset() == "PvE", "ruleset: the first answer is kept for the session")
+  ns.ResetRuleset()
+  Enum.GameRule = nil
+  check(ns.Ruleset() == nil, "ruleset: nil when Enum.GameRule is missing")
+  Enum.GameRule = { HardcoreRuleset = 1, RPRuleset = 2 }
+  check(ns.Ruleset() == nil, "ruleset: nil when a field is missing")
+  Enum.GameRule = enumWas
+  C_GameRules = { IsGameRuleActive = function() error("boom") end }
+  check(ns.Ruleset() == nil, "ruleset: nil when the call errors")
+  C_GameRules = { IsGameRuleActive = function() return nil end }
+  check(ns.Ruleset() == nil, "ruleset: nil when the answer isn't readable")
+  C_GameRules = nil
+  check(ns.Ruleset() == nil, "ruleset: nil without C_GameRules")
+  C_GameRules = gameRulesWas
+
+  -- store key
+  setRules(false, false, true)
+  check(D.StoreKey() == "Forever-PvP", "store key per ruleset")
+  setRules(false, true, true)
+  check(D.StoreKey() == "Forever-RPPvP", "store key per ruleset (RPPvP)")
+  Enum.GameRule = nil
+  ns.ResetRuleset()
+  check(D.StoreKey() == "Forever", "store key falls back to Forever when the ruleset can't be read")
+  Enum.GameRule = enumWas
+
+  -- the first ruleset takes over the old store and the old account-wide world data
+  local dbWas = FriendsAndFoesDB
+  local function freshDb(extra)
+    local db = { settings = dbWas.settings, debugLog = dbWas.debugLog, errorLog = dbWas.errorLog, realms = {} }
+    for k, v in pairs(extra or {}) do db[k] = v end
+    return db
+  end
+  FriendsAndFoesDB = freshDb({
+    realms = { Forever = { players = { ["Old Foe"] = { name = "Old Foe", k = 2, enemy = true } }, hitlist = {}, feed = {} } },
+    profile = { bounty = { total = 5, count = 1 } }, weekly = { start = 1, k = 4, d = 0, killers = {}, bt = 0 },
+    outbox = { { t = 1, kind = "LVL", id = "old1", f = {} } },
+  })
+  ns.Saved.STEPS[16](FriendsAndFoesDB)
+  check(FriendsAndFoesDB.profile == nil and FriendsAndFoesDB.weekly == nil and FriendsAndFoesDB.realms.Forever.weekly.k == 4,
+    "step 16 moves the account-wide world data into the old store")
+  setRules(true, false, false)
+  local hc = D.Realm()
+  check(FriendsAndFoesDB.legacyClaimedBy == "Hardcore" and FriendsAndFoesDB.realms.Forever == nil
+    and hc == FriendsAndFoesDB.realms["Forever-Hardcore"] and hc.players["Old Foe"].k == 2 and hc.profile.bounty.total == 5 and hc.weekly.k == 4,
+    "the first ruleset takes over the old store and world data")
+  check(FriendsAndFoesDB.outbox[1].rs == "Hardcore", "old catch-up events belong to the ruleset that took over")
+  setRules(false, false, false)
+  local pve = D.Realm()
+  check(pve ~= hc and next(pve.players) == nil and pve.weekly == nil and FriendsAndFoesDB.legacyClaimedBy == "Hardcore"
+    and FriendsAndFoesDB.realms.Forever == nil, "a second ruleset starts empty and does not claim again")
+  setRules(false, false, true)
+  check(D.Realm() ~= hc and D.Realm().players["Old Foe"] == nil and D.Realm().profile == nil, "the PvP store has none of it either")
+  -- the ruleset can't be read yet: the old store keeps being used, and is taken over later
+  FriendsAndFoesDB = freshDb({ realms = { Forever = { players = { ["Old Foe"] = { name = "Old Foe", k = 2 } }, hitlist = {}, feed = {} } } })
+  Enum.GameRule = nil
+  ns.ResetRuleset()
+  check(D.Realm() == FriendsAndFoesDB.realms.Forever and FriendsAndFoesDB.legacyClaimedBy == nil, "ruleset unknown: nothing moves, Forever is used")
+  Enum.GameRule = enumWas
+  setRules(false, false, true)
+  check(D.Realm().players["Old Foe"] and FriendsAndFoesDB.realms.Forever == nil and FriendsAndFoesDB.legacyClaimedBy == "PvP",
+    "...and the first ruleset that can be read takes it over")
+  -- the old realm-name merge leaves the per-ruleset stores alone
+  local mdb = { realms = {
+    ["Forever-PvP"] = { players = { ["Keep Me"] = { name = "Keep Me" } }, hitlist = {}, feed = {} },
+    ["Forever-PvE"] = { players = {}, hitlist = {}, feed = {} },
+    ["CAMWOW EU4 Realm 8 PvP"] = { players = { ["Old One"] = { name = "Old One" } }, hitlist = {}, feed = {} },
+  } }
+  check(D.MergeServerStores(mdb) == 1 and mdb.realms["Forever-PvP"].players["Keep Me"] and mdb.realms["Forever-PvE"]
+    and mdb.realms.Forever.players["Old One"] and mdb.realms["CAMWOW EU4 Realm 8 PvP"] == nil, "the old-realm merge leaves Forever-* stores alone")
+  local none = { realms = { ["Forever-PvP"] = { players = {}, hitlist = {}, feed = {} } } }
+  check(D.MergeServerStores(none) == 0 and none.realms.Forever == nil, "...and makes no empty Forever store")
+  FriendsAndFoesDB = dbWas
+  setRules(false, false, true)
+
+  -- messages carry the ruleset
+  local m = { kind = "LVL", id = "rs1", name = "Buddy Pal", class = "PRIEST", level = 31, f = { level = 40 } }
+  local text = C.Encode(m)
+  check(C.Decode(text).rs == "PvP", "encode/decode: the ruleset travels with the message")
+  m.rs = "RP"
+  check(C.Decode(C.Encode(m)).rs == "RP", "encode/decode: an event's own ruleset is kept")
+  m.rs = ""
+  local blank = C.Decode(C.Encode(m))
+  check(blank.rs == nil and blank.f.level == "40", "encode/decode: unknown ruleset gives nil")
+  local noRs = text:gsub("\t[^\t]*$", "")
+  local old = C.Decode(noRs)
+  check(old and old.rs == nil and old.f.level == "40" and old.id == "rs1", "a message from an older client (no ruleset) decodes with nil")
+  -- an older client reads only the schema's fields: the same ones, in the same places
+  local p = ns.Split(text, "\t")
+  check(#p == 7 + #C.SCHEMA.LVL + 1 and p[8] == "40" and p[1] == tostring(ns.PROTOCOL), "the ruleset is one extra trailing field")
+  -- trimming never drops it
+  local long = { kind = "DIE", id = "rs2", name = "Buddy Pal", class = "PRIEST", level = 31,
+    f = { zone = string.rep("Z", 60), killer = "Big Bad:ROGUE:60:" .. string.rep("G", 40), conf = "c", assists = string.rep("Helper Name:MAGE:60:Some Guild;", 6), ended = "0" } }
+  local fit = C.Fit(long)
+  check(fit and #fit <= 255 and C.Decode(fit).rs == "PvP", "a trimmed message keeps its ruleset")
+
+  -- receiving
+  local S = SYNC
+  local restore = S.friends({ { gid = 77, name = "Buddy Pal", tag = "Buddy#1234" } })
+  ns.Comm.ClearPicks()
+  ns.Comm.RebuildRoster()
+  S.drain()
+  local function levelOf(name) local r = D.FindPlayer(name); return r and r.level end
+  local function viaBn(id, level, rs)
+    local msg = { kind = "LVL", id = id, name = "Buddy Pal", class = "PRIEST", level = level, f = { level = level } }
+    msg.rs = rs
+    local pl = C.Encode(msg)
+    if rs == false then pl = pl:gsub("\t[^\t]*$", "") end
+    FIRE("BN_CHAT_MSG_ADDON", "FNF1", pl, "WHISPER", 77)
+  end
+  local debugWas = FriendsAndFoesDB.settings.debug
+  FriendsAndFoesDB.settings.debug = true
+  viaBn("rsa1", 41, "PvE")
+  check(levelOf("Buddy Pal") ~= 41, "another ruleset's message is not applied")
+  check(debugHas("[RULESET-DROP] LVL | Buddy Pal | PvE | PvP"), "...and logged")
+  FriendsAndFoesDB.settings.debug = debugWas
+  viaBn("rsa2", 42, "PvP")
+  check(levelOf("Buddy Pal") == 42, "a message from the same ruleset is accepted")
+  viaBn("rsa3", 43, false)
+  check(levelOf("Buddy Pal") == 43, "a message without a ruleset (older client) is accepted")
+  setRules(false, false, false)
+  Enum.GameRule = nil
+  ns.ResetRuleset()
+  viaBn("rsa4", 44, "PvE")
+  check(levelOf("Buddy Pal") == 44, "your own ruleset unknown: everything is accepted")
+  Enum.GameRule = enumWas
+  setRules(false, false, true)
+
+  -- catch-up: only this ruleset's events go out, and passed-on events keep their original ruleset
+  local boxWas = FriendsAndFoesDB.outbox
+  FriendsAndFoesDB.outbox = {
+    { t = time() - 300, kind = "LVL", id = "ob1", f = { level = "33" }, who = ns.me, c = "WARRIOR", l = 33, rs = "PvP" },
+    { t = time() - 290, kind = "LVL", id = "ob2", f = { level = "34" }, who = ns.me, c = "WARRIOR", l = 34, rs = "PvE" },
+    { t = time() - 280, kind = "LVL", id = "ob3", f = { level = "35" }, who = ns.me, c = "WARRIOR", l = 35 },
+    { t = time() - 270, kind = "KILL", id = "ob4", who = "Testme Alt", c = "MAGE", l = 22, rs = "PvE",
+      f = { victim = "Alt Victim", vclass = "MAGE", vlevel = "40", vguild = "", zone = "Duskwood", streak = "1", rl = "" } },
+    { t = time() - 260, kind = "KILL", id = "ob5", who = "Testme Alt", c = "MAGE", l = 22, rs = "PvP",
+      f = { victim = "Alt Victim", vclass = "MAGE", vlevel = "40", vguild = "", zone = "Duskwood", streak = "1", rl = "" } },
+  }
+  ADVANCE(100)
+  SENT = {}
+  S.from("Buddy Pal", 77, "REQ", { window = 3600 }, "rsq1")
+  S.drain()
+  local lvls, rlys = S.sent(77, "LVL"), S.sent(77, "RLY")
+  check(#lvls == 1 and lvls[1].id == "ob1" and lvls[1].rs == "PvP", "catch-up sends only this ruleset's own events, with their ruleset")
+  check(#rlys == 1 and rlys[1].f.oid == "ob5" and rlys[1].rs == "PvP", "...and your alts' events of this ruleset only")
+  FriendsAndFoesDB.outbox = boxWas
+
+  -- relayed: the original sender's ruleset, never yours
+  D.Realm().heard = {}
+  C.Hear("Far Friend", { kind = "LVL", id = "h1", class = "MAGE", level = 20, f = { level = "20", rl = "1" }, rs = "PvP" })
+  C.Hear("Far Friend", { kind = "LVL", id = "h2", class = "MAGE", level = 21, f = { level = "21", rl = "1" } }) -- (older client: none)
+  ADVANCE(100)
+  SENT = {}
+  S.from("Buddy Pal", 77, "RLQ", { window = 3600, names = "Far Friend" }, "rsq2")
+  S.drain()
+  local byId = {}
+  for _, r in ipairs(S.sent(77, "RLY")) do byId[r.f.oid] = r end
+  check(byId.h1 and byId.h1.rs == "PvP" and byId.h2 and byId.h2.rs == nil, "a passed-on event keeps its original ruleset (none stays none)")
+  restore()
+  check(ns.errors == errs, "no errors in the ruleset tests (" .. tostring(ns.lastError) .. ")")
+  setRules(false, false, true)
 end
 
 RESULTS[#RESULTS + 1] = string.format("%d passed, %d failed", passed, failed)

@@ -13,14 +13,46 @@ local function ensure(r)
   return r
 end
 
+-- What describes the game world is kept in the store, so it is per ruleset too (see the list in
+-- Saved.lua): your profile, the week, repeat chains, the bounty board, the kill and death logs,
+-- your group card, friends' group cards, and the catch-up bookkeeping.
+Data.WORLD_FIELDS = { "profile", "weekly", "repeats", "contracts", "killLog", "deathLog", "groupStat", "relay",
+  "got", "heard", "digestAt" }
+
 -- Storage key. Forever has no realms (GetRealmName is an internal server name that can differ
--- between friends and logins) and names are unique region-wide, so everything shares one store.
+-- between friends and logins) and names are unique region-wide. Characters on different rulesets
+-- never meet, so each ruleset has its own store ("Forever-PvP"); if the ruleset can't be read,
+-- the old single "Forever" store is used.
 function Data.StoreKey()
-  if ns.ForeverNames() then return "Forever" end
+  if ns.ForeverNames() then
+    local rs = ns.Ruleset()
+    return rs and ("Forever-" .. rs) or "Forever"
+  end
   return ns.realm or GetRealmName()
 end
 
+-- The first ruleset logged in after the update takes over the old single store (and the old
+-- account-wide world data, moved into it by upgrade step 16). Once: legacyClaimedBy remembers it.
+function Data.ClaimLegacy()
+  local db = FriendsAndFoesDB
+  if not db or db.legacyClaimedBy or not ns.ForeverNames() then return end
+  local rs = ns.Ruleset()
+  if not rs then return end
+  db.legacyClaimedBy = rs
+  db.realms = db.realms or {}
+  local old = db.realms.Forever
+  if old then
+    local key = "Forever-" .. rs
+    if db.realms[key] then Data.MergeStores(db.realms[key], old) else db.realms[key] = old end
+    db.realms.Forever = nil
+  end
+  -- (catch-up events of before the update belong to the ruleset that took over)
+  for _, e in ipairs(db.outbox or {}) do e.rs = e.rs or rs end
+  ns.Debug("CLAIM-LEGACY", rs, old and "moved" or "nothing to move")
+end
+
 function Data.RealRealm()
+  Data.ClaimLegacy()
   local realms = FriendsAndFoesDB.realms
   local key = Data.StoreKey()
   realms[key] = realms[key] or {}
@@ -311,31 +343,41 @@ end
 
 -- 0.2-0.3.1 stored data per "realm", which on Forever is an internal server name
 -- ("CAMWOW EU4 Realm 8 PvP"). Fold every such store into the single "Forever" store.
+-- src's records, Feed and world data folded into dst (dst's own world data wins)
+function Data.MergeStores(dst, src)
+  ensure(dst)
+  ensure(src)
+  for _, field in ipairs({ "players", "hitlist" }) do
+    for name, rec in pairs(src[field]) do
+      if dst[field][name] then mergeInto(dst[field][name], rec) else dst[field][name] = rec end
+    end
+  end
+  for _, e in ipairs(src.feed) do dst.feed[#dst.feed + 1] = e end
+  table.sort(dst.feed, function(a, b) return (a.t or 0) < (b.t or 0) end)
+  while #dst.feed > FEED_MAX do table.remove(dst.feed, 1) end
+  for _, f in ipairs(Data.WORLD_FIELDS) do
+    if dst[f] == nil then dst[f] = src[f] end
+  end
+end
+
+-- (the per-ruleset stores "Forever-PvP" and so on are not old realm names: left alone)
 function Data.MergeServerStores(db)
   if not ns.ForeverNames() then return 0 end
   db.realms = db.realms or {}
-  local dst = db.realms.Forever or {}
-  db.realms.Forever = ensure(dst)
-  local merged, keys = 0, {}
+  local keys = {}
   for key in pairs(db.realms) do
-    if key ~= "Forever" then keys[#keys + 1] = key end
+    if key ~= "Forever" and not key:find("^Forever%-") then keys[#keys + 1] = key end
   end
+  if #keys == 0 then return 0 end
+  local dst = ensure(db.realms.Forever or {})
+  db.realms.Forever = dst
   for _, key in ipairs(keys) do
-    local src = ensure(db.realms[key])
-    for _, field in ipairs({ "players", "hitlist" }) do
-      for name, rec in pairs(src[field]) do
-        if dst[field][name] then mergeInto(dst[field][name], rec) else dst[field][name] = rec end
-      end
-    end
-    for _, e in ipairs(src.feed) do dst.feed[#dst.feed + 1] = e end
+    Data.MergeStores(dst, db.realms[key])
     db.realms[key] = nil
-    merged = merged + 1
   end
-  if merged > 0 then
-    table.sort(dst.feed, function(a, b) return (a.t or 0) < (b.t or 0) end)
-    while #dst.feed > FEED_MAX do table.remove(dst.feed, 1) end
-  end
-  return merged
+  -- (the single store is back: the ruleset in use takes it over again)
+  db.legacyClaimedBy = nil
+  return #keys
 end
 
 -- 0.5.3 and earlier put anyone who attacked on the hitlist. Now only kills do: once, drop

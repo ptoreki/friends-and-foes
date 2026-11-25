@@ -789,7 +789,7 @@ end
 -- A week is over (at login, or when you claim notoriety after it): start the next one and say how
 -- the last one went in one chat line.
 function Events.WeeklyRoll()
-  local db = FriendsAndFoesDB
+  local db = ns.Data.Realm()
   local now = time()
   local w = db.weekly
   if not w then
@@ -813,11 +813,11 @@ end
 -- weekly summary: your own takedowns and deaths, and who killed you most
 -- (kind "bt": points of notoriety you claimed; killer is then the number)
 function Events.WeeklyAdd(kind, killer)
-  local w = FriendsAndFoesDB.weekly
+  local w = ns.Data.Realm().weekly
   if not w then return end
   if kind == "bt" then
     -- a week over while you were playing: start the next one (with its summary) first
-    if time() - (w.start or time()) >= 7 * 86400 then Events.WeeklyRoll(); w = FriendsAndFoesDB.weekly end
+    if time() - (w.start or time()) >= 7 * 86400 then Events.WeeklyRoll(); w = ns.Data.Realm().weekly end
     w.bt = ns.Count(w.bt) + ns.Count(killer)
     return
   end

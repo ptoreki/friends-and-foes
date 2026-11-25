@@ -13,7 +13,7 @@ local L = ns.L
 --  * Contracts go to every friend with the add-on (not only your alert list), when posted or
 --    changed, and when a friend comes online.
 --  * Enemy players only: never someone on your side.
--- Saved account-wide in FriendsAndFoesDB.contracts, keyed "poster/id".
+-- Saved account-wide in the store (per ruleset): contracts, keyed "poster/id".
 local Contracts = {}
 ns.Contracts = Contracts
 
@@ -43,8 +43,9 @@ local FRESH = 3600 -- a friend's news older than this goes on the board without 
 local function finite(n) return type(n) == "number" and n == n and n > -math.huge and n < math.huge end
 
 local function store()
-  FriendsAndFoesDB.contracts = FriendsAndFoesDB.contracts or {}
-  return FriendsAndFoesDB.contracts
+  local world = ns.Data.Realm()
+  world.contracts = world.contracts or {}
+  return world.contracts
 end
 Contracts.Store = store
 

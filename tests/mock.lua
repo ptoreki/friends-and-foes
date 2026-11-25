@@ -92,6 +92,10 @@ print = function(...) local t = {...}; for i = 1, #t do t[i] = tostring(t[i]) en
 RAID_CLASS_COLORS = setmetatable({}, { __index = function() return { colorStr = "ffffffff" } end })
 SOUNDKIT = { RAID_WARNING = 8959, READY_CHECK = 8960 }
 Enum = { SendAddonMessageResult = { Success = 0, AddonMessageThrottle = 3 } }
+-- WoW Forever rulesets: GAME_RULES says which are active (default: the PvP ruleset)
+Enum.GameRule = { HardcoreRuleset = 1, RPRuleset = 2, PvPRuleset = 3 }
+GAME_RULES = { [1] = false, [2] = false, [3] = true }
+C_GameRules = { IsGameRuleActive = function(rule) return GAME_RULES[rule] end }
 BNET_CLIENT_WOW = "WoW"
 LOOT_ITEM_SELF = "You receive loot: %s."
 LOOT_ITEM_SELF_MULTIPLE = "You receive loot: %sx%d."

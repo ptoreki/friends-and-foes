@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
-ns.VERSION = "1.0.6"
+ns.VERSION = "1.1.0"
 ns.PROTOCOL = 3
 ns.PREFIX = "FNF1"
 ns.MILESTONE_LEVEL = 60 -- reaching this level always toasts
@@ -285,7 +285,7 @@ ns.On("PLAYER_LOGIN", function()
     end
   end
   trimLog(FriendsAndFoesDB.debugLog, DEBUG_LOG_MAX)
-  ns.Debug("LOGIN", ns.VERSION, select(4, GetBuildInfo()), ns.realm, ns.me, ns.myFaction)
+  ns.Debug("LOGIN", ns.VERSION, select(4, GetBuildInfo()), ns.realm, ns.me, ns.myFaction, tostring(ns.Ruleset()))
   for i = 1, #readyCallbacks do ns.Try("ready", readyCallbacks[i]) end
 end)
 
@@ -328,6 +328,33 @@ function ns.ForeverNames()
   end
   return true -- this addon only targets Forever (interface 16001)
 end
+
+-- Which WoW Forever ruleset this character plays: "Hardcore", "RPPvP", "RP", "PvP" or "PvE"; nil
+-- if it can't be read (no such API, an error, a secret value). Characters on different rulesets
+-- never meet, so data and friends' events are kept apart by it. The first answer is kept.
+local rulesetNow
+function ns.Ruleset()
+  if rulesetNow then return rulesetNow end
+  local GR = C_GameRules
+  local E = type(Enum) == "table" and Enum.GameRule
+  if type(GR) ~= "table" or type(GR.IsGameRuleActive) ~= "function" or type(E) ~= "table"
+    or E.HardcoreRuleset == nil or E.RPRuleset == nil or E.PvPRuleset == nil then return nil end
+  local function active(rule)
+    local ok, v = pcall(GR.IsGameRuleActive, rule)
+    if not ok or issecret(v) or type(v) ~= "boolean" then return nil end
+    return v
+  end
+  local hc, rp, pvp = active(E.HardcoreRuleset), active(E.RPRuleset), active(E.PvPRuleset)
+  if hc == nil or rp == nil or pvp == nil then return nil end
+  if hc then rulesetNow = "Hardcore"
+  elseif rp and pvp then rulesetNow = "RPPvP"
+  elseif rp then rulesetNow = "RP"
+  elseif pvp then rulesetNow = "PvP"
+  else rulesetNow = "PvE" end
+  return rulesetNow
+end
+-- (for tests: forget the kept answer)
+function ns.ResetRuleset() rulesetNow = nil end
 
 -- CleanName(name [, second]) -> "First Last" / "First" / nil.
 -- `second` is UnitName's second return: the surname on Forever, the realm elsewhere.
@@ -475,7 +502,7 @@ end
 function ns.PrintStatus()
   ns.Comm.RebuildRoster()
   local names = ns.Comm.RosterNames()
-  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " (server " .. tostring(ns.realm) .. ")")
+  print("|cff33ff99" .. ns.L.ADDON .. "|r " .. ns.VERSION .. " - you: " .. tostring(ns.me) .. " (server " .. tostring(ns.realm) .. ", ruleset " .. tostring(ns.Ruleset()) .. ")")
   print("  friends online: " .. #names .. (#names > 0 and (" (" .. table.concat(names, ", ") .. ")") or "")
     .. ", messages queued: " .. ns.Comm.QueuedCount())
   print("  alerts: " .. (ns.Comm.GroupActive() and "your alert list only (/fnf alerts)" or "every friend (/fnf alerts to limit)"))

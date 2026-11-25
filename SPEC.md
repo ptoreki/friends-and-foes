@@ -15,7 +15,10 @@ WoW Forever add-on (interface 16001, `_forever_\Interface\AddOns\FriendsAndFoes`
   handler runs through `ns.Try` (`pcall`). A signal that turns out unreadable degrades its feature
   (recorded in `ns.caps`), never errors.
 - **Forever has no realms.** `GetRealmName` returns an internal server name that differs between
-  friends who play together, so it's ignored. Everything lives in one store, `realms.Forever`.
+  friends who play together, so it's ignored. Forever's rulesets (PvP, PvE, RP, RP-PvP, Hardcore) never meet, so
+  each has its own store, `realms["Forever-<ruleset>"]`, and a friend's event that names another ruleset is
+  dropped (one with no ruleset, from an older version, is accepted). If the ruleset can't be read, the old single
+  `realms.Forever` is used. The first ruleset you log in with after the update takes over the old store.
 - **Names:** every character is "First Last". Only the pair is unique (region-wide). First names
   are shared, and neither part has spaces or hyphens. `UnitName` returns `(first, surname)`. The
   key is always "First Last" (`ns.CleanName`). A bare first name resolves to a full one only when
@@ -170,7 +173,7 @@ levels show nothing.
   per 60 s), you send AST: you join the notoriety claim and the bounty's killers like a killer, but
   it is never a kill for you (no K/D, streak, weekly count, kill list or hitlist change, no toast).
 
-## Records (account-wide, `realms.Forever`)
+## Records (account-wide, per ruleset: `realms["Forever-<ruleset>"]`)
 - **Players:** K/D/A per name, plus each player's kill list (`slain`; a friend's own report merges
   in as `slainRep`, highest count wins).
 - **Hitlist:** anyone who **killed** you or a friend, or **attacked one of you first** (ATK). It

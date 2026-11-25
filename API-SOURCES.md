@@ -64,6 +64,9 @@ From the sources above (beta-era findings; recheck on the live client):
   is never read.
 - **Range checks on hostile targets give plain values in open-world combat**, but melee range
   isn't reliable. We don't use range.
+- **Rulesets:** `C_GameRules.IsGameRuleActive` is in forever-addon-kit's captured API list. The names
+  of the `Enum.GameRule` fields (`HardcoreRuleset`, `RPRuleset`, `PvPRuleset`) are unverified, so
+  `ns.Ruleset()` returns nil if any is missing and the add-on falls back to one store.
 - **After 100 Lua errors the client stops reporting them.** Every handler runs through `ns.Try`,
   which keeps its own error log (`/fnf report`).
 - **Beta bug: saved variables were written but not loaded back.** Our live saved data loads

@@ -15,11 +15,12 @@ local RECENT_MAX = 10
 local PVP_KINDS = { attacked = true, engage = true, died = true, kill = true, sighting = true }
 
 ---------------------------------------------------------------------------
--- your own profile (account-wide)
+-- your own profile (kept in the store: per ruleset)
 ---------------------------------------------------------------------------
 local function mine()
-  FriendsAndFoesDB.profile = FriendsAndFoesDB.profile or {}
-  return FriendsAndFoesDB.profile
+  local world = ns.Data.Realm()
+  world.profile = world.profile or {}
+  return world.profile
 end
 
 -- bytes in the UTF-8 character starting with byte b

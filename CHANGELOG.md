@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- **Separate data per ruleset:** WoW Forever's rulesets (PvP, PvE, RP, RP-PvP, Hardcore) never meet, so each now has its own hitlist, Feed, profile, notoriety, Stats, Bounty board and catch-up, and friends' events from another ruleset are ignored. The first ruleset you log in with after the update keeps all your existing data; the others start empty. Friends on an older version still work (their events carry no ruleset and are accepted). If the game doesn't tell the add-on your ruleset, it behaves as before (one store).
+- **Technical:** `ns.Ruleset()` reads `C_GameRules.IsGameRuleActive` for `Enum.GameRule.HardcoreRuleset / RPRuleset / PvPRuleset` (all guarded; nil when anything is missing, errors or is secret; first answer kept). `Data.StoreKey()` is `Forever-<ruleset>`, or `Forever` when unknown. World data moves inside the store (`profile, weekly, repeats, contracts, killLog, deathLog, groupStat, relay, got, heard, digestAt`; upgrade step 16 moves the old account-wide copies into `realms.Forever`). `Data.ClaimLegacy()` hands `realms.Forever` to the first readable ruleset (`legacyClaimedBy`), merging if that store exists, and tags the old outbox entries with it. `Data.MergeServerStores` leaves `Forever-*` keys alone. Settings, friend tags, alert list, groups membership, caps, logs and the outbox stay account-wide; each outbox entry carries `rs` and catch-up only sends the current ruleset's. Wire format: PROTOCOL unchanged; one extra field, always the last one, holds the ruleset (older clients never read it; new schema fields go before it). Messages for other rulesets are dropped (`RULESET-DROP` in the debug log); passed-on events keep the original sender's `rs`. The ruleset shows in the debug log's LOGIN line, `/fnf` and the report.
+
 ## 1.0.6
 
 - **Close buttons work in combat:** the X on the main window, the alert list, the Bounty and Group windows and the What's new popup hid their window through the game's `HideUIPanel`, which is blocked for add-on windows in combat, so the X did nothing during a fight. They now hide their own window directly (`UI.CloseButton` / `UI.CloseOnClick`).

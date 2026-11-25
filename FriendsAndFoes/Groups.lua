@@ -41,8 +41,9 @@ end
 
 -- stats you heard about: account key -> { k, d, t, name, via, direct }
 local function relayed()
-  FriendsAndFoesDB.relay = FriendsAndFoesDB.relay or {}
-  return FriendsAndFoesDB.relay
+  local world = ns.Data.Realm()
+  world.relay = world.relay or {}
+  return world.relay
 end
 Groups.Relayed = relayed
 
@@ -265,10 +266,10 @@ function Groups.MyTotals()
   end
   -- bounties collected (0.9) ride along: a new total is newer news too
   local bt = ns.Bounty and (ns.Bounty.Mine()) or 0
-  local s = FriendsAndFoesDB.groupStat
+  local s = ns.Data.Realm().groupStat
   if not s or s.k ~= k or s.d ~= d or s.bt ~= bt then
     s = { k = k, d = d, bt = bt, t = time() }
-    FriendsAndFoesDB.groupStat = s
+    ns.Data.Realm().groupStat = s
   end
   return s
 end

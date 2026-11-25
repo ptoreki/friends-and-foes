@@ -22,7 +22,7 @@ function Report.Text()
   if GetBuildInfo then version, build, _, iface = GetBuildInfo() end
   add("Friends & Foes " .. tostring(ns.VERSION) .. " report, " .. date("%Y-%m-%d %H:%M:%S"))
   add("client: " .. tostring(version) .. " (" .. tostring(build) .. "), interface " .. tostring(iface))
-  add("you: " .. tostring(ns.me) .. ", " .. tostring(ns.myFaction))
+  add("you: " .. tostring(ns.me) .. ", " .. tostring(ns.myFaction) .. ", ruleset " .. tostring(ns.Ruleset()))
   add("debug logging: " .. onOff(s.debug) .. ", errors this session: " .. tostring(ns.errors))
 
   add("")

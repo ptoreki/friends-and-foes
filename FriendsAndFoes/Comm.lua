@@ -169,8 +169,14 @@ local UNIT_FIELDS = { attackers = true, killer = true, assists = true }
 -- wire format: PROTOCOL \t KIND \t ID \t senderName \t class \t level \t addonVersion \t fields...
 -- senderName is the full "First Last": on Forever, Battle.net may only give us the first name,
 -- and first names are shared.
+-- After the schema's own fields comes one more, always last: the ruleset (after 1.0.6; new
+-- schema fields go before it; "PvP", "PvE", "RP",
+-- "RPPvP" or "Hardcore", empty if unknown). Older clients only read the schema's fields and never
+-- see it; a message from one of them has none (it is accepted). Characters on different rulesets
+-- never meet, so a message that says another ruleset than yours is dropped.
 ---------------------------------------------------------------------------
 local HEADER = 7
+local RULESETS = { PvP = true, PvE = true, RP = true, RPPvP = true, Hardcore = true }
 local function clean(v)
   if v == nil then return "" end
   return (tostring(v):gsub("\t", " "))
@@ -185,6 +191,11 @@ function Comm.Encode(msg, dropGuilds)
     end
     parts[#parts + 1] = v
   end
+  -- msg.rs: the ruleset the event belongs to; not set = yours, "" = not known (an event passed on
+  -- from a friend on an older version)
+  local rs = msg.rs
+  if rs == nil then rs = ns.Ruleset() end
+  parts[#parts + 1] = clean(rs)
   return table.concat(parts, "\t")
 end
 
@@ -198,6 +209,10 @@ function Comm.Decode(text)
   local msg = { kind = p[2], id = p[3], name = ns.CleanName(p[4]), class = p[5] and p[5]:match("^%u+$"), level = tonumber(p[6]),
     version = p[7] and p[7]:match("^[%d%.]+$"), f = {} }
   for i, field in ipairs(schema) do msg.f[field] = p[HEADER + i] or "" end
+  -- (the ruleset is always the LAST field, so a later version that adds schema fields still
+  -- finds it; a message without anything past the schema has none)
+  local rs = #p > HEADER + #schema and p[#p] or nil
+  msg.rs = rs and RULESETS[rs] and rs or nil
   return msg
 end
 
@@ -672,7 +687,7 @@ end
 function Comm.SendDigest(name)
   if not (name and roster[name]) or ns.S().share.pvp == false then return 0 end
   local key = Comm.TagFor(name) or name
-  local db = FriendsAndFoesDB
+  local db = ns.Data.Realm()
   db.digestAt = db.digestAt or {}
   local now = time()
   if db.digestAt[key] and now - db.digestAt[key] < DIGEST_EVERY then return 0 end
@@ -766,14 +781,15 @@ function Comm.Remember(kind, id, fields)
   end
   local _, class = UnitClass("player")
   local box = outbox()
-  box[#box + 1] = { t = time(), kind = kind, id = id, f = f, who = ns.me, c = class, l = UnitLevel("player") }
+  box[#box + 1] = { t = time(), kind = kind, id = id, f = f, who = ns.me, c = class, l = UnitLevel("player"), rs = ns.Ruleset() }
   outbox()
 end
 
 -- what we received, kept a day and an hour so a replay of something you already saw is ignored
 local function got()
-  FriendsAndFoesDB.got = FriendsAndFoesDB.got or {}
-  return FriendsAndFoesDB.got
+  local world = ns.Data.Realm()
+  world.got = world.got or {}
+  return world.got
 end
 
 local function pruneGot()
@@ -885,20 +901,22 @@ function Comm.AnswerCatchUp(name, window, version)
   local share = ns.S().share
   local rec = ns.Data.FindPlayer(key)
   local altsOk = Comm.VersionSupports(version or (rec and rec.version), "altCatchup")
+  local mine = ns.Ruleset()
   for _, e in ipairs(outbox()) do
     local ago = now - e.t
     local cat = ns.Events.SHARE[e.kind]
-    if ago <= window and cat and share[cat] then
+    -- (only this ruleset's events; with no ruleset known, all of them, as before)
+    if ago <= window and cat and share[cat] and (not mine or e.rs == mine) then
       local payload
       if not e.who or e.who == ns.me then
         local f = {}
         for k, v in pairs(e.f) do f[k] = v end
         f.ago = math.max(1, ago)
         -- (your level when it happened, kept with the event - the Feed shows it)
-        payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = e.l or UnitLevel("player"), f = f })
+        payload = Comm.Fit({ kind = e.kind, id = e.id, class = class, level = e.l or UnitLevel("player"), f = f, rs = e.rs or "" })
       elseif altsOk then
         -- another of your characters: passed on as theirs (only your own share settings apply)
-        payload = relayPayload({ o = e.who, c = e.c, l = e.l, k = e.kind, id = e.id, f = e.f }, ago, false, true)
+        payload = relayPayload({ o = e.who, c = e.c, l = e.l, k = e.kind, id = e.id, f = e.f, rs = e.rs }, ago, false, true)
       end
       if payload then
         sendTo(key, payload, "bulk")
@@ -933,7 +951,7 @@ end
 
 -- events friends sent you that may be passed on, oldest first
 local function heard()
-  local db = FriendsAndFoesDB
+  local db = ns.Data.Realm()
   db.heard = db.heard or {}
   local box, cutoff = db.heard, time() - CATCHUP_WINDOW
   while #box > 0 and ((box[1].t or 0) < cutoff or #box > HEARD_MAX) do table.remove(box, 1) end
@@ -950,7 +968,7 @@ function Comm.Hear(origin, msg)
   local t = time() - (msg.ago or 0)
   local i = #box + 1 -- keep time order (a caught-up event can be older than the newest)
   while i > 1 and (box[i - 1].t or 0) > t do i = i - 1 end
-  table.insert(box, i, { t = t, o = origin, c = msg.class, l = msg.level, k = msg.kind, id = msg.id, f = f })
+  table.insert(box, i, { t = t, o = origin, c = msg.class, l = msg.level, k = msg.kind, id = msg.id, f = f, rs = msg.rs })
   heard()
 end
 
@@ -1009,7 +1027,8 @@ function relayPayload(e, ago, dropGuilds, alt)
   local _, class = UnitClass("player")
   local payload = Comm.Encode({ kind = "RLY", id = ns.NewId(), class = class, level = UnitLevel("player"),
     f = { origin = e.o, oclass = e.c or "", olevel = e.l or "", okind = e.k, oid = e.id,
-      ago = math.max(1, ago), data = table.concat(parts, SEP), alt = alt and "1" or "" } })
+      ago = math.max(1, ago), data = table.concat(parts, SEP), alt = alt and "1" or "" },
+    rs = e.rs or "" }) -- (the original sender's ruleset, never yours)
   if #payload <= MAX_PAYLOAD then return payload end
   if dropGuilds then return nil end
   return relayPayload(e, ago, true, alt)
@@ -1149,6 +1168,12 @@ local function accept(text, routeName, via)
   end
   local sender = senderOf(msg, routeName)
   if not sender then return end
+  -- another ruleset: a friend who plays on one can't be in your world (no ruleset: an older client, accepted)
+  local mine = ns.Ruleset()
+  if msg.rs and mine and msg.rs ~= mine then
+    ns.Debug("RULESET-DROP", msg.kind, sender, msg.rs, mine)
+    return
+  end
   local key = sender .. ":" .. msg.id
   if seen[key] then ns.Debug("DUP", key, via .. " (the same message came by another route)") return end
   seen[key] = GetTime()

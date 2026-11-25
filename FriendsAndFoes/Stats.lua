@@ -2,11 +2,11 @@ local _, ns = ...
 local L = ns.L
 
 -- Your own kill log, level brackets, and the numbers the Stats page (UIStats.lua) shows.
---  * FriendsAndFoesDB.killLog = { { t, c, p, n, vl, ml, z }, ... }, oldest first, at most LOG_MAX
+--  * the store's killLog = { { t, c, p, n, vl, ml, z }, ... }, oldest first, at most LOG_MAX
 --    (p: this character's time played at the kill, 1.0.2+): t time, c the character (ns.me; entries
 --    without one are ignored), n victim's name (nil when unreadable), vl victim's level at the time
 --    (nil unknown, -1 skull), ml your level at the time, z zone. Only your own live kills are
---    logged (never a friend's, never a caught-up or replayed one). Account-wide. Never sent.
+--    logged (never a friend's, never a caught-up or replayed one). Per ruleset (in the store). Never sent.
 --    Today / Last 7 days / Last 30 days are counted from this log.
 --  * FriendsAndFoesCharDB.brackets[key] = running totals per level bracket (your level at the
 --    moment of the event), never trimmed: the log is capped, these are not. All-time numbers are
@@ -53,7 +53,7 @@ local function myLevel()
 end
 
 function Stats.List()
-  local db = FriendsAndFoesDB
+  local db = ns.Data.Realm()
   if type(db.killLog) ~= "table" then db.killLog = {} end
   return db.killLog
 end
@@ -194,7 +194,7 @@ end
 -- and whenever the state changes (dead, alive, unghost, logout), so a crash loses at most 10 s.
 -- Each delta also goes to the bracket of your level at that moment.
 -- FriendsAndFoesCharDB.lifeStart = the counter at your last PvP death (nil: the first life, which
--- runs from the counter's start, 0). FriendsAndFoesDB.deathLog = { { t, c, p, k, z }, ... }: time,
+-- runs from the counter's start, 0). The store's deathLog = { { t, c, p, k, z }, ... }: time,
 -- character, played at the time, killer's name (nil unknown), zone; your own live PvP deaths only.
 Stats.MIN_DEATHS = 3 -- PvP deaths before the average life shows
 Stats.MIN_PLAYED = 3600 -- seconds played before kills per hour shows
@@ -272,7 +272,7 @@ function Stats.Duration(sec)
 end
 
 function Stats.DeathList()
-  local db = FriendsAndFoesDB
+  local db = ns.Data.Realm()
   if type(db.deathLog) ~= "table" then db.deathLog = {} end
   return db.deathLog
 end
